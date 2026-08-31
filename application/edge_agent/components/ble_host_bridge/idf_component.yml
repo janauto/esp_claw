@@ -1,0 +1,5 @@
+dependencies:
+  cap_lua:
+    path: ../../../../components/claw_capabilities/cap_lua
+  espressif/cjson:
+    version: "^1.7.19"

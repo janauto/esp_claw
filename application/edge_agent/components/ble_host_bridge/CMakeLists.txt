@@ -1,0 +1,14 @@
+idf_component_register(
+    SRCS
+        "src/ble_host_bridge.c"
+    INCLUDE_DIRS
+        "include"
+    PRIV_INCLUDE_DIRS
+        "$ENV{IDF_PATH}/components/bt/host/nimble/esp-hci/include"
+    REQUIRES
+        bt
+        cap_lua
+        cjson
+        freertos
+        nvs_flash
+)
