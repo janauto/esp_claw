@@ -5,6 +5,7 @@ idf_component_register(
         "src/boot_splash.c"
         "src/businesscard_screen.c"
         "src/font_assets.c"
+        "src/home_apps.c"
         "src/home_key.c"
         "src/infrared_remote_commands.c"
         "src/home_screen.c"

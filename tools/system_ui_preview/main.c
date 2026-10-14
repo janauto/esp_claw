@@ -11,6 +11,9 @@
  * Each trailing x,y[,ms] is pressed for ms (default 100) and released through a
  * pointer input device before the frame is captured, e.g. to open a popup;
  * a long ms gives a long press.
+ *
+ * PREVIEW_APPS="name1,name2" adds installed apps after the built-in home pages,
+ * as if they lived under /sdcard/skills/<name>.
  */
 
 #include <stdio.h>
@@ -31,6 +34,24 @@ static uint16_t *s_fb;
 static int32_t s_w, s_h;
 static lv_point_t s_touch_point;
 static bool s_touch_pressed;
+
+/* Register the comma-separated PREVIEW_APPS as installed home apps. */
+static void add_preview_apps(void)
+{
+    const char *env = getenv("PREVIEW_APPS");
+    char list[256];
+    char location[128];
+
+    if (env == NULL || strlcpy(list, env, sizeof(list)) >= sizeof(list)) {
+        return;
+    }
+    for (char *name = strtok(list, ","); name != NULL; name = strtok(NULL, ",")) {
+        snprintf(location, sizeof(location), "/sdcard/skills/%s", name);
+        if (!ui_squareline_add_app(&(ui_squareline_app_t){ name, name, location })) {
+            fprintf(stderr, "PREVIEW_APPS: could not add %s\n", name);
+        }
+    }
+}
 
 static void touch_read_cb(lv_indev_t *indev, lv_indev_data_t *data)
 {
@@ -161,6 +182,7 @@ int main(int argc, char **argv)
     if (strncmp(screen, "home", 4) == 0 && (screen[4] == '\0' || screen[4] == ':')) {
         ui_squareline_set_img_base_path(PREVIEW_IMG_BASE);
         ui_squareline_set_menu_font(s_ui.font);
+        add_preview_apps();
         scr = ui_squareline_init();
         if (scr != NULL && screen[4] == ':') {
             ui_squareline_show_page((uint8_t)atoi(screen + 5));

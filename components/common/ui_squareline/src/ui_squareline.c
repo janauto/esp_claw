@@ -48,6 +48,21 @@ void ui_squareline_set_menu_font(const lv_font_t *font)
     ui_page_menu_set_font(font);
 }
 
+bool ui_squareline_add_app(const ui_squareline_app_t *app)
+{
+    return app != NULL && ui_page_add_app(app->title, app->app_id, app->location);
+}
+
+void ui_squareline_clear_apps(void)
+{
+    ui_page_clear_apps();
+}
+
+void ui_squareline_show_toast(const char *text)
+{
+    ui_page_show_toast(text);
+}
+
 void ui_squareline_launch_app(const char *script_rel_path)
 {
     /* Called from LVGL button callbacks, i.e. with the LVGL lock already held.

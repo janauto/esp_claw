@@ -5,6 +5,7 @@
  */
 #pragma once
 
+#include <stdbool.h>
 #include <stdint.h>
 
 #include "lvgl.h"
@@ -111,21 +112,56 @@ void ui_squareline_prev_page(void);
 void ui_squareline_next_page(void);
 void ui_squareline_select_page(void);
 
-/** @brief App actions offered by the long-press menu on the selected icon. */
+/**
+ * @brief Installed app shown on the carousel after the built-in pages.
+ *
+ * Installed apps share a generic icon, are launched through the page-select
+ * callback by @p app_id (with a NULL script) and are the only pages the
+ * long-press menu lets the user uninstall; built-in pages answer 卸载 with
+ * "系统应用不可卸载". 详细 is answered by the carousel itself.
+ */
+typedef struct {
+    const char *title;      /**< Caption, may be Chinese; copied, at most 39 bytes   */
+    const char *app_id;     /**< Unique id; copied, at most 39 bytes                  */
+    const char *location;   /**< Shown in 详细, e.g. the app's directory; may be NULL */
+} ui_squareline_app_t;
+
+/**
+ * @brief Add an installed app to the carousel. Call before ui_squareline_init().
+ *
+ * At most 16 pages fit, built-in ones included.
+ *
+ * @return false if the carousel is already built, full, the id is taken or a
+ *         string is too long.
+ */
+bool ui_squareline_add_app(const ui_squareline_app_t *app);
+
+/** @brief Forget every installed app added so far. Call before ui_squareline_init(). */
+void ui_squareline_clear_apps(void);
+
+/**
+ * @brief Show a short message above the footer for a couple of seconds.
+ *
+ * Must be called with the LVGL mutex held. No-op before init / after destroy.
+ */
+void ui_squareline_show_toast(const char *text);
+
+/** @brief App actions the long-press menu hands to the owner. */
 typedef enum {
-    UI_SQUARELINE_PAGE_ACTION_UNINSTALL = 0,   /**< 卸载 */
-    UI_SQUARELINE_PAGE_ACTION_DETAIL,          /**< 详细 */
+    UI_SQUARELINE_PAGE_ACTION_UNINSTALL = 0,   /**< 卸载, confirmed, on an installed app */
 } ui_squareline_page_action_t;
 
 /**
- * @brief Callback invoked when the user picks 卸载 or 详细 in the long-press menu.
+ * @brief Callback invoked when the user confirms uninstalling an installed app.
  *
- * The menu is already closed when this runs; 取消 and dismissals are not
- * reported. Called with the LVGL lock held, so the handler must not block on it.
+ * The menu is already closed and a "正在卸载…" toast is showing. The owner is
+ * expected to delete the app and rebuild the carousel without it. Called with the
+ * LVGL lock held, so the handler must not block on it or do file I/O; post the
+ * work to another task instead.
  *
  * @param page      Index of the page whose icon was long-pressed.
- * @param app_id    Stable identifier for the page's app, or NULL if it has none.
- * @param action    The row the user picked.
+ * @param app_id    The installed app's id.
+ * @param action    What the user asked for.
  * @param user_ctx  Context passed to ui_squareline_set_page_action_cb().
  */
 typedef void (*ui_squareline_page_action_cb_t)(uint8_t page, const char *app_id,
@@ -135,17 +171,17 @@ typedef void (*ui_squareline_page_action_cb_t)(uint8_t page, const char *app_id,
 /**
  * @brief Register the handler for the long-press menu's app actions.
  *
- * With no handler registered the menu still opens, but 卸载 / 详细 only close it.
- * Passing NULL clears the handler.
+ * With no handler registered a confirmed uninstall does nothing. Passing NULL
+ * clears the handler.
  */
 void ui_squareline_set_page_action_cb(ui_squareline_page_action_cb_t cb, void *user_ctx);
 
 /**
- * @brief Font for the long-press menu captions.
+ * @brief Font for the long-press menu, toasts and installed apps' captions.
  *
- * The compiled-in SquareLine fonts lack 卸载 / 详细, so the owner passes a font
- * that covers them (the system TTF). Call before ui_squareline_init(); NULL
- * falls back to LV_FONT_DEFAULT.
+ * The compiled-in SquareLine fonts lack 卸载 / 详细 and most Chinese app names,
+ * so the owner passes a font that covers them (the system TTF). Call before
+ * ui_squareline_init(); NULL falls back to LV_FONT_DEFAULT.
  */
 void ui_squareline_set_menu_font(const lv_font_t *font);
 

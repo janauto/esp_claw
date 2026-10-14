@@ -60,6 +60,28 @@ bool ui_page_register(const char *title, const char *app_id, const char *script,
                       const char *icon_sel, const char *icon_unsel);
 
 /**
+ * @brief Append an installed app after the built-in pages.
+ *
+ * Must be called BEFORE ui_page_screen_init(), like ui_page_register(). The
+ * strings are copied. Installed pages share a generic icon, can be removed
+ * through the long-press menu and are launched by their app_id (their script is
+ * NULL in the page-select callback).
+ *
+ * @param title     Caption shown on the home screen (may be Chinese).
+ * @param app_id    Unique id reported to the select and action callbacks.
+ * @param location  Where the app lives, shown in its 详细 sheet; may be NULL.
+ * @return false if the screen is built, the table is full, the id is taken or a
+ *         string does not fit.
+ */
+bool ui_page_add_app(const char *title, const char *app_id, const char *location);
+
+/** @brief Drop every page added after the built-in ones. Before init only. */
+void ui_page_clear_apps(void);
+
+/** @brief Show a short message above the footer. Does nothing without a screen. */
+void ui_page_show_toast(const char *text);
+
+/**
  * @brief The three user actions the carousel offers, shared by the on-screen hit
  *        targets and the board's physical keys.
  *

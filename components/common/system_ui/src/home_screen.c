@@ -102,7 +102,24 @@ static void system_ui_home_page_select_cb(uint8_t page, const char *app_id,
         return;
     }
 
+    /* Installed apps carry no script in the page table; start them by id. */
+    if (script == NULL && system_ui_home_apps_launch(app_id)) {
+        return;
+    }
+
     ui_squareline_launch_app(script);
+}
+
+/* A confirmed uninstall from the long-press menu. Runs in the LVGL event
+ * context, so the delete and the carousel rebuild go to the UI event task. */
+static void system_ui_home_page_action_cb(uint8_t page, const char *app_id,
+                                          ui_squareline_page_action_t action, void *user_ctx)
+{
+    (void)user_ctx;
+
+    if (action == UI_SQUARELINE_PAGE_ACTION_UNINSTALL) {
+        system_ui_home_apps_request_uninstall(page, app_id);
+    }
 }
 
 esp_err_t system_ui_create_home_locked(void)
@@ -113,8 +130,11 @@ esp_err_t system_ui_create_home_locked(void)
     ui_squareline_set_app_launch_cb(system_ui_home_app_launch_cb, NULL);
     /* Take over selection so pages with a native screen can be routed to it. */
     ui_squareline_set_page_select_cb(system_ui_home_page_select_cb, NULL);
+    ui_squareline_set_page_action_cb(system_ui_home_page_action_cb, NULL);
     /* The long-press menu's 卸载 / 详细 are missing from the SquareLine fonts. */
     ui_squareline_set_menu_font(s_ui.font);
+    /* Installed apps follow the built-in pages; the dots are sized at init. */
+    system_ui_home_apps_register_locked();
 
     s_ui.home_screen = ui_squareline_init();
     ESP_RETURN_ON_FALSE(s_ui.home_screen != NULL, ESP_ERR_NO_MEM, SYSTEM_UI_TAG,
@@ -158,6 +178,7 @@ void system_ui_delete_home_locked(void)
 {
     ui_squareline_set_app_launch_cb(NULL, NULL);
     ui_squareline_set_page_select_cb(NULL, NULL);
+    ui_squareline_set_page_action_cb(NULL, NULL);
     if (s_ui.home_screen) {
         ui_squareline_destroy();
     }

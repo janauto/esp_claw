@@ -209,6 +209,11 @@ static void system_ui_event_task(void *arg)
                 system_ui_unlock();
             }
             break;
+        case SYSTEM_UI_WORK_EVENT_APP_UNINSTALL:
+            if (event.generation == s_ui.generation) {
+                system_ui_home_apps_handle_uninstall(&event);
+            }
+            break;
         case SYSTEM_UI_WORK_EVENT_STOP:
         default:
             break;

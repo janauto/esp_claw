@@ -21,10 +21,12 @@
 #include "ui_page.h"
 
 #include <stddef.h>
+#include <stdio.h>
 #include <string.h>
 
 #include "ui.h"
 #include "ui_icon_2048.h"
+#include "ui_icon_app.h"
 #include "ui_img_sd.h"
 #include "ui_page_menu.h"
 #include "ui_squareline_priv.h"
@@ -50,16 +52,25 @@
 #define UI_PAGE_DOT_COLOR       0x384038
 #define UI_PAGE_DOT_COLOR_SEL   0xF0C430
 
-/* Long-press menu: it dims everything above the footer and hangs its panel just
- * below the selected icon's frame. The footer stays live as the key hint, with
- * its middle caption switched to say what M does while the menu is up. */
+/* Long-press sheets dim everything above the footer and rise from just above
+ * it; the action sheet then sits right below the selected icon's frame. The
+ * footer stays live as the key hint, with its middle caption switched to say
+ * what M does while a sheet is up. Toasts appear between the dots and footer. */
 #define UI_PAGE_SCREEN_H        800
 #define UI_PAGE_FOOTER_H        56
-#define UI_PAGE_MENU_GAP        16
-#define UI_PAGE_MENU_TOP        (UI_PAGE_SCREEN_H / 2 + UI_CAROUSEL_FRAME_Y + \
-                                 UI_CAROUSEL_FRAME_H / 2 + UI_PAGE_MENU_GAP)
+#define UI_PAGE_SHEET_GAP       14
+#define UI_PAGE_SHEET_BOTTOM    (UI_PAGE_SCREEN_H - UI_PAGE_FOOTER_H - UI_PAGE_SHEET_GAP)
+#define UI_PAGE_SHEET_W         336
+#define UI_PAGE_DETAIL_W        400     /* confirm and detail sheets */
+#define UI_PAGE_TOAST_Y         640
 #define UI_PAGE_OPEN_CAPTION    "M OPEN"
 #define UI_PAGE_MENU_CAPTION    "M OK"
+
+/* Installed apps: one accent for all of them, and room for their own strings. */
+#define UI_PAGE_APP_ACCENT      0xF0C430
+#define UI_PAGE_APP_TITLE_LEN   40
+#define UI_PAGE_APP_ID_LEN      40
+#define UI_PAGE_APP_LOCATION_LEN 128
 
 /* Per-app data. Only the app's own appearance is listed here — the carousel
  * layout (which icon goes in which flanking slot) is derived at bind time from
@@ -78,6 +89,8 @@ typedef struct {
     uint32_t    pill_color;     /* small pill on top of that frame               */
     const char *icon_sel;       /* centre slot – selected state                  */
     const char *icon_unsel;     /* flanking slots – unselected state             */
+    bool        installed;      /* on the data partition, so it can be removed   */
+    const char *location;       /* installed apps: where they live, for 详细      */
 } ui_app_desc_t;
 
 /* Maximum number of pages that can be registered at runtime.  The static table
@@ -90,6 +103,14 @@ typedef struct {
 static ui_app_desc_t s_pages[UI_PAGE_MAX];
 static uint8_t       s_page_count       = 0;
 static uint8_t       s_static_page_count = 0;
+
+/* Copies of the installed apps' strings, indexed like s_pages: the owner's
+ * buffers do not outlive ui_page_add_app(). */
+static struct {
+    char title[UI_PAGE_APP_TITLE_LEN];
+    char app_id[UI_PAGE_APP_ID_LEN];
+    char location[UI_PAGE_APP_LOCATION_LEN];
+} s_app_text[UI_PAGE_MAX];
 
 /* Ring accessor: index modulo live count. */
 static inline uint8_t page_ring(int idx)
@@ -188,6 +209,19 @@ static struct {
 
 /* ------------------------------------------------------------------ helpers */
 
+/* Seed the runtime page table with the compile-time defaults, once. */
+static void ui_page_load_defaults(void)
+{
+    if (s_page_count != 0) {
+        return;
+    }
+    s_static_page_count = (uint8_t)(sizeof(s_default_pages) / sizeof(s_default_pages[0]));
+    for (uint8_t i = 0; i < s_static_page_count && i < UI_PAGE_MAX; i++) {
+        s_pages[i] = s_default_pages[i];
+    }
+    s_page_count = s_static_page_count;
+}
+
 /* Text areas come in two flavours in the original screens: captions that use
  * the custom font, and the two status strings that keep the default font and a
  * placeholder. Both share the transparent-background / no-border styling. */
@@ -284,6 +318,9 @@ static const void *ui_page_icon_src(lv_obj_t *parent, const char *name, bool sel
     if (strcmp(name, UI_ICON_2048_NAME) == 0) {
         return ui_icon_2048_src(parent, selected);
     }
+    if (strcmp(name, UI_ICON_APP_NAME) == 0) {
+        return ui_icon_app_src(parent, selected);
+    }
     return ui_img_sd_path(name);
 }
 
@@ -378,6 +415,11 @@ static void ui_page_bind(uint8_t page)
                        s_ui.icon_right_in, s_ui.icon_left_in);
 
     lv_textarea_set_text(s_ui.title, cur->title);
+    /* Installed apps may be named in Chinese, which Font1 lacks. */
+    lv_obj_set_style_text_font(s_ui.title,
+                               cur->installed && ui_page_menu_get_font() != NULL
+                               ? ui_page_menu_get_font() : &ui_font_Font1,
+                               LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_border_color(s_ui.frame, lv_color_hex(cur->frame_color),
                                   LV_PART_MAIN | LV_STATE_DEFAULT);
     ui_page_block_fill(s_ui.pill, cur->pill_color);
@@ -551,48 +593,160 @@ static void ui_page_mid_icon_cb(lv_event_t *e)
     }
 }
 
-static void ui_page_menu_done(ui_page_menu_item_t item)
+/* ---------------------------------------------------------- long-press flow */
+
+/* Long press on the selected icon opens the action sheet. 卸载 refuses built-in
+ * apps with a toast and asks before removing an installed one; 详细 swaps in an
+ * information sheet. Only a confirmed uninstall leaves this file, through
+ * ui_squareline_page_action(): the owner deletes the app and rebuilds the home
+ * screen. */
+typedef enum {
+    UI_PAGE_SHEET_ACTIONS = 0,
+    UI_PAGE_SHEET_CONFIRM,
+    UI_PAGE_SHEET_DETAIL,
+} ui_page_sheet_t;
+
+enum { ACTION_UNINSTALL, ACTION_DETAIL, ACTION_CANCEL, ACTION_COUNT };
+enum { CONFIRM_UNINSTALL, CONFIRM_CANCEL, CONFIRM_COUNT };
+
+static const ui_page_menu_row_t s_action_rows[ACTION_COUNT] = {
+    [ACTION_UNINSTALL] = { "卸载", UI_PAGE_MENU_ICON_TRASH, true  },
+    [ACTION_DETAIL]    = { "详细", UI_PAGE_MENU_ICON_INFO,  false },
+    [ACTION_CANCEL]    = { "取消", UI_PAGE_MENU_ICON_CLOSE, false },
+};
+
+static const ui_page_menu_row_t s_confirm_rows[CONFIRM_COUNT] = {
+    [CONFIRM_UNINSTALL] = { "卸载", UI_PAGE_MENU_ICON_TRASH, true  },
+    [CONFIRM_CANCEL]    = { "取消", UI_PAGE_MENU_ICON_CLOSE, false },
+};
+
+static const ui_page_menu_row_t s_detail_rows[] = {
+    { "关闭", UI_PAGE_MENU_ICON_CLOSE, false },
+};
+
+static ui_page_sheet_t s_sheet;
+static char s_sheet_heading[UI_PAGE_APP_TITLE_LEN + 16];
+
+static void ui_page_sheet_done(uint8_t row);
+
+static void ui_page_toast(const char *text)
+{
+    if (s_ui.screen != NULL) {
+        ui_page_menu_toast(s_ui.screen, UI_PAGE_TOAST_Y, text);
+    }
+}
+
+/* Open @p config as @p sheet. With @p lift, a copy of the framed icon is raised
+ * above the scrim so the user can see which app the sheet is about; sheets tall
+ * enough to cover the frame name the app in their heading instead. */
+static void ui_page_sheet_open(ui_page_sheet_t sheet, ui_page_menu_config_t *config, bool lift)
+{
+    const ui_app_desc_t *p = &s_pages[s_ui.page];
+    lv_obj_t *layer;
+    lv_obj_t *icon;
+
+    config->parent = s_ui.screen;
+    config->scrim_h = UI_PAGE_SCREEN_H - UI_PAGE_FOOTER_H;
+    config->panel_bottom = UI_PAGE_SHEET_BOTTOM;
+    config->done_cb = ui_page_sheet_done;
+    layer = ui_page_menu_open(config);
+    if (layer == NULL) {
+        return;
+    }
+    s_sheet = sheet;
+    if (lift) {
+        ui_page_frame(layer, p->frame_color, p->pill_color, NULL);
+        icon = ui_page_icon(layer, NULL, 0, UI_CAROUSEL_MID_Y, UI_CAROUSEL_MID_ZOOM, false, true);
+        lv_img_set_src(icon, lv_img_get_src(s_ui.icon_mid));
+    }
+    lv_textarea_set_text(s_ui.footer_open, UI_PAGE_MENU_CAPTION);
+}
+
+static void ui_page_actions_open(void)
+{
+    ui_page_menu_config_t config = {
+        .panel_w    = UI_PAGE_SHEET_W,
+        .rows       = s_action_rows,
+        .row_count  = ACTION_COUNT,
+        .focus      = ACTION_CANCEL,
+        .cancel_row = ACTION_CANCEL,
+    };
+
+    ui_page_sheet_open(UI_PAGE_SHEET_ACTIONS, &config, true);
+}
+
+static void ui_page_confirm_open(void)
+{
+    ui_page_menu_config_t config = {
+        .panel_w    = UI_PAGE_DETAIL_W,
+        .heading    = s_sheet_heading,
+        .message    = "应用文件将被删除，无法恢复",
+        .rows       = s_confirm_rows,
+        .row_count  = CONFIRM_COUNT,
+        .focus      = CONFIRM_CANCEL,
+        .cancel_row = CONFIRM_CANCEL,
+    };
+
+    snprintf(s_sheet_heading, sizeof(s_sheet_heading), "卸载「%s」？", s_pages[s_ui.page].title);
+    ui_page_sheet_open(UI_PAGE_SHEET_CONFIRM, &config, false);
+}
+
+static void ui_page_detail_open(void)
+{
+    const ui_app_desc_t *p = &s_pages[s_ui.page];
+    const ui_page_menu_field_t fields[] = {
+        { "类型", p->installed ? "已安装应用" : "内置应用" },
+        { "应用 ID", p->app_id != NULL ? p->app_id : "-" },
+        p->installed ? (ui_page_menu_field_t){ "位置", p->location != NULL ? p->location : "-" }
+                     : (ui_page_menu_field_t){ "入口", p->script != NULL ? p->script : "固件界面" },
+    };
+    ui_page_menu_config_t config = {
+        .panel_w     = UI_PAGE_DETAIL_W,
+        .heading     = p->title,
+        .fields      = fields,
+        .field_count = (uint8_t)(sizeof(fields) / sizeof(fields[0])),
+        .rows        = s_detail_rows,
+        .row_count   = 1,
+    };
+
+    ui_page_sheet_open(UI_PAGE_SHEET_DETAIL, &config, false);
+}
+
+static void ui_page_sheet_done(uint8_t row)
 {
     const ui_app_desc_t *p = &s_pages[s_ui.page];
 
     lv_textarea_set_text(s_ui.footer_open, UI_PAGE_OPEN_CAPTION);
-    switch (item) {
-    case UI_PAGE_MENU_UNINSTALL:
-        ui_squareline_page_action(s_ui.page, p->app_id, UI_SQUARELINE_PAGE_ACTION_UNINSTALL);
+    switch (s_sheet) {
+    case UI_PAGE_SHEET_ACTIONS:
+        if (row == ACTION_UNINSTALL) {
+            if (p->installed) {
+                ui_page_confirm_open();
+            } else {
+                ui_page_toast("系统应用不可卸载");
+            }
+        } else if (row == ACTION_DETAIL) {
+            ui_page_detail_open();
+        }
         break;
-    case UI_PAGE_MENU_DETAIL:
-        ui_squareline_page_action(s_ui.page, p->app_id, UI_SQUARELINE_PAGE_ACTION_DETAIL);
+    case UI_PAGE_SHEET_CONFIRM:
+        if (row == CONFIRM_UNINSTALL) {
+            ui_page_toast("正在卸载…");
+            ui_squareline_page_action(s_ui.page, p->app_id, UI_SQUARELINE_PAGE_ACTION_UNINSTALL);
+        }
         break;
+    case UI_PAGE_SHEET_DETAIL:
     default:
         break;
     }
 }
 
-/* Long press on the selected icon: dim the screen, lift a copy of the framed
- * icon above the scrim so it stays readable, and offer 卸载 / 详细 / 取消. */
 static void ui_page_mid_icon_long_cb(lv_event_t *e)
 {
-    const ui_app_desc_t *p = &s_pages[s_ui.page];
-    const ui_page_menu_config_t config = {
-        .parent    = s_ui.screen,
-        .scrim_h   = UI_PAGE_SCREEN_H - UI_PAGE_FOOTER_H,
-        .panel_top = UI_PAGE_MENU_TOP,
-        .done_cb   = ui_page_menu_done,
-    };
-    lv_obj_t *layer;
-    lv_obj_t *icon;
-
     if (lv_event_get_code(e) != LV_EVENT_LONG_PRESSED || s_ui.settle != NULL) {
         return;
     }
-    layer = ui_page_menu_open(&config);
-    if (layer == NULL) {
-        return;
-    }
-    ui_page_frame(layer, p->frame_color, p->pill_color, NULL);
-    icon = ui_page_icon(layer, NULL, 0, UI_CAROUSEL_MID_Y, UI_CAROUSEL_MID_ZOOM, false, true);
-    lv_img_set_src(icon, lv_img_get_src(s_ui.icon_mid));
-    lv_textarea_set_text(s_ui.footer_open, UI_PAGE_MENU_CAPTION);
+    ui_page_actions_open();
 }
 
 /* ------------------------------------------------------------------- screen */
@@ -611,16 +765,9 @@ void ui_page_screen_init(void)
         return;
     }
 
-    /* Populate the runtime page table from the compile-time defaults on first
-     * call.  ui_page_register() may have been called before screen_init to
-     * append extra pages; those sit after the static ones and are left alone. */
-    if (s_page_count == 0) {
-        s_static_page_count = (uint8_t)(sizeof(s_default_pages) / sizeof(s_default_pages[0]));
-        for (uint8_t i = 0; i < s_static_page_count && i < UI_PAGE_MAX; i++) {
-            s_pages[i] = s_default_pages[i];
-        }
-        s_page_count = s_static_page_count;
-    }
+    /* ui_page_register() / ui_page_add_app() may have been called before
+     * screen_init to append extra pages; those sit after the static ones. */
+    ui_page_load_defaults();
 
     /* Allocate the dot-widget pointer array now that we know the live count. */
     s_ui.dots = lv_malloc(s_page_count * sizeof(lv_obj_t *));
@@ -772,6 +919,7 @@ void ui_page_screen_init(void)
 void ui_page_screen_destroy(void)
 {
     ui_page_menu_close();
+    ui_page_menu_toast_clear();
     if (s_ui.settle != NULL) {
         lv_timer_del(s_ui.settle);
     }
@@ -783,6 +931,7 @@ void ui_page_screen_destroy(void)
     }
     /* After the slots are gone, so nothing still points at the buffers. */
     ui_icon_2048_release();
+    ui_icon_app_release();
     lv_memzero(&s_ui, sizeof(s_ui));
 }
 
@@ -825,16 +974,7 @@ bool ui_page_register(const char *title, const char *app_id, const char *script,
         return false;
     }
 
-    /* Populate from the compile-time defaults on first register call if they
-     * haven't been copied yet (screen_init does this too, but register may run
-     * first). */
-    if (s_page_count == 0) {
-        s_static_page_count = (uint8_t)(sizeof(s_default_pages) / sizeof(s_default_pages[0]));
-        for (uint8_t i = 0; i < s_static_page_count && i < UI_PAGE_MAX; i++) {
-            s_pages[i] = s_default_pages[i];
-        }
-        s_page_count = s_static_page_count;
-    }
+    ui_page_load_defaults();
 
     s_pages[s_page_count++] = (ui_app_desc_t){
         .title       = title,
@@ -846,4 +986,56 @@ bool ui_page_register(const char *title, const char *app_id, const char *script,
         .icon_unsel  = icon_unsel,
     };
     return true;
+}
+
+bool ui_page_add_app(const char *title, const char *app_id, const char *location)
+{
+    uint8_t index;
+
+    /* Like ui_page_register(): the dot row is sized when the screen is built. */
+    if (s_ui.screen != NULL || title == NULL || app_id == NULL) {
+        return false;
+    }
+    ui_page_load_defaults();
+    if (s_page_count >= UI_PAGE_MAX) {
+        return false;
+    }
+    for (uint8_t i = 0; i < s_page_count; i++) {
+        if (s_pages[i].app_id != NULL && strcmp(s_pages[i].app_id, app_id) == 0) {
+            return false;
+        }
+    }
+
+    index = s_page_count;
+    if (strlcpy(s_app_text[index].title, title, UI_PAGE_APP_TITLE_LEN) >= UI_PAGE_APP_TITLE_LEN ||
+            strlcpy(s_app_text[index].app_id, app_id, UI_PAGE_APP_ID_LEN) >= UI_PAGE_APP_ID_LEN ||
+            strlcpy(s_app_text[index].location, location != NULL ? location : "",
+                    UI_PAGE_APP_LOCATION_LEN) >= UI_PAGE_APP_LOCATION_LEN) {
+        return false;
+    }
+    s_pages[index] = (ui_app_desc_t){
+        .title       = s_app_text[index].title,
+        .app_id      = s_app_text[index].app_id,
+        .script      = NULL,    /* the owner launches installed apps by app_id */
+        .frame_color = UI_PAGE_APP_ACCENT,
+        .pill_color  = UI_PAGE_APP_ACCENT,
+        .icon_sel    = UI_ICON_APP_NAME,
+        .icon_unsel  = UI_ICON_APP_NAME,
+        .installed   = true,
+        .location    = location != NULL ? s_app_text[index].location : NULL,
+    };
+    s_page_count++;
+    return true;
+}
+
+void ui_page_clear_apps(void)
+{
+    if (s_ui.screen == NULL && s_page_count > s_static_page_count) {
+        s_page_count = s_static_page_count;
+    }
+}
+
+void ui_page_show_toast(const char *text)
+{
+    ui_page_toast(text);
 }

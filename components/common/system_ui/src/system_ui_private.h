@@ -138,6 +138,7 @@ typedef enum {
     SYSTEM_UI_WORK_EVENT_NETWORK_STATUS,
     SYSTEM_UI_WORK_EVENT_APP_EXIT_SWIPE,
     SYSTEM_UI_WORK_EVENT_HOME_KEY,
+    SYSTEM_UI_WORK_EVENT_APP_UNINSTALL,
 } system_ui_work_event_type_t;
 
 /* Physical key actions on the home carousel. These mirror the screen's own
@@ -172,6 +173,10 @@ typedef struct {
             char ap_ssid[64];
         } network_status;
         system_ui_home_key_t home_key;
+        struct {
+            uint8_t page;                           /* carousel page it was on */
+            char app_id[SYSTEM_UI_LAUNCHER_TITLE_LEN];
+        } app_uninstall;
     };
     char launcher_id[SYSTEM_UI_LAUNCHER_ID_LEN];
     char launcher_title[SYSTEM_UI_LAUNCHER_TITLE_LEN];
@@ -352,6 +357,12 @@ void system_ui_create_font_locked(const char *font_path, uint32_t font_size);
 void system_ui_destroy_font_locked(void);
 
 esp_err_t system_ui_post_work_event(const system_ui_work_event_t *event, TickType_t wait_ticks);
+
+/* Installed apps on the home carousel (home_apps.c). */
+void system_ui_home_apps_register_locked(void);
+bool system_ui_home_apps_launch(const char *app_id);
+void system_ui_home_apps_request_uninstall(uint8_t page, const char *app_id);
+void system_ui_home_apps_handle_uninstall(const system_ui_work_event_t *event);
 void system_ui_jobs_refresh_snapshot_locked(const system_ui_job_item_t *items, size_t count);
 esp_err_t system_ui_lock(void);
 void system_ui_unlock(void);
