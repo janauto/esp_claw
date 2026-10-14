@@ -299,6 +299,19 @@ static void display_service_delete_dummy_input_blocker_locked(void)
     CONFIG_ESP_BOARD_DEV_DISPLAY_LCD_SUB_RGB_3WIRE_SPI_SUPPORT
 static esp_lv_adapter_rotation_t display_service_get_rotation(const dev_display_lcd_config_t *lcd_cfg)
 {
+#if CONFIG_DISPLAY_SERVICE_ROTATION_0
+    (void)lcd_cfg;
+    return ESP_LV_ADAPTER_ROTATE_0;
+#elif CONFIG_DISPLAY_SERVICE_ROTATION_90
+    (void)lcd_cfg;
+    return ESP_LV_ADAPTER_ROTATE_90;
+#elif CONFIG_DISPLAY_SERVICE_ROTATION_180
+    (void)lcd_cfg;
+    return ESP_LV_ADAPTER_ROTATE_180;
+#elif CONFIG_DISPLAY_SERVICE_ROTATION_270
+    (void)lcd_cfg;
+    return ESP_LV_ADAPTER_ROTATE_270;
+#endif
     if (lcd_cfg->swap_xy) {
         return lcd_cfg->mirror_x ? ESP_LV_ADAPTER_ROTATE_90 : ESP_LV_ADAPTER_ROTATE_270;
     }

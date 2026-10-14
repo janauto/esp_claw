@@ -141,7 +141,9 @@ devices:
         data_width: 16
         in_color_format: LCD_COLOR_FMT_RGB565
         out_color_format: LCD_COLOR_FMT_RGB565
-        num_fbs: 1
+        # Portrait UI: esp_lvgl_adapter rotates in software and needs three
+        # framebuffers for that (TRIPLE_PARTIAL), ~2.3 MiB PSRAM at 800x480 RGB565.
+        num_fbs: 3
         bounce_buffer_size_px: 0
         dma_burst_size: 64
         hsync_gpio_num: 44
@@ -185,10 +187,12 @@ devices:
         levels:
           reset: 0
           interrupt: 0
+        # Portrait UI (CONFIG_DISPLAY_SERVICE_ROTATION_270, panel's left edge
+        # at the top): logical (x, y) = (y_max - raw_y, raw_x).
         flags:
-          swap_xy: false
+          swap_xy: true
           mirror_x: false
-          mirror_y: false
+          mirror_y: true
     peripherals:
       - name: i2c_master
         i2c_addr: [0x28]  # GT1151 8-bit I2C address, from 7-bit 0x14

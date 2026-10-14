@@ -1,0 +1,27 @@
+menu "Display service"
+
+    choice DISPLAY_SERVICE_ROTATION
+        prompt "LVGL display rotation"
+        default DISPLAY_SERVICE_ROTATION_FROM_PANEL
+        help
+            Rotation applied by esp_lvgl_adapter in software. Only this setting
+            should express a UI rotation on RGB/DSI panels: the LCD swap_xy and
+            mirror flags in board_devices.yaml are also applied to the panel
+            driver, so using them for rotation rotates twice and clips.
+
+            Rotating by 90 or 270 degrees needs num_fbs >= 2 on the panel, and
+            the touch flags in board_devices.yaml have to be set to match.
+
+        config DISPLAY_SERVICE_ROTATION_FROM_PANEL
+            bool "Follow the LCD swap_xy/mirror flags"
+        config DISPLAY_SERVICE_ROTATION_0
+            bool "0 degrees"
+        config DISPLAY_SERVICE_ROTATION_90
+            bool "90 degrees (panel's right edge at the top)"
+        config DISPLAY_SERVICE_ROTATION_180
+            bool "180 degrees"
+        config DISPLAY_SERVICE_ROTATION_270
+            bool "270 degrees (panel's left edge at the top)"
+    endchoice
+
+endmenu
