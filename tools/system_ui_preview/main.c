@@ -7,7 +7,7 @@
  *
  *   system_ui_preview <width> <height> <screen> <out.bmp> [x,y ...]
  *
- * screen: home | boot | businesscard | meeting | infrared | workbuddy
+ * screen: home[:page] | boot | businesscard | meeting | infrared | workbuddy
  * Each trailing x,y[,ms] is pressed for ms (default 100) and released through a
  * pointer input device before the frame is captured, e.g. to open a popup;
  * a long ms gives a long press.
@@ -158,9 +158,13 @@ int main(int argc, char **argv)
         s_ui.clock_font = lv_tiny_ttf_create_file("S:" PREVIEW_FONT_PATH, SYSTEM_UI_CLOCK_FONT_SIZE);
     }
 
-    if (strcmp(screen, "home") == 0) {
+    if (strncmp(screen, "home", 4) == 0 && (screen[4] == '\0' || screen[4] == ':')) {
         ui_squareline_set_img_base_path(PREVIEW_IMG_BASE);
+        ui_squareline_set_menu_font(s_ui.font);
         scr = ui_squareline_init();
+        if (scr != NULL && screen[4] == ':') {
+            ui_squareline_show_page((uint8_t)atoi(screen + 5));
+        }
     } else if (strcmp(screen, "boot") == 0) {
         system_ui_create_boot_locked();
         scr = newest_screen();

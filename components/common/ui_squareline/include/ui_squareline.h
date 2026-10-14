@@ -111,6 +111,44 @@ void ui_squareline_prev_page(void);
 void ui_squareline_next_page(void);
 void ui_squareline_select_page(void);
 
+/** @brief App actions offered by the long-press menu on the selected icon. */
+typedef enum {
+    UI_SQUARELINE_PAGE_ACTION_UNINSTALL = 0,   /**< 卸载 */
+    UI_SQUARELINE_PAGE_ACTION_DETAIL,          /**< 详细 */
+} ui_squareline_page_action_t;
+
+/**
+ * @brief Callback invoked when the user picks 卸载 or 详细 in the long-press menu.
+ *
+ * The menu is already closed when this runs; 取消 and dismissals are not
+ * reported. Called with the LVGL lock held, so the handler must not block on it.
+ *
+ * @param page      Index of the page whose icon was long-pressed.
+ * @param app_id    Stable identifier for the page's app, or NULL if it has none.
+ * @param action    The row the user picked.
+ * @param user_ctx  Context passed to ui_squareline_set_page_action_cb().
+ */
+typedef void (*ui_squareline_page_action_cb_t)(uint8_t page, const char *app_id,
+                                               ui_squareline_page_action_t action,
+                                               void *user_ctx);
+
+/**
+ * @brief Register the handler for the long-press menu's app actions.
+ *
+ * With no handler registered the menu still opens, but 卸载 / 详细 only close it.
+ * Passing NULL clears the handler.
+ */
+void ui_squareline_set_page_action_cb(ui_squareline_page_action_cb_t cb, void *user_ctx);
+
+/**
+ * @brief Font for the long-press menu captions.
+ *
+ * The compiled-in SquareLine fonts lack 卸载 / 详细, so the owner passes a font
+ * that covers them (the system TTF). Call before ui_squareline_init(); NULL
+ * falls back to LV_FONT_DEFAULT.
+ */
+void ui_squareline_set_menu_font(const lv_font_t *font);
+
 /**
  * @brief Initialize the SquareLine UI and build the carousel screen.
  *

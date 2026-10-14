@@ -149,6 +149,18 @@ void _ui_switch_theme(int val)
 #define UI_CAROUSEL_SIDE_Y      6
 #define UI_CAROUSEL_SIDE_ZOOM   80
 
+/* Rounded frame around the selected icon and the pill on its top edge (the
+ * pill's Y is relative to the frame centre). */
+#define UI_CAROUSEL_FRAME_W       220
+#define UI_CAROUSEL_FRAME_H       204
+#define UI_CAROUSEL_FRAME_Y       (UI_CAROUSEL_MID_Y - 6)
+#define UI_CAROUSEL_FRAME_RADIUS  20
+#define UI_CAROUSEL_FRAME_BORDER  6
+#define UI_CAROUSEL_PILL_W        176
+#define UI_CAROUSEL_PILL_H        13
+#define UI_CAROUSEL_PILL_Y        (-80)
+#define UI_CAROUSEL_PILL_RADIUS   10
+
 /* Re-apply the designed layout to a screen's five animated carousel slots.
  * Call on LV_EVENT_SCREEN_LOAD_START: the switch animations write real object
  * properties, so their end state persists on screens that are never rebuilt. */

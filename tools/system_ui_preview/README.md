@@ -15,5 +15,8 @@ tools/system_ui_preview/build/system_ui_preview 480 800 home home.bmp
 ```
 
 Screens: `home`, `boot`, `businesscard`, `meeting`, `infrared`, `workbuddy`.
+`home:N` starts the carousel on page N. Trailing `x,y[,ms]` arguments are
+pressed before the capture; `home:1 240,406,800` long-presses the Pomodoro icon
+to open its 卸载 / 详细 / 取消 menu.
 Carousel icons come from the compiled-in copies under
 `ui_squareline/src/images` instead of the SD-card `.bin` files.

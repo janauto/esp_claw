@@ -113,6 +113,8 @@ esp_err_t system_ui_create_home_locked(void)
     ui_squareline_set_app_launch_cb(system_ui_home_app_launch_cb, NULL);
     /* Take over selection so pages with a native screen can be routed to it. */
     ui_squareline_set_page_select_cb(system_ui_home_page_select_cb, NULL);
+    /* The long-press menu's 卸载 / 详细 are missing from the SquareLine fonts. */
+    ui_squareline_set_menu_font(s_ui.font);
 
     s_ui.home_screen = ui_squareline_init();
     ESP_RETURN_ON_FALSE(s_ui.home_screen != NULL, ESP_ERR_NO_MEM, SYSTEM_UI_TAG,
@@ -159,6 +161,7 @@ void system_ui_delete_home_locked(void)
     if (s_ui.home_screen) {
         ui_squareline_destroy();
     }
+    ui_squareline_set_menu_font(NULL);
     s_ui.home_screen = NULL;
     s_ui.home_tile = NULL;
     s_ui.tileview = NULL;

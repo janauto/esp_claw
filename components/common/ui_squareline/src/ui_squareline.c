@@ -8,6 +8,7 @@
 #include "ui.h"
 #include "ui_img_sd.h"
 #include "ui_page.h"
+#include "ui_page_menu.h"
 #include "ui_squareline_priv.h"
 
 static ui_squareline_app_launch_cb_t s_app_launch_cb;
@@ -15,6 +16,9 @@ static void *s_app_launch_user_ctx;
 
 static ui_squareline_page_select_cb_t s_page_select_cb;
 static void *s_page_select_user_ctx;
+
+static ui_squareline_page_action_cb_t s_page_action_cb;
+static void *s_page_action_user_ctx;
 
 void ui_squareline_set_img_base_path(const char *base_path)
 {
@@ -31,6 +35,17 @@ void ui_squareline_set_page_select_cb(ui_squareline_page_select_cb_t cb, void *u
 {
     s_page_select_cb = cb;
     s_page_select_user_ctx = user_ctx;
+}
+
+void ui_squareline_set_page_action_cb(ui_squareline_page_action_cb_t cb, void *user_ctx)
+{
+    s_page_action_cb = cb;
+    s_page_action_user_ctx = user_ctx;
+}
+
+void ui_squareline_set_menu_font(const lv_font_t *font)
+{
+    ui_page_menu_set_font(font);
 }
 
 void ui_squareline_launch_app(const char *script_rel_path)
@@ -58,6 +73,14 @@ void ui_squareline_page_selected(uint8_t page, const char *app_id, const char *s
         return;
     }
     ui_squareline_launch_app(script);
+}
+
+void ui_squareline_page_action(uint8_t page, const char *app_id,
+                               ui_squareline_page_action_t action)
+{
+    if (s_page_action_cb != NULL) {
+        s_page_action_cb(page, app_id, action, s_page_action_user_ctx);
+    }
 }
 
 uint8_t ui_squareline_page_count(void)

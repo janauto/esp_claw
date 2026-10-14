@@ -26,6 +26,7 @@
 #include "ui.h"
 #include "ui_icon_2048.h"
 #include "ui_img_sd.h"
+#include "ui_page_menu.h"
 #include "ui_squareline_priv.h"
 
 /* Duration of the slide animations defined in ui.c. The page is re-bound once
@@ -48,6 +49,17 @@
 #define UI_PAGE_DOT_SIZE_SEL    18
 #define UI_PAGE_DOT_COLOR       0x384038
 #define UI_PAGE_DOT_COLOR_SEL   0xF0C430
+
+/* Long-press menu: it dims everything above the footer and hangs its panel just
+ * below the selected icon's frame. The footer stays live as the key hint, with
+ * its middle caption switched to say what M does while the menu is up. */
+#define UI_PAGE_SCREEN_H        800
+#define UI_PAGE_FOOTER_H        56
+#define UI_PAGE_MENU_GAP        16
+#define UI_PAGE_MENU_TOP        (UI_PAGE_SCREEN_H / 2 + UI_CAROUSEL_FRAME_Y + \
+                                 UI_CAROUSEL_FRAME_H / 2 + UI_PAGE_MENU_GAP)
+#define UI_PAGE_OPEN_CAPTION    "M OPEN"
+#define UI_PAGE_MENU_CAPTION    "M OK"
 
 /* Per-app data. Only the app's own appearance is listed here — the carousel
  * layout (which icon goes in which flanking slot) is derived at bind time from
@@ -167,6 +179,7 @@ static struct {
     lv_obj_t *icon_left;
     lv_obj_t *icon_right_in;
     lv_obj_t *icon_left_in;
+    lv_obj_t *footer_open;      /* middle caption, relabelled while the menu is up */
     lv_obj_t **dots;            /* allocated in screen_init, length = s_page_count */
     lv_timer_t *settle;         /* fires when a slide finishes, then re-binds */
     uint8_t   page;
@@ -228,6 +241,28 @@ static void ui_page_block_fill(lv_obj_t *obj, uint32_t color)
 {
     lv_obj_set_style_bg_color(obj, lv_color_hex(color), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_bg_opa(obj, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
+}
+
+/* Rounded frame around the selected icon, with the pill on its top edge. Used by
+ * the carousel and by the copy the long-press menu lifts above its scrim. */
+static lv_obj_t *ui_page_frame(lv_obj_t *parent, uint32_t frame_color, uint32_t pill_color,
+                               lv_obj_t **ret_pill)
+{
+    lv_obj_t *frame = ui_page_block(parent, UI_CAROUSEL_FRAME_W, UI_CAROUSEL_FRAME_H,
+                                    0, UI_CAROUSEL_FRAME_Y, UI_CAROUSEL_FRAME_RADIUS);
+    lv_obj_t *pill;
+
+    lv_obj_set_style_border_color(frame, lv_color_hex(frame_color), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_border_opa(frame, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_border_width(frame, UI_CAROUSEL_FRAME_BORDER, LV_PART_MAIN | LV_STATE_DEFAULT);
+
+    pill = ui_page_block(frame, UI_CAROUSEL_PILL_W, UI_CAROUSEL_PILL_H,
+                         0, UI_CAROUSEL_PILL_Y, UI_CAROUSEL_PILL_RADIUS);
+    ui_page_block_fill(pill, pill_color);
+    if (ret_pill != NULL) {
+        *ret_pill = pill;
+    }
+    return frame;
 }
 
 /* Resolve a page-table icon name to something lv_image_set_src() accepts.
@@ -404,11 +439,19 @@ static void ui_page_slide(uint8_t target, bool forward)
  * were, so the ring index moves opposite to the captions. */
 void ui_page_prev(void)
 {
+    if (ui_page_menu_is_open()) {
+        ui_page_menu_step(-1);
+        return;
+    }
     ui_page_slide(page_ring((int)s_ui.page - 1), false);
 }
 
 void ui_page_next(void)
 {
+    if (ui_page_menu_is_open()) {
+        ui_page_menu_step(1);
+        return;
+    }
     ui_page_slide(page_ring((int)s_ui.page + 1), true);
 }
 
@@ -418,6 +461,10 @@ void ui_page_select(void)
     const ui_app_desc_t *p;
 
     if (s_ui.screen == NULL) {
+        return;
+    }
+    if (ui_page_menu_is_open()) {
+        ui_page_menu_confirm();
         return;
     }
     p = &s_pages[s_ui.page];
@@ -453,6 +500,12 @@ static void ui_page_touch_event_cb(lv_event_t *e)
     lv_indev_t *indev = lv_indev_active();
 
     if (!indev) return;
+
+    /* The footer stays live under the menu; a swipe there must not page. */
+    if (ui_page_menu_is_open()) {
+        page_touch_state.is_pressed = false;
+        return;
+    }
 
     if (code == LV_EVENT_PRESSED) {
         lv_point_t point;
@@ -496,6 +549,50 @@ static void ui_page_mid_icon_cb(lv_event_t *e)
     if (lv_event_get_code(e) == LV_EVENT_DOUBLE_CLICKED) {
         ui_page_select();
     }
+}
+
+static void ui_page_menu_done(ui_page_menu_item_t item)
+{
+    const ui_app_desc_t *p = &s_pages[s_ui.page];
+
+    lv_textarea_set_text(s_ui.footer_open, UI_PAGE_OPEN_CAPTION);
+    switch (item) {
+    case UI_PAGE_MENU_UNINSTALL:
+        ui_squareline_page_action(s_ui.page, p->app_id, UI_SQUARELINE_PAGE_ACTION_UNINSTALL);
+        break;
+    case UI_PAGE_MENU_DETAIL:
+        ui_squareline_page_action(s_ui.page, p->app_id, UI_SQUARELINE_PAGE_ACTION_DETAIL);
+        break;
+    default:
+        break;
+    }
+}
+
+/* Long press on the selected icon: dim the screen, lift a copy of the framed
+ * icon above the scrim so it stays readable, and offer 卸载 / 详细 / 取消. */
+static void ui_page_mid_icon_long_cb(lv_event_t *e)
+{
+    const ui_app_desc_t *p = &s_pages[s_ui.page];
+    const ui_page_menu_config_t config = {
+        .parent    = s_ui.screen,
+        .scrim_h   = UI_PAGE_SCREEN_H - UI_PAGE_FOOTER_H,
+        .panel_top = UI_PAGE_MENU_TOP,
+        .done_cb   = ui_page_menu_done,
+    };
+    lv_obj_t *layer;
+    lv_obj_t *icon;
+
+    if (lv_event_get_code(e) != LV_EVENT_LONG_PRESSED || s_ui.settle != NULL) {
+        return;
+    }
+    layer = ui_page_menu_open(&config);
+    if (layer == NULL) {
+        return;
+    }
+    ui_page_frame(layer, p->frame_color, p->pill_color, NULL);
+    icon = ui_page_icon(layer, NULL, 0, UI_CAROUSEL_MID_Y, UI_CAROUSEL_MID_ZOOM, false, true);
+    lv_img_set_src(icon, lv_img_get_src(s_ui.icon_mid));
+    lv_textarea_set_text(s_ui.footer_open, UI_PAGE_MENU_CAPTION);
 }
 
 /* ------------------------------------------------------------------- screen */
@@ -596,7 +693,8 @@ void ui_page_screen_init(void)
     lv_obj_set_style_outline_pad(bar, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
 
     footer_prev = ui_page_label(root, 93, 45, -150, 378, "PREV", 0xF0C428, true);
-    footer_open = ui_page_label(root, 93, 49, -1, 378, "M OPEN", 0xF0C428, true);
+    footer_open = ui_page_label(root, 93, 49, -1, 378, UI_PAGE_OPEN_CAPTION, 0xF0C428, true);
+    s_ui.footer_open = footer_open;
 
     /* Page caption — rebound on every page change; empty string until ui_page_bind(0) below. */
     s_ui.title = ui_page_label(root, 360, 45, 4, UI_CAROUSEL_MID_Y - 145, "", 0x788078, true);
@@ -607,14 +705,7 @@ void ui_page_screen_init(void)
     ui_page_label(root, 135, 58, -153, -367, "LANGUAGE", 0xFAFBF5, false);
 
     /* Frame + pill highlighting the selected icon. Colours rebound by ui_page_bind(0). */
-    s_ui.frame = ui_page_block(root, 220, 204, 0, UI_CAROUSEL_MID_Y - 6, 20);
-    lv_obj_set_style_border_color(s_ui.frame, lv_color_hex(0x000000),
-                                  LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_border_opa(s_ui.frame, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_border_width(s_ui.frame, 6, LV_PART_MAIN | LV_STATE_DEFAULT);
-
-    s_ui.pill = ui_page_block(s_ui.frame, 176, 13, 0, -80, 10);
-    ui_page_block_fill(s_ui.pill, 0x000000);
+    s_ui.frame = ui_page_frame(root, 0x000000, 0x000000, &s_ui.pill);
 
     /* Visible carousel slots — sources will be overwritten by ui_page_bind(0)
      * below; passing NULL here is safe because set_src accepts NULL. */
@@ -667,6 +758,7 @@ void ui_page_screen_init(void)
 
     lv_obj_add_flag(s_ui.icon_mid, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_EVENT_BUBBLE);
     lv_obj_add_event_cb(s_ui.icon_mid, ui_page_mid_icon_cb, LV_EVENT_DOUBLE_CLICKED, NULL);
+    lv_obj_add_event_cb(s_ui.icon_mid, ui_page_mid_icon_long_cb, LV_EVENT_LONG_PRESSED, NULL);
 
     /* Register touch events for swipe navigation */
     lv_obj_add_event_cb(s_ui.screen, ui_page_touch_event_cb, LV_EVENT_PRESSED, NULL);
@@ -679,6 +771,7 @@ void ui_page_screen_init(void)
 
 void ui_page_screen_destroy(void)
 {
+    ui_page_menu_close();
     if (s_ui.settle != NULL) {
         lv_timer_del(s_ui.settle);
     }
@@ -710,6 +803,7 @@ uint8_t ui_page_current(void)
 
 void ui_page_show(uint8_t page)
 {
+    ui_page_menu_close();       /* the menu belongs to the page being replaced */
     if (s_ui.settle != NULL) {
         lv_timer_del(s_ui.settle);
         s_ui.settle = NULL;
