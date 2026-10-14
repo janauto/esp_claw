@@ -32,9 +32,6 @@ local C_TEXT_DIM  = "#788078"
 local C_OK        = "#00FF88"
 local C_WARN      = "#FFCC00"
 
-local SCREEN_W = 800
-local SCREEN_H = 480
-
 lvgl.init({
     buffer_lines = 40,
     tick_ms = 5,
@@ -56,6 +53,10 @@ scr:set_style({ bg_color = C_BG, bg_opa = 255 })
 -- 屏幕本身也是一个 lv_obj，同样默认可滚动
 scr:set_scroll({ dir = "none", scrollbar = "off" })
 
+-- 横屏（800x480）时翻页键在页码卡片左右；竖屏（480x800）时卡片上移，两键并排在下方
+local SCREEN_W, SCREEN_H = scr:get_size()
+local PORTRAIT = SCREEN_H > SCREEN_W
+
 ---------------------------------------------------------------- 顶部标题栏
 local top_bar = panel(scr, { w = SCREEN_W, h = 56, align = "top_mid", y = 0 })
 top_bar:set_style({ bg_color = C_PANEL, bg_opa = 255, radius = 0, border_width = 0 })
@@ -75,7 +76,7 @@ local link_dot = panel(top_bar, { w = 16, h = 16, align = "right_mid", x = -20 }
 link_dot:set_style({ bg_color = C_DIM, bg_opa = 255, radius = 75, border_width = 0 })
 
 ---------------------------------------------------------------- 中间页码卡片
-local page_card = panel(scr, { w = 260, h = 168, align = "center", y = -26 })
+local page_card = panel(scr, { w = 260, h = 168, align = "center", y = PORTRAIT and -110 or -26 })
 page_card:set_style({
     bg_color = C_PANEL,
     bg_opa = 255,
@@ -138,12 +139,14 @@ local function make_key(parent, opts)
 end
 
 local prev_key = make_key(scr, {
-    w = 210, h = 104, align = "center", x = -258, y = -26,
+    w = 210, h = 104, align = "center",
+    x = PORTRAIT and -112 or -258, y = PORTRAIT and 120 or -26,
     title = "< 上一页", subtitle = "VOL-",
 })
 
 local next_key = make_key(scr, {
-    w = 210, h = 104, align = "center", x = 258, y = -26,
+    w = 210, h = 104, align = "center",
+    x = PORTRAIT and 112 or 258, y = PORTRAIT and 120 or -26,
     title = "下一页 >", subtitle = "VOL+",
 })
 
@@ -167,10 +170,12 @@ exit_key:set_style({
 })
 lvgl.label(exit_key, { text = "退出  MODE", align = "center", text_color = C_ACCENT })
 
-local hid_label = lvgl.label(bottom_bar, {
+-- 竖屏底栏放不下退出键和状态文字，状态单独放在底栏上方一行
+local hid_label = lvgl.label(PORTRAIT and scr or bottom_bar, {
     text = "HID: 等待配对 esp-claw-host",
-    align = "right_mid",
-    x = -24,
+    align = PORTRAIT and "bottom_mid" or "right_mid",
+    x = PORTRAIT and 0 or -24,
+    y = PORTRAIT and -96 or 0,
     text_color = C_WARN,
 })
 
