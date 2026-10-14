@@ -660,6 +660,12 @@ void vTaskDelay(TickType_t ticks)
     sim_esp_compat_pump_once();
 }
 
+TickType_t xTaskGetTickCount(void)
+{
+    /* Simulator tick is 1 ms, matching pdMS_TO_TICKS(). */
+    return (TickType_t)emscripten_get_now();
+}
+
 void vTaskDelete(TaskHandle_t task)
 {
     (void)task;

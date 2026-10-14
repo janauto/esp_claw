@@ -12,6 +12,7 @@ BaseType_t xTaskCreate(TaskFunction_t task,
                        UBaseType_t priority,
                        TaskHandle_t *out_handle);
 void vTaskDelay(TickType_t ticks);
+TickType_t xTaskGetTickCount(void);
 void vTaskDelete(TaskHandle_t task);
 TaskHandle_t xTaskGetCurrentTaskHandle(void);
 uint32_t ulTaskNotifyTake(BaseType_t clear_on_exit, TickType_t ticks_to_wait);
