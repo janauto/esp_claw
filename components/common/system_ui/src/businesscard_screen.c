@@ -26,9 +26,9 @@ extern const lv_font_t ui_font_Font1;  /* Smaller font for type_tag and id_line 
 extern const lv_font_t ui_font_Font2;  /* 32px font for main text */
 
 /* Chrome geometry — matches every add_ui screen's root container */
-#define BC_ROOT_W   804
-#define BC_ROOT_H   490
-#define BC_ROOT_Y   -3
+#define BC_ROOT_W   480
+#define BC_ROOT_H   800
+#define BC_ROOT_Y   0
 
 /* Shared chrome colours (same across all screens) */
 #define BC_C_BG          0x000000
@@ -48,7 +48,7 @@ extern const lv_font_t ui_font_Font2;  /* 32px font for main text */
 /*
  * Per-card descriptor.
  *
- * frame_color   — border of the 587×245 card container (TextArea10 bg colour
+ * frame_color   — border of the card container (TextArea10 bg colour
  *                 matches it in every add_ui screen)
  * accent_color  — strip inside the frame, TextArea12/13/id_line text colour
  * badge_bg      — TextArea10 (name badge) background; usually == frame_color
@@ -156,7 +156,7 @@ typedef struct {
     lv_obj_t *screen;
 
     /* Per-card dynamic widgets */
-    lv_obj_t *card_frame;       /* 587×245 container — border colour changes */
+    lv_obj_t *card_frame;       /* card container — border colour changes */
     lv_obj_t *frame_strip;      /* accent strip inside frame */
     lv_obj_t *card_img;
     lv_obj_t *badge;            /* TextArea10: name pill */
@@ -408,16 +408,16 @@ esp_err_t system_ui_create_businesscard_locked(void)
     lv_obj_clear_flag(s_bc.screen, LV_OBJ_FLAG_SCROLLABLE);
 
     /* Root container (matches ui_Container40 / ui_Container39 / etc.) */
-    root = bc_block(s_bc.screen, BC_ROOT_W, BC_ROOT_H, -1, BC_ROOT_Y, 0);
+    root = bc_block(s_bc.screen, BC_ROOT_W, BC_ROOT_H, 0, BC_ROOT_Y, 0);
     bc_fill(root, BC_C_BG);
 
     /* ── Status bar (ui_Container1 + ui_Container17) ── */
-    bar = bc_block(root, 791, 30, -1, -222, 0);
+    bar = bc_block(root, 480, 48, 0, -376, 0);
     bc_fill(bar, BC_C_PANEL);
-    bc_fill(bc_block(bar, 9, 39, -388, -1, 0), BC_C_ACCENT_HI);
+    bc_fill(bc_block(bar, 12, 48, -234, 0, 0), BC_C_ACCENT_HI);
 
     /* Time (ui_TextArea24 / equivalent) */
-    bc_label(root, 88, 54, 313, -213, "9:51", BC_C_TEXT_WHITE);
+    bc_label(root, 88, 54, 140, -366, "9:51", BC_C_TEXT_WHITE);
 
     /* Battery bar (ui_Bar3 / equivalent) */
     obj = lv_bar_create(root);
@@ -425,8 +425,8 @@ esp_err_t system_ui_create_businesscard_locked(void)
     lv_bar_set_start_value(obj, 0, LV_ANIM_OFF);
     lv_obj_set_width(obj, 32);
     lv_obj_set_height(obj, 9);
-    lv_obj_set_x(obj, 367);
-    lv_obj_set_y(obj, -225);
+    lv_obj_set_x(obj, 208);
+    lv_obj_set_y(obj, -376);
     lv_obj_set_align(obj, LV_ALIGN_CENTER);
     lv_obj_set_style_radius(obj, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
     bc_fill(obj, BC_C_BAR_BG);
@@ -435,27 +435,27 @@ esp_err_t system_ui_create_businesscard_locked(void)
     lv_obj_set_style_bg_opa(obj, 255, LV_PART_INDICATOR | LV_STATE_DEFAULT);
 
     /* Header strip (ui_Container18) + "nfc卡片" title + counter */
-    bar = bc_block(root, 240, 41, 0, -182, 0);
+    bar = bc_block(root, 200, 41, 10, -310, 0);
     bc_fill(bar, BC_C_PANEL);
-    bc_label(root, 164, 54, -11, -178, "nfc卡片", BC_C_TEXT_WHITE);
-    bc_label(root, 135, 58, -316, -213, "LANGUAGE", BC_C_TEXT_WHITE);
-    s_bc.counter = bc_label(root, 80, 40, 330, -182, "1/6", BC_C_TEXT_DIM);
+    bc_label(root, 164, 54, 10, -306, "nfc卡片", BC_C_TEXT_WHITE);
+    bc_label(root, 135, 58, -153, -367, "LANGUAGE", BC_C_TEXT_WHITE);
+    s_bc.counter = bc_label(root, 80, 40, 192, -310, "1/6", BC_C_TEXT_DIM);
 
-    /* ── Card frame (ui_Container19 — 587×245, radius 20) ── */
-    s_bc.card_frame = bc_block(root, 587, 245, 0, -16, 20);
+    /* ── Card frame (ui_Container19, portrait: artwork on top, text below) ── */
+    s_bc.card_frame = bc_block(root, 440, 470, 0, -35, 20);
     lv_obj_set_style_border_color(s_bc.card_frame, lv_color_hex(0xFFAD17),
                                   LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_border_opa(s_bc.card_frame, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_border_width(s_bc.card_frame, 6, LV_PART_MAIN | LV_STATE_DEFAULT);
 
-    /* Accent strip (ui_Container20 — 520×13, radius 10, at y=-95) inside card_frame */
-    s_bc.frame_strip = bc_block(s_bc.card_frame, 520, 13, 0, -95, 10);
+    /* Accent strip (ui_Container20) along the top of card_frame */
+    s_bc.frame_strip = bc_block(s_bc.card_frame, 390, 13, 0, -212, 10);
     bc_fill(s_bc.frame_strip, 0xFFAD17);
 
-    /* Card image (ui_Image7 — x=-156, y=-14, zoom 640) inside card_frame */
+    /* Card image (ui_Image7, zoom 640) centred in the upper half of card_frame */
     s_bc.card_img = lv_image_create(s_bc.card_frame);
-    lv_obj_set_x(s_bc.card_img, -156);
-    lv_obj_set_y(s_bc.card_img, -14);
+    lv_obj_set_x(s_bc.card_img, 0);
+    lv_obj_set_y(s_bc.card_img, -100);
     lv_obj_set_align(s_bc.card_img, LV_ALIGN_CENTER);
     lv_image_set_scale(s_bc.card_img, 640);
     lv_obj_clear_flag(s_bc.card_img, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
@@ -463,12 +463,12 @@ esp_err_t system_ui_create_businesscard_locked(void)
     /* Move strip to foreground so it's not covered by the image */
     lv_obj_move_foreground(s_bc.frame_strip);
 
-    /* TextArea10: name badge (260×54 at x=129, y=-49, radius 15) - use textarea directly, no wrapper */
+    /* TextArea10: name badge (260×54, radius 15) below the artwork - use textarea directly, no wrapper */
     s_bc.badge_label = lv_textarea_create(root);
     lv_obj_set_width(s_bc.badge_label, 260);
     lv_obj_set_height(s_bc.badge_label, 54);
-    lv_obj_set_x(s_bc.badge_label, 129);
-    lv_obj_set_y(s_bc.badge_label, -49);
+    lv_obj_set_x(s_bc.badge_label, 0);
+    lv_obj_set_y(s_bc.badge_label, 30);
     lv_obj_set_align(s_bc.badge_label, LV_ALIGN_CENTER);
     lv_textarea_set_text(s_bc.badge_label, "");
     lv_obj_clear_flag(s_bc.badge_label, LV_OBJ_FLAG_SCROLLABLE);
@@ -486,23 +486,24 @@ esp_err_t system_ui_create_businesscard_locked(void)
     lv_obj_set_style_opa(s_bc.badge_label, 0, LV_PART_CURSOR | LV_STATE_DEFAULT);
     /* Note: s_bc.badge is not used, only s_bc.badge_label */
 
-    /* TextArea11: subtitle (239×54 at x=123, y=15) white - parent is ROOT */
-    s_bc.subtitle = bc_label(root, 239, 54, 123, 15, "", BC_C_TEXT_WHITE);
+    /* TextArea11: subtitle (239×54) white - parent is ROOT */
+    s_bc.subtitle = bc_label(root, 300, 54, 0, 88, "", BC_C_TEXT_WHITE);
     lv_obj_set_style_text_font(s_bc.subtitle, &ui_font_Font2, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_text_align(s_bc.subtitle, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN | LV_STATE_DEFAULT);
 
-    /* TextArea12: type tag (164×54 at x=92, y=55) accent - parent is ROOT */
-    s_bc.type_tag = bc_label(root, 164, 54, 92, 55, "", 0xFFAD17);
+    /* TextArea12: type tag (164×54) accent, left of the detail - parent is ROOT */
+    s_bc.type_tag = bc_label(root, 164, 54, -100, 134, "", 0xFFAD17);
     lv_obj_set_style_text_font(s_bc.type_tag, &ui_font_Font1, LV_PART_MAIN | LV_STATE_DEFAULT);
 
-    /* TextArea13: detail (164×54 at x=201, y=59) accent - parent is ROOT */
-    s_bc.detail = bc_label(root, 164, 54, 201, 59, "", 0xFFAD17);
+    /* TextArea13: detail (164×54) accent - parent is ROOT */
+    s_bc.detail = bc_label(root, 164, 54, 30, 132, "", 0xFFAD17);
     lv_obj_set_style_text_font(s_bc.detail, &ui_font_Font2, LV_PART_MAIN | LV_STATE_DEFAULT);
 
-    /* 5th label: id_line (164×54 at x=201, y=88) accent - parent is ROOT - now Font1 has 川 */
-    s_bc.id_line = bc_label(root, 164, 54, 201, 88, "", 0xFFAD17);
+    /* 5th label: id_line (164×54, under the detail) accent - parent is ROOT - now Font1 has 川 */
+    s_bc.id_line = bc_label(root, 164, 54, 30, 168, "", 0xFFAD17);
     lv_obj_set_style_text_font(s_bc.id_line, &ui_font_Font1, LV_PART_MAIN | LV_STATE_DEFAULT);
 
-    /* ── Page-indicator dots (match add_ui placement: y=134, parent is ROOT not card_frame) ── */
+    /* ── Page-indicator dots (under the card, parent is ROOT not card_frame) ── */
     for (int i = 0; i < BC_CARD_COUNT; i++) {
         /* Centre the row: first dot offset is -(N-1)/2 * step, then +i*step */
         int32_t dot_x = -(BC_CARD_COUNT - 1) * BC_DOT_STEP / 2
@@ -512,7 +513,7 @@ esp_err_t system_ui_create_businesscard_locked(void)
         lv_obj_set_width(dot, BC_DOT_IDLE_SZ);
         lv_obj_set_height(dot, BC_DOT_IDLE_SZ);
         lv_obj_set_x(dot, dot_x);
-        lv_obj_set_y(dot, 134);
+        lv_obj_set_y(dot, 232);
         lv_obj_set_align(dot, LV_ALIGN_CENTER);
         lv_obj_clear_flag(dot, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
         lv_obj_set_style_radius(dot, 75, LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -525,8 +526,8 @@ esp_err_t system_ui_create_businesscard_locked(void)
     btn = lv_button_create(root);
     lv_obj_set_width(btn, 122);
     lv_obj_set_height(btn, 71);
-    lv_obj_set_x(btn, -176);
-    lv_obj_set_y(btn, 193);
+    lv_obj_set_x(btn, -146);
+    lv_obj_set_y(btn, 310);
     lv_obj_set_align(btn, LV_ALIGN_CENTER);
     lv_obj_clear_flag(btn, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_style_radius(btn, 20, LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -552,8 +553,8 @@ esp_err_t system_ui_create_businesscard_locked(void)
     btn = lv_button_create(root);
     lv_obj_set_width(btn, 122);
     lv_obj_set_height(btn, 71);
-    lv_obj_set_x(btn, -34);
-    lv_obj_set_y(btn, 193);
+    lv_obj_set_x(btn, 0);
+    lv_obj_set_y(btn, 310);
     lv_obj_set_align(btn, LV_ALIGN_CENTER);
     lv_obj_clear_flag(btn, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_style_radius(btn, 20, LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -579,8 +580,8 @@ esp_err_t system_ui_create_businesscard_locked(void)
     btn = lv_button_create(root);
     lv_obj_set_width(btn, 122);
     lv_obj_set_height(btn, 71);
-    lv_obj_set_x(btn, 108);
-    lv_obj_set_y(btn, 193);
+    lv_obj_set_x(btn, 146);
+    lv_obj_set_y(btn, 310);
     lv_obj_set_align(btn, LV_ALIGN_CENTER);
     lv_obj_clear_flag(btn, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_style_radius(btn, 20, LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -606,8 +607,8 @@ esp_err_t system_ui_create_businesscard_locked(void)
     btn = lv_button_create(root);
     lv_obj_set_width(btn, 100);
     lv_obj_set_height(btn, 40);
-    lv_obj_set_x(btn, -316);
-    lv_obj_set_y(btn, -170);
+    lv_obj_set_x(btn, -170);
+    lv_obj_set_y(btn, -310);
     lv_obj_set_align(btn, LV_ALIGN_CENTER);
     lv_obj_clear_flag(btn, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_style_radius(btn, 10, LV_PART_MAIN | LV_STATE_DEFAULT);
