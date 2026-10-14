@@ -92,12 +92,10 @@ extern esp_err_t cap_lua_async_submit(const cap_lua_async_job_t *job,
 extern void ui_squareline_launch_app(const char *script_rel_path);
 #include "ui_squareline.h"
 
-/* Same chrome geometry as the carousel screen. The generated file used a
- * 804x490 container over an 800x480 display; the object is centred, so the
- * overflow is absorbed by the panel edges exactly as it is on the carousel. */
-#define WORKBUDDY_ROOT_W        804
-#define WORKBUDDY_ROOT_H        490
-#define WORKBUDDY_ROOT_Y        2
+/* Same chrome geometry as the carousel screen: a full 480x800 portrait root. */
+#define WORKBUDDY_ROOT_W        480
+#define WORKBUDDY_ROOT_H        800
+#define WORKBUDDY_ROOT_Y        0
 
 #define WORKBUDDY_C_BG          0x000000
 #define WORKBUDDY_C_PANEL       0x080C08
@@ -818,11 +816,11 @@ esp_err_t system_ui_create_workbuddy_locked(void)
     workbuddy_fill(root, WORKBUDDY_C_BG);
 
     /* --- status bar with its yellow marker (ui_Container30/31) --- */
-    bar = workbuddy_block(root, 791, 30, -1, -222, 0);
+    bar = workbuddy_block(root, 480, 48, 0, -376, 0);
     workbuddy_fill(bar, WORKBUDDY_C_PANEL);
-    workbuddy_fill(workbuddy_block(bar, 9, 39, -388, -1, 0), WORKBUDDY_C_ACCENT_HI);
+    workbuddy_fill(workbuddy_block(bar, 12, 48, -234, 0, 0), WORKBUDDY_C_ACCENT_HI);
 
-    workbuddy_label(root, 88, 54, 313, -213, "9:51", WORKBUDDY_C_TEXT);
+    workbuddy_label(root, 88, 54, 140, -366, "9:51", WORKBUDDY_C_TEXT);
 
     /* --- battery gauge (ui_Bar4) --- */
     obj = lv_bar_create(root);
@@ -830,8 +828,8 @@ esp_err_t system_ui_create_workbuddy_locked(void)
     lv_bar_set_start_value(obj, 0, LV_ANIM_OFF);
     lv_obj_set_width(obj, 32);
     lv_obj_set_height(obj, 9);
-    lv_obj_set_x(obj, 367);
-    lv_obj_set_y(obj, -225);
+    lv_obj_set_x(obj, 208);
+    lv_obj_set_y(obj, -376);
     lv_obj_set_align(obj, LV_ALIGN_CENTER);
     lv_obj_set_style_radius(obj, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
     workbuddy_fill(obj, WORKBUDDY_C_BAR_BG);
@@ -841,34 +839,34 @@ esp_err_t system_ui_create_workbuddy_locked(void)
     s_wb.battery = obj;
 
     /* --- header strip with the orange dot (ui_Container32/33) --- */
-    bar = workbuddy_block(root, 240, 41, 0, -176, 0);
+    bar = workbuddy_block(root, 240, 41, 0, -296, 0);
     workbuddy_fill(bar, WORKBUDDY_C_PANEL);
     workbuddy_fill(workbuddy_block(bar, 17, 16, -88, 2, 75), WORKBUDDY_C_DOT);
 
-    workbuddy_label(root, 135, 58, -312, -213, "LANGUAGE", WORKBUDDY_C_TEXT);
+    workbuddy_label(root, 135, 58, -153, -367, "LANGUAGE", WORKBUDDY_C_TEXT);
 
     /* --- the framed body (ui_Container35/36) --- */
-    obj = workbuddy_block(root, 675, 245, 0, -16, 20);
+    obj = workbuddy_block(root, 440, 400, 0, -50, 20);
     lv_obj_set_style_border_color(obj, lv_color_hex(WORKBUDDY_C_FRAME), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_border_opa(obj, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_border_width(obj, 6, LV_PART_MAIN | LV_STATE_DEFAULT);
-    workbuddy_fill(workbuddy_block(obj, 633, 13, 4, -104, 10), WORKBUDDY_C_ACCENT);
+    workbuddy_fill(workbuddy_block(obj, 400, 13, 0, -182, 10), WORKBUDDY_C_ACCENT);
 
     /* Main readout (ui_TextArea17). Left-aligned, like the generated file. */
-    s_wb.output = workbuddy_textarea(root, 610, 192, 0, -9, "等待中", WORKBUDDY_C_TEXT);
+    s_wb.output = workbuddy_textarea(root, 400, 340, 0, -36, "等待中", WORKBUDDY_C_TEXT);
 
     /* --- the four readouts around the body --- */
-    s_wb.status  = workbuddy_label(root, 93, 54, -28,  -165, "等待中", WORKBUDDY_C_TEXT);
-    s_wb.counter = workbuddy_label(root, 93, 54, 103,  -165, "5421",   0xDCB701);
-    s_wb.detail  = workbuddy_label(root, 93, 54, -232,  133, "未关联", WORKBUDDY_C_TEXT_DIM);
-    s_wb.score   = workbuddy_label(root, 93, 54, 335,   133, "0",      WORKBUDDY_C_TEXT_OK);
+    s_wb.status  = workbuddy_label(root, 93, 54, -28,  -285, "等待中", WORKBUDDY_C_TEXT);
+    s_wb.counter = workbuddy_label(root, 93, 54, 103,  -285, "5421",   0xDCB701);
+    s_wb.detail  = workbuddy_label(root, 93, 54, -118,  196, "未关联", WORKBUDDY_C_TEXT_DIM);
+    s_wb.score   = workbuddy_label(root, 93, 54, 186,   196, "0",      WORKBUDDY_C_TEXT_OK);
 
     /* --- record button (ui_Button6 + ui_Image17 + ui_TextArea16) --- */
     btn = lv_button_create(root);
     lv_obj_set_width(btn, 210);
     lv_obj_set_height(btn, 76);
     lv_obj_set_x(btn, 0);
-    lv_obj_set_y(btn, 171);
+    lv_obj_set_y(btn, 278);
     lv_obj_set_align(btn, LV_ALIGN_CENTER);
     lv_obj_clear_flag(btn, LV_OBJ_FLAG_SCROLLABLE);
     workbuddy_fill(btn, WORKBUDDY_C_RECORD_OFF);
@@ -886,16 +884,16 @@ esp_err_t system_ui_create_workbuddy_locked(void)
     workbuddy_icon(btn, WORKBUDDY_ICON_BUTTON, -73, -2, 192);
 
     /* --- the three decorative icons (ui_Image14/15/16) --- */
-    workbuddy_icon(root, WORKBUDDY_ICON_LEFT, -294, 124, 128);
-    workbuddy_icon(root, WORKBUDDY_ICON_TASKS, 278, 125, 64);
-    workbuddy_icon(root, WORKBUDDY_ICON_POINTS, 41, -172, 128);
+    workbuddy_icon(root, WORKBUDDY_ICON_LEFT, -180, 187, 128);
+    workbuddy_icon(root, WORKBUDDY_ICON_TASKS, 129, 188, 64);
+    workbuddy_icon(root, WORKBUDDY_ICON_POINTS, 41, -292, 128);
 
     /* --- back to the carousel --- */
     btn = lv_button_create(root);
     lv_obj_set_width(btn, 120);
     lv_obj_set_height(btn, 44);
-    lv_obj_set_x(btn, -330);
-    lv_obj_set_y(btn, 213);
+    lv_obj_set_x(btn, -170);
+    lv_obj_set_y(btn, 362);
     lv_obj_set_align(btn, LV_ALIGN_CENTER);
     lv_obj_clear_flag(btn, LV_OBJ_FLAG_SCROLLABLE);
     workbuddy_fill(btn, WORKBUDDY_C_PANEL);
