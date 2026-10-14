@@ -628,10 +628,10 @@ static void meeting_minutes_screen_init(void)
 
     ui_Container21 = lv_obj_create(ui_Screen2);
     lv_obj_remove_style_all(ui_Container21);
-    lv_obj_set_width(ui_Container21, 804);
-    lv_obj_set_height(ui_Container21, 490);
-    lv_obj_set_x(ui_Container21, -1);
-    lv_obj_set_y(ui_Container21, -4);
+    lv_obj_set_width(ui_Container21, 480);
+    lv_obj_set_height(ui_Container21, 800);
+    lv_obj_set_x(ui_Container21, 0);
+    lv_obj_set_y(ui_Container21, 0);
     lv_obj_set_align(ui_Container21, LV_ALIGN_CENTER);
     lv_obj_clear_flag(ui_Container21, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);      /// Flags
     lv_obj_set_style_bg_color(ui_Container21, lv_color_hex(0x000000), LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -648,10 +648,10 @@ static void meeting_minutes_screen_init(void)
 
     ui_Container1 = lv_obj_create(ui_Container21);
     lv_obj_remove_style_all(ui_Container1);
-    lv_obj_set_width(ui_Container1, 791);
-    lv_obj_set_height(ui_Container1, 30);
-    lv_obj_set_x(ui_Container1, -1);
-    lv_obj_set_y(ui_Container1, -222);
+    lv_obj_set_width(ui_Container1, 480);
+    lv_obj_set_height(ui_Container1, 48);
+    lv_obj_set_x(ui_Container1, 0);
+    lv_obj_set_y(ui_Container1, -376);
     lv_obj_set_align(ui_Container1, LV_ALIGN_CENTER);
     lv_obj_clear_flag(ui_Container1, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);      /// Flags
     lv_obj_set_style_bg_color(ui_Container1, lv_color_hex(0x080C08), LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -659,10 +659,10 @@ static void meeting_minutes_screen_init(void)
 
     ui_Container17 = lv_obj_create(ui_Container1);
     lv_obj_remove_style_all(ui_Container17);
-    lv_obj_set_width(ui_Container17, 9);
-    lv_obj_set_height(ui_Container17, 39);
-    lv_obj_set_x(ui_Container17, -388);
-    lv_obj_set_y(ui_Container17, -1);
+    lv_obj_set_width(ui_Container17, 12);
+    lv_obj_set_height(ui_Container17, 48);
+    lv_obj_set_x(ui_Container17, -234);
+    lv_obj_set_y(ui_Container17, 0);
     lv_obj_set_align(ui_Container17, LV_ALIGN_CENTER);
     lv_obj_clear_flag(ui_Container17, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);      /// Flags
     lv_obj_set_style_bg_color(ui_Container17, lv_color_hex(0xF8E458), LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -671,8 +671,8 @@ static void meeting_minutes_screen_init(void)
     ui_TextArea11 = lv_textarea_create(ui_Container21);
     lv_obj_set_width(ui_TextArea11, 88);
     lv_obj_set_height(ui_TextArea11, 54);
-    lv_obj_set_x(ui_TextArea11, 313);
-    lv_obj_set_y(ui_TextArea11, -221);
+    lv_obj_set_x(ui_TextArea11, 140);
+    lv_obj_set_y(ui_TextArea11, -366);
     lv_obj_set_align(ui_TextArea11, LV_ALIGN_CENTER);
     lv_textarea_set_text(ui_TextArea11, "9:51");
     lv_textarea_set_placeholder_text(ui_TextArea11, "Placeholder...");
@@ -688,8 +688,8 @@ static void meeting_minutes_screen_init(void)
     lv_bar_set_start_value(ui_Bar3, 0, LV_ANIM_OFF);
     lv_obj_set_width(ui_Bar3, 32);
     lv_obj_set_height(ui_Bar3, 9);
-    lv_obj_set_x(ui_Bar3, 367);
-    lv_obj_set_y(ui_Bar3, -225);
+    lv_obj_set_x(ui_Bar3, 208);
+    lv_obj_set_y(ui_Bar3, -376);
     lv_obj_set_align(ui_Bar3, LV_ALIGN_CENTER);
     lv_obj_set_style_radius(ui_Bar3, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_bg_color(ui_Bar3, lv_color_hex(0x384038), LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -705,10 +705,10 @@ static void meeting_minutes_screen_init(void)
 
     ui_Container18 = lv_obj_create(ui_Container21);
     lv_obj_remove_style_all(ui_Container18);
-    lv_obj_set_width(ui_Container18, 480);
-    lv_obj_set_height(ui_Container18, 84);
+    lv_obj_set_width(ui_Container18, 440);
+    lv_obj_set_height(ui_Container18, 96);
     lv_obj_set_x(ui_Container18, 0);
-    lv_obj_set_y(ui_Container18, -146);
+    lv_obj_set_y(ui_Container18, -280);
     lv_obj_set_align(ui_Container18, LV_ALIGN_CENTER);
     lv_obj_clear_flag(ui_Container18, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);      /// Flags
     lv_obj_set_style_radius(ui_Container18, 10, LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -718,8 +718,8 @@ static void meeting_minutes_screen_init(void)
     ui_TextArea2 = lv_textarea_create(ui_Container21);
     lv_obj_set_width(ui_TextArea2, 238);
     lv_obj_set_height(ui_TextArea2, 54);
-    lv_obj_set_x(ui_TextArea2, 56);
-    lv_obj_set_y(ui_TextArea2, -150);
+    lv_obj_set_x(ui_TextArea2, 70);
+    lv_obj_set_y(ui_TextArea2, -284);
     lv_obj_set_align(ui_TextArea2, LV_ALIGN_CENTER);
     lv_textarea_set_text(ui_TextArea2, "会议纪要");
     lv_obj_clear_flag(ui_TextArea2, LV_OBJ_FLAG_SCROLLABLE);      /// Flags
@@ -740,8 +740,8 @@ static void meeting_minutes_screen_init(void)
     ui_TextArea9 = lv_textarea_create(ui_Container21);
     lv_obj_set_width(ui_TextArea9, 135);
     lv_obj_set_height(ui_TextArea9, 58);
-    lv_obj_set_x(ui_TextArea9, -316);
-    lv_obj_set_y(ui_TextArea9, -213);
+    lv_obj_set_x(ui_TextArea9, -153);
+    lv_obj_set_y(ui_TextArea9, -367);
     lv_obj_set_align(ui_TextArea9, LV_ALIGN_CENTER);
     lv_textarea_set_text(ui_TextArea9, "LANGUAGE");
     lv_textarea_set_placeholder_text(ui_TextArea9, "Placeholder...");
@@ -753,10 +753,10 @@ static void meeting_minutes_screen_init(void)
     lv_obj_set_style_border_side(ui_TextArea9, LV_BORDER_SIDE_NONE, LV_PART_MAIN | LV_STATE_DEFAULT);
 
     ui_Button2 = lv_btn_create(ui_Container21);
-    lv_obj_set_width(ui_Button2, 122);
-    lv_obj_set_height(ui_Button2, 71);
-    lv_obj_set_x(ui_Button2, -160);
-    lv_obj_set_y(ui_Button2, 193);
+    lv_obj_set_width(ui_Button2, 136);
+    lv_obj_set_height(ui_Button2, 84);
+    lv_obj_set_x(ui_Button2, -152);
+    lv_obj_set_y(ui_Button2, 230);
     lv_obj_set_align(ui_Button2, LV_ALIGN_CENTER);
     lv_obj_add_flag(ui_Button2, LV_OBJ_FLAG_SCROLL_ON_FOCUS);     /// Flags
     lv_obj_clear_flag(ui_Button2, LV_OBJ_FLAG_SCROLLABLE);      /// Flags
@@ -775,8 +775,8 @@ static void meeting_minutes_screen_init(void)
     ui_Label1 = lv_label_create(ui_Container21);
     lv_obj_set_width(ui_Label1, LV_SIZE_CONTENT);   /// 1
     lv_obj_set_height(ui_Label1, LV_SIZE_CONTENT);    /// 1
-    lv_obj_set_x(ui_Label1, -160);
-    lv_obj_set_y(ui_Label1, 193);
+    lv_obj_set_x(ui_Label1, -152);
+    lv_obj_set_y(ui_Label1, 230);
     lv_obj_set_align(ui_Label1, LV_ALIGN_CENTER);
     lv_label_set_text(ui_Label1, "开始");
     lv_obj_set_style_text_color(ui_Label1, lv_color_hex(0xF0C430), LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -784,10 +784,10 @@ static void meeting_minutes_screen_init(void)
     lv_obj_set_style_text_font(ui_Label1, &ui_font_Font2, LV_PART_MAIN | LV_STATE_DEFAULT);
 
     ui_ButtonPause = lv_btn_create(ui_Container21);
-    lv_obj_set_width(ui_ButtonPause, 122);
-    lv_obj_set_height(ui_ButtonPause, 71);
+    lv_obj_set_width(ui_ButtonPause, 136);
+    lv_obj_set_height(ui_ButtonPause, 84);
     lv_obj_set_x(ui_ButtonPause, 0);
-    lv_obj_set_y(ui_ButtonPause, 193);
+    lv_obj_set_y(ui_ButtonPause, 230);
     lv_obj_set_align(ui_ButtonPause, LV_ALIGN_CENTER);
     lv_obj_add_flag(ui_ButtonPause, LV_OBJ_FLAG_SCROLL_ON_FOCUS);     /// Flags
     lv_obj_clear_flag(ui_ButtonPause, LV_OBJ_FLAG_SCROLLABLE);      /// Flags
@@ -807,7 +807,7 @@ static void meeting_minutes_screen_init(void)
     lv_obj_set_width(ui_LabelPause, LV_SIZE_CONTENT);   /// 1
     lv_obj_set_height(ui_LabelPause, LV_SIZE_CONTENT);    /// 1
     lv_obj_set_x(ui_LabelPause, 0);
-    lv_obj_set_y(ui_LabelPause, 193);
+    lv_obj_set_y(ui_LabelPause, 230);
     lv_obj_set_align(ui_LabelPause, LV_ALIGN_CENTER);
     lv_label_set_text(ui_LabelPause, "暂停");
     lv_obj_set_style_text_color(ui_LabelPause, lv_color_hex(0xF0C430), LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -817,8 +817,8 @@ static void meeting_minutes_screen_init(void)
     ui_TextArea12 = lv_textarea_create(ui_Container21);
     lv_obj_set_width(ui_TextArea12, 164);
     lv_obj_set_height(ui_TextArea12, 54);
-    lv_obj_set_x(ui_TextArea12, -92);
-    lv_obj_set_y(ui_TextArea12, -150);
+    lv_obj_set_x(ui_TextArea12, -84);
+    lv_obj_set_y(ui_TextArea12, -284);
     lv_obj_set_align(ui_TextArea12, LV_ALIGN_CENTER);
     lv_textarea_set_text(ui_TextArea12, "A-001");
     lv_obj_clear_flag(ui_TextArea12, LV_OBJ_FLAG_SCROLLABLE);      /// Flags
@@ -839,8 +839,8 @@ static void meeting_minutes_screen_init(void)
     lv_obj_remove_style_all(ui_Container19);
     lv_obj_set_width(ui_Container19, 30);
     lv_obj_set_height(ui_Container19, 30);
-    lv_obj_set_x(ui_Container19, -204);
-    lv_obj_set_y(ui_Container19, -150);
+    lv_obj_set_x(ui_Container19, -186);
+    lv_obj_set_y(ui_Container19, -280);
     lv_obj_set_align(ui_Container19, LV_ALIGN_CENTER);
     lv_obj_clear_flag(ui_Container19, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);      /// Flags
     lv_obj_set_style_radius(ui_Container19, 25, LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -851,7 +851,7 @@ static void meeting_minutes_screen_init(void)
     lv_obj_set_width(ui_TextArea13, 470);
     lv_obj_set_height(ui_TextArea13, LV_SIZE_CONTENT);
     lv_obj_set_x(ui_TextArea13, 0);
-    lv_obj_set_y(ui_TextArea13, -55);
+    lv_obj_set_y(ui_TextArea13, -148);
     lv_obj_set_align(ui_TextArea13, LV_ALIGN_CENTER);
     lv_label_set_text(ui_TextArea13, "00:00:00");
     lv_label_set_long_mode(ui_TextArea13, LV_LABEL_LONG_CLIP);
@@ -869,7 +869,7 @@ static void meeting_minutes_screen_init(void)
     lv_obj_set_width(ui_Container20, 12);
     lv_obj_set_height(ui_Container20, 24);
     lv_obj_set_x(ui_Container20, 160);
-    lv_obj_set_y(ui_Container20, 57);
+    lv_obj_set_y(ui_Container20, 30);
     lv_obj_set_align(ui_Container20, LV_ALIGN_CENTER);
     lv_obj_clear_flag(ui_Container20, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);      /// Flags
     lv_obj_set_style_radius(ui_Container20, 10, LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -881,7 +881,7 @@ static void meeting_minutes_screen_init(void)
     lv_obj_set_width(ui_Container23, 12);
     lv_obj_set_height(ui_Container23, 24);
     lv_obj_set_x(ui_Container23, 120);
-    lv_obj_set_y(ui_Container23, 57);
+    lv_obj_set_y(ui_Container23, 30);
     lv_obj_set_align(ui_Container23, LV_ALIGN_CENTER);
     lv_obj_clear_flag(ui_Container23, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);      /// Flags
     lv_obj_set_style_radius(ui_Container23, 10, LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -893,7 +893,7 @@ static void meeting_minutes_screen_init(void)
     lv_obj_set_width(ui_Container24, 12);
     lv_obj_set_height(ui_Container24, 24);
     lv_obj_set_x(ui_Container24, 80);
-    lv_obj_set_y(ui_Container24, 57);
+    lv_obj_set_y(ui_Container24, 30);
     lv_obj_set_align(ui_Container24, LV_ALIGN_CENTER);
     lv_obj_clear_flag(ui_Container24, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);      /// Flags
     lv_obj_set_style_radius(ui_Container24, 10, LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -905,7 +905,7 @@ static void meeting_minutes_screen_init(void)
     lv_obj_set_width(ui_Container25, 12);
     lv_obj_set_height(ui_Container25, 24);
     lv_obj_set_x(ui_Container25, 40);
-    lv_obj_set_y(ui_Container25, 57);
+    lv_obj_set_y(ui_Container25, 30);
     lv_obj_set_align(ui_Container25, LV_ALIGN_CENTER);
     lv_obj_clear_flag(ui_Container25, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);      /// Flags
     lv_obj_set_style_radius(ui_Container25, 10, LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -917,7 +917,7 @@ static void meeting_minutes_screen_init(void)
     lv_obj_set_width(ui_Container26, 12);
     lv_obj_set_height(ui_Container26, 24);
     lv_obj_set_x(ui_Container26, 0);
-    lv_obj_set_y(ui_Container26, 57);
+    lv_obj_set_y(ui_Container26, 30);
     lv_obj_set_align(ui_Container26, LV_ALIGN_CENTER);
     lv_obj_clear_flag(ui_Container26, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);      /// Flags
     lv_obj_set_style_radius(ui_Container26, 10, LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -929,7 +929,7 @@ static void meeting_minutes_screen_init(void)
     lv_obj_set_width(ui_Container27, 12);
     lv_obj_set_height(ui_Container27, 24);
     lv_obj_set_x(ui_Container27, -40);
-    lv_obj_set_y(ui_Container27, 57);
+    lv_obj_set_y(ui_Container27, 30);
     lv_obj_set_align(ui_Container27, LV_ALIGN_CENTER);
     lv_obj_clear_flag(ui_Container27, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);      /// Flags
     lv_obj_set_style_radius(ui_Container27, 10, LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -941,7 +941,7 @@ static void meeting_minutes_screen_init(void)
     lv_obj_set_width(ui_Container28, 12);
     lv_obj_set_height(ui_Container28, 24);
     lv_obj_set_x(ui_Container28, -80);
-    lv_obj_set_y(ui_Container28, 57);
+    lv_obj_set_y(ui_Container28, 30);
     lv_obj_set_align(ui_Container28, LV_ALIGN_CENTER);
     lv_obj_clear_flag(ui_Container28, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);      /// Flags
     lv_obj_set_style_radius(ui_Container28, 10, LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -953,7 +953,7 @@ static void meeting_minutes_screen_init(void)
     lv_obj_set_width(ui_Container29, 12);
     lv_obj_set_height(ui_Container29, 24);
     lv_obj_set_x(ui_Container29, -120);
-    lv_obj_set_y(ui_Container29, 57);
+    lv_obj_set_y(ui_Container29, 30);
     lv_obj_set_align(ui_Container29, LV_ALIGN_CENTER);
     lv_obj_clear_flag(ui_Container29, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);      /// Flags
     lv_obj_set_style_radius(ui_Container29, 10, LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -965,7 +965,7 @@ static void meeting_minutes_screen_init(void)
     lv_obj_set_width(ui_Container30, 12);
     lv_obj_set_height(ui_Container30, 24);
     lv_obj_set_x(ui_Container30, 200);
-    lv_obj_set_y(ui_Container30, 57);
+    lv_obj_set_y(ui_Container30, 30);
     lv_obj_set_align(ui_Container30, LV_ALIGN_CENTER);
     lv_obj_clear_flag(ui_Container30, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);      /// Flags
     lv_obj_set_style_radius(ui_Container30, 10, LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -977,7 +977,7 @@ static void meeting_minutes_screen_init(void)
     lv_obj_set_width(ui_Container31, 12);
     lv_obj_set_height(ui_Container31, 24);
     lv_obj_set_x(ui_Container31, -160);
-    lv_obj_set_y(ui_Container31, 57);
+    lv_obj_set_y(ui_Container31, 30);
     lv_obj_set_align(ui_Container31, LV_ALIGN_CENTER);
     lv_obj_clear_flag(ui_Container31, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);      /// Flags
     lv_obj_set_style_radius(ui_Container31, 10, LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -989,7 +989,7 @@ static void meeting_minutes_screen_init(void)
     lv_obj_set_width(ui_Container32, 12);
     lv_obj_set_height(ui_Container32, 24);
     lv_obj_set_x(ui_Container32, -200);
-    lv_obj_set_y(ui_Container32, 57);
+    lv_obj_set_y(ui_Container32, 30);
     lv_obj_set_align(ui_Container32, LV_ALIGN_CENTER);
     lv_obj_clear_flag(ui_Container32, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);      /// Flags
     lv_obj_set_style_radius(ui_Container32, 10, LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -1001,7 +1001,7 @@ static void meeting_minutes_screen_init(void)
     lv_obj_set_width(ui_Container33, 12);
     lv_obj_set_height(ui_Container33, 24);
     lv_obj_set_x(ui_Container33, -182);
-    lv_obj_set_y(ui_Container33, 57);
+    lv_obj_set_y(ui_Container33, 30);
     lv_obj_set_align(ui_Container33, LV_ALIGN_CENTER);
     lv_obj_clear_flag(ui_Container33, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);      /// Flags
     lv_obj_set_style_radius(ui_Container33, 10, LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -1013,7 +1013,7 @@ static void meeting_minutes_screen_init(void)
     lv_obj_set_width(ui_Container34, 12);
     lv_obj_set_height(ui_Container34, 24);
     lv_obj_set_x(ui_Container34, -140);
-    lv_obj_set_y(ui_Container34, 57);
+    lv_obj_set_y(ui_Container34, 30);
     lv_obj_set_align(ui_Container34, LV_ALIGN_CENTER);
     lv_obj_clear_flag(ui_Container34, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);      /// Flags
     lv_obj_set_style_radius(ui_Container34, 10, LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -1025,7 +1025,7 @@ static void meeting_minutes_screen_init(void)
     lv_obj_set_width(ui_Container35, 12);
     lv_obj_set_height(ui_Container35, 24);
     lv_obj_set_x(ui_Container35, -100);
-    lv_obj_set_y(ui_Container35, 57);
+    lv_obj_set_y(ui_Container35, 30);
     lv_obj_set_align(ui_Container35, LV_ALIGN_CENTER);
     lv_obj_clear_flag(ui_Container35, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);      /// Flags
     lv_obj_set_style_radius(ui_Container35, 10, LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -1037,7 +1037,7 @@ static void meeting_minutes_screen_init(void)
     lv_obj_set_width(ui_Container36, 12);
     lv_obj_set_height(ui_Container36, 24);
     lv_obj_set_x(ui_Container36, -60);
-    lv_obj_set_y(ui_Container36, 57);
+    lv_obj_set_y(ui_Container36, 30);
     lv_obj_set_align(ui_Container36, LV_ALIGN_CENTER);
     lv_obj_clear_flag(ui_Container36, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);      /// Flags
     lv_obj_set_style_radius(ui_Container36, 10, LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -1049,7 +1049,7 @@ static void meeting_minutes_screen_init(void)
     lv_obj_set_width(ui_Container37, 12);
     lv_obj_set_height(ui_Container37, 24);
     lv_obj_set_x(ui_Container37, -20);
-    lv_obj_set_y(ui_Container37, 57);
+    lv_obj_set_y(ui_Container37, 30);
     lv_obj_set_align(ui_Container37, LV_ALIGN_CENTER);
     lv_obj_clear_flag(ui_Container37, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);      /// Flags
     lv_obj_set_style_radius(ui_Container37, 10, LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -1061,7 +1061,7 @@ static void meeting_minutes_screen_init(void)
     lv_obj_set_width(ui_Container38, 12);
     lv_obj_set_height(ui_Container38, 24);
     lv_obj_set_x(ui_Container38, 20);
-    lv_obj_set_y(ui_Container38, 57);
+    lv_obj_set_y(ui_Container38, 30);
     lv_obj_set_align(ui_Container38, LV_ALIGN_CENTER);
     lv_obj_clear_flag(ui_Container38, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);      /// Flags
     lv_obj_set_style_radius(ui_Container38, 10, LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -1073,7 +1073,7 @@ static void meeting_minutes_screen_init(void)
     lv_obj_set_width(ui_Container40, 12);
     lv_obj_set_height(ui_Container40, 24);
     lv_obj_set_x(ui_Container40, 60);
-    lv_obj_set_y(ui_Container40, 57);
+    lv_obj_set_y(ui_Container40, 30);
     lv_obj_set_align(ui_Container40, LV_ALIGN_CENTER);
     lv_obj_clear_flag(ui_Container40, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);      /// Flags
     lv_obj_set_style_radius(ui_Container40, 10, LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -1085,7 +1085,7 @@ static void meeting_minutes_screen_init(void)
     lv_obj_set_width(ui_Container41, 12);
     lv_obj_set_height(ui_Container41, 24);
     lv_obj_set_x(ui_Container41, 100);
-    lv_obj_set_y(ui_Container41, 57);
+    lv_obj_set_y(ui_Container41, 30);
     lv_obj_set_align(ui_Container41, LV_ALIGN_CENTER);
     lv_obj_clear_flag(ui_Container41, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);      /// Flags
     lv_obj_set_style_radius(ui_Container41, 10, LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -1097,7 +1097,7 @@ static void meeting_minutes_screen_init(void)
     lv_obj_set_width(ui_Container45, 12);
     lv_obj_set_height(ui_Container45, 24);
     lv_obj_set_x(ui_Container45, 140);
-    lv_obj_set_y(ui_Container45, 57);
+    lv_obj_set_y(ui_Container45, 30);
     lv_obj_set_align(ui_Container45, LV_ALIGN_CENTER);
     lv_obj_clear_flag(ui_Container45, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);      /// Flags
     lv_obj_set_style_radius(ui_Container45, 10, LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -1109,7 +1109,7 @@ static void meeting_minutes_screen_init(void)
     lv_obj_set_width(ui_Container46, 12);
     lv_obj_set_height(ui_Container46, 24);
     lv_obj_set_x(ui_Container46, 180);
-    lv_obj_set_y(ui_Container46, 57);
+    lv_obj_set_y(ui_Container46, 30);
     lv_obj_set_align(ui_Container46, LV_ALIGN_CENTER);
     lv_obj_clear_flag(ui_Container46, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);      /// Flags
     lv_obj_set_style_radius(ui_Container46, 10, LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -1117,10 +1117,10 @@ static void meeting_minutes_screen_init(void)
     lv_obj_set_style_bg_opa(ui_Container46, 100, LV_PART_MAIN | LV_STATE_DEFAULT);
 
     ui_Button6 = lv_btn_create(ui_Container21);
-    lv_obj_set_width(ui_Button6, 122);
-    lv_obj_set_height(ui_Button6, 71);
-    lv_obj_set_x(ui_Button6, 160);
-    lv_obj_set_y(ui_Button6, 193);
+    lv_obj_set_width(ui_Button6, 136);
+    lv_obj_set_height(ui_Button6, 84);
+    lv_obj_set_x(ui_Button6, 152);
+    lv_obj_set_y(ui_Button6, 230);
     lv_obj_set_align(ui_Button6, LV_ALIGN_CENTER);
     lv_obj_add_flag(ui_Button6, LV_OBJ_FLAG_SCROLL_ON_FOCUS);     /// Flags
     lv_obj_clear_flag(ui_Button6, LV_OBJ_FLAG_SCROLLABLE);      /// Flags
@@ -1139,8 +1139,8 @@ static void meeting_minutes_screen_init(void)
     ui_Label3 = lv_label_create(ui_Container21);
     lv_obj_set_width(ui_Label3, LV_SIZE_CONTENT);   /// 1
     lv_obj_set_height(ui_Label3, LV_SIZE_CONTENT);    /// 1
-    lv_obj_set_x(ui_Label3, 160);
-    lv_obj_set_y(ui_Label3, 193);
+    lv_obj_set_x(ui_Label3, 152);
+    lv_obj_set_y(ui_Label3, 230);
     lv_obj_set_align(ui_Label3, LV_ALIGN_CENTER);
     lv_label_set_text(ui_Label3, "标记");
     lv_obj_set_style_text_color(ui_Label3, lv_color_hex(0xF0C430), LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -1150,8 +1150,8 @@ static void meeting_minutes_screen_init(void)
     ui_ButtonBack = lv_btn_create(ui_Container21);
     lv_obj_set_width(ui_ButtonBack, 120);
     lv_obj_set_height(ui_ButtonBack, 44);
-    lv_obj_set_x(ui_ButtonBack, -330);
-    lv_obj_set_y(ui_ButtonBack, 213);
+    lv_obj_set_x(ui_ButtonBack, -170);
+    lv_obj_set_y(ui_ButtonBack, 362);
     lv_obj_set_align(ui_ButtonBack, LV_ALIGN_CENTER);
     lv_obj_clear_flag(ui_ButtonBack, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_style_radius(ui_ButtonBack, 10, LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -1175,10 +1175,10 @@ static void meeting_minutes_screen_init(void)
 
     ui_Container22 = lv_obj_create(ui_Screen2);
     lv_obj_remove_style_all(ui_Container22);
-    lv_obj_set_width(ui_Container22, 190);
-    lv_obj_set_height(ui_Container22, 50);
+    lv_obj_set_width(ui_Container22, 220);
+    lv_obj_set_height(ui_Container22, 60);
     lv_obj_set_x(ui_Container22, 0);
-    lv_obj_set_y(ui_Container22, -57);
+    lv_obj_set_y(ui_Container22, -150);
     lv_obj_set_align(ui_Container22, LV_ALIGN_CENTER);
     lv_obj_clear_flag(ui_Container22, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);      /// Flags
     lv_obj_set_style_radius(ui_Container22, 15, LV_PART_MAIN | LV_STATE_DEFAULT);
