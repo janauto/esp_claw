@@ -5,9 +5,12 @@
  * host, renders one screen into an RGB565 framebuffer of the requested size and
  * writes it out as a BMP. Lets layout changes be checked without flashing.
  *
- *   system_ui_preview <width> <height> <screen> <out.bmp>
+ *   system_ui_preview <width> <height> <screen> <out.bmp> [x,y ...]
  *
  * screen: home | boot | businesscard | meeting | infrared | workbuddy
+ * Each trailing x,y[,ms] is pressed for ms (default 100) and released through a
+ * pointer input device before the frame is captured, e.g. to open a popup;
+ * a long ms gives a long press.
  */
 
 #include <stdio.h>
@@ -26,6 +29,33 @@
 
 static uint16_t *s_fb;
 static int32_t s_w, s_h;
+static lv_point_t s_touch_point;
+static bool s_touch_pressed;
+
+static void touch_read_cb(lv_indev_t *indev, lv_indev_data_t *data)
+{
+    LV_UNUSED(indev);
+    data->point = s_touch_point;
+    data->state = s_touch_pressed ? LV_INDEV_STATE_PRESSED : LV_INDEV_STATE_RELEASED;
+}
+
+static void run_for(int ms)
+{
+    for (int t = 0; t < ms; t += 10) {
+        lv_tick_inc(10);
+        lv_timer_handler();
+    }
+}
+
+static void tap(int32_t x, int32_t y, int hold_ms)
+{
+    s_touch_point.x = x;
+    s_touch_point.y = y;
+    s_touch_pressed = true;
+    run_for(hold_ms);
+    s_touch_pressed = false;
+    run_for(600);
+}
 
 static void flush_cb(lv_display_t *disp, const lv_area_t *area, uint8_t *px)
 {
@@ -102,8 +132,8 @@ int main(int argc, char **argv)
     lv_display_t *disp;
     lv_obj_t *scr = NULL;
 
-    if (argc != 5) {
-        fprintf(stderr, "usage: %s <width> <height> <screen> <out.bmp>\n", argv[0]);
+    if (argc < 5) {
+        fprintf(stderr, "usage: %s <width> <height> <screen> <out.bmp> [x,y[,ms] ...]\n", argv[0]);
         return 2;
     }
     s_w = atoi(argv[1]);
@@ -116,6 +146,9 @@ int main(int argc, char **argv)
     lv_display_set_color_format(disp, LV_COLOR_FORMAT_RGB565);
     lv_display_set_buffers(disp, buf, NULL, sizeof(buf), LV_DISPLAY_RENDER_MODE_PARTIAL);
     lv_display_set_flush_cb(disp, flush_cb);
+    lv_indev_t *touch = lv_indev_create();
+    lv_indev_set_type(touch, LV_INDEV_TYPE_POINTER);
+    lv_indev_set_read_cb(touch, touch_read_cb);
 
     s_ui.width = (uint32_t)s_w;
     s_ui.height = (uint32_t)s_h;
@@ -149,6 +182,13 @@ int main(int argc, char **argv)
         return 1;
     }
     lv_screen_load(scr);
+    run_for(200);
+    for (int i = 5; i < argc; i++) {
+        int x, y, ms = 100;
+        if (sscanf(argv[i], "%d,%d,%d", &x, &y, &ms) >= 2) {
+            tap(x, y, ms);
+        }
+    }
     render();
     return write_bmp(argv[4]) == 0 ? 0 : 1;
 }
