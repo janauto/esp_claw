@@ -133,6 +133,11 @@ do not clear the selected phone's state. This fixes the observed iPhone state
 `notify_enabled=true`, `connected=false`, `encrypted=false` on 26261e3d.
 
 Validation: the esp32_s31_korvo1 IDF 6.1 build and 15 extracted C function host
-checks passed. Physical pairing and media results remain separate acceptance
-gates until measured on the device.
-
+checks passed. The a97cb556 app image was flashed at 0x20000 with device hash
+verification on 2026-10-15. Boot ELF prefix 5d4eb3211 and report handles
+37/41/45 were read back; the installed Lua application remains on SD.
+Actual iPhone pairing and media results remain separate acceptance gates.
+macOS CoreBluetooth also subscribes to HID when using the bridge; subscription
+does not identify a phone platform. A Mac transfer started SMP and timed out;
+the Mac was released before asking for iPhone-only pairing. Simultaneous host
+acceptance has not passed.
