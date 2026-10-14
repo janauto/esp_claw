@@ -26,6 +26,9 @@
 
 #include <stddef.h>
 
+/* For lv_canvas_t, to detach the buffer before deleting the canvas. */
+#include "src/widgets/canvas/lv_canvas_private.h"
+
 /* Matches the artwork icons, so ui.c's zoom values apply unchanged. */
 #define ICON_SIDE       256
 
@@ -95,8 +98,19 @@ static void icon_2048_rect(lv_layer_t *layer, int32_t x, int32_t y, int32_t w, i
  * A canvas is used purely as the drawing target: lv_canvas_init_layer() points a
  * layer at our buffer, the rectangles are drawn through it, and
  * lv_canvas_finish_layer() flushes the queued draw tasks. The canvas is then
- * deleted - its destructor only drops the cache entry, it does not free the
- * buffer (lv_canvas.c), so the buffer outlives it and becomes the image source.
+ * deleted without freeing the buffer, which outlives it and becomes the image
+ * source.
+ *
+ * The buffer is detached before the delete. lv_canvas_destructor() (LVGL 9.5 and
+ * 9.6) calls lv_image_cache_drop(&canvas->draw_buf) - the address of the field,
+ * not the buffer - so both cache lookups read the low byte of our buffer pointer
+ * as an image magic. Depending on where the allocator put the buffer that logs
+ * "invalid magic" twice (low byte < 0x20, e.g. 0x10), or silently treats the
+ * field as a file path and strcmp()s it against cached paths (0x20..0x7F). With
+ * draw_buf NULL the destructor returns early. Nothing is lost by skipping its
+ * drop: lv_canvas_set_draw_buf() already dropped the buffer, an allocated RGB565
+ * buffer is used directly by the decoder rather than cached, and the header cache
+ * only holds file sources. Drop the detach once LVGL passes canvas->draw_buf.
  */
 static lv_draw_buf_t *icon_2048_render(lv_obj_t *parent, bool selected)
 {
@@ -145,6 +159,7 @@ static lv_draw_buf_t *icon_2048_render(lv_obj_t *parent, bool selected)
                    TILE_RADIUS, icon_2048_shade(COLOR_TILE_2048, selected));
 
     lv_canvas_finish_layer(canvas, &layer);
+    ((lv_canvas_t *)canvas)->draw_buf = NULL;
     lv_obj_delete(canvas);
     return buf;
 }
