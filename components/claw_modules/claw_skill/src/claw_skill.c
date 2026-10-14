@@ -1086,12 +1086,17 @@ static esp_err_t load_registry_dir_recursive(const char *root_dir,
         entry = &(*entries)[*entry_count];
         entry->root_dir = root_dir;
 
+        /* A malformed skill document is skipped rather than failing the whole
+         * registry: the writable root holds user-installed skills, and one bad
+         * SKILL.md there must not stop the firmware from booting (app_claw_start
+         * treats a registry error as fatal). Only allocation failures abort. */
         err = parse_skill_document_metadata(relative_path, text, (int)*entry_count, entry);
         free(text);
         if (err == ESP_ERR_INVALID_ARG) {
-            ESP_LOGE(TAG, "skill file %s has invalid metadata", relative_path);
+            ESP_LOGE(TAG, "skill file %s has invalid metadata, skipped", relative_path);
             free_registry_entry(entry);
-            goto cleanup;
+            err = ESP_OK;
+            continue;
         }
         if (err != ESP_OK) {
             ESP_LOGE(TAG, "skill file %s metadata parse failed: %s", relative_path, esp_err_to_name(err));
@@ -1100,10 +1105,15 @@ static esp_err_t load_registry_dir_recursive(const char *root_dir,
         }
 
         err = validate_registry_entry(entry);
-        if (err != ESP_OK) {
-            ESP_LOGE(TAG, "skill file %s validation failed: %s", relative_path, esp_err_to_name(err));
+        if (err == ESP_ERR_NO_MEM) {
             free_registry_entry(entry);
             goto cleanup;
+        }
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "skill file %s validation failed: %s, skipped", relative_path, esp_err_to_name(err));
+            free_registry_entry(entry);
+            err = ESP_OK;
+            continue;
         }
 
         /* A skill id already loaded from an earlier (higher-priority) root wins;
