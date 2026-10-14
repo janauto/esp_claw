@@ -1,5 +1,26 @@
+--[[
+Description: 2048。LVGL 画面 + 触摸滑动 + 实体按键。
+
+    滑动棋盘        -> 上/下/左/右移动方块，相同数字合并
+    屏幕上的 新游戏 -> 重开一局
+    屏幕上的 退出 / MODE -> 退出，回到启动本脚本的那个界面
+
+画面走 LVGL，适配器旋转屏幕时（例如竖屏 480x800）布局跟着 scr:get_size()
+走，触摸坐标也是同一套，不用脚本自己转。
+
+触摸：LVGL 的 Lua 事件不带坐标，滑动方向只能自己算，所以触摸全部从
+lcd_touch 轮询里来，按钮也是自己做命中判断，不再 indev_register 第二个
+LVGL 输入设备——同一个 GT1151 被多个任务读时，读走数据的一方会把点清掉，
+另一方偶尔读到空，松手判定因此要连续几次读空才算。
+
+退出：lvgl.init() 开的是带 RESTORE_DEFAULT_ON_RELEASE 的独占显示会话，
+      lvgl.deinit() 会把屏幕交还给启动本脚本的界面。释放显示之前先退订按键
+      ——iot_button_unregister_cb() 会清掉 single_click 上的全部回调（含首页
+      那一份），而首页是在显示会话释放时才重新订阅的，顺序反了退出后首页
+      按键就失灵。
+--]]
 local bm = require("board_manager")
-local display = require("display")
+local lvgl = require("lvgl")
 local delay = require("delay")
 local system_ok, system = pcall(require, "system")
 local touch_ok, lcd_touch = pcall(require, "lcd_touch")
@@ -23,53 +44,93 @@ local function now_ms()
     return math.floor(os.clock() * 1000)
 end
 
-local function rgb(r, g, b)
-    return { r = r, g = g, b = b }
-end
-
 local function clamp(v, lo, hi)
     if v < lo then return lo end
     if v > hi then return hi end
     return v
 end
 
-local RUN_TIME_MS = int_arg("run_time_ms", 180000)
-local TARGET_SIZE = clamp(int_arg("target_size", 480), 240, 800)
+local RUN_TIME_MS = int_arg("run_time_ms", 1800000)
 local FRAME_MS = 16
 local SWIPE_THRESHOLD = 44
+-- 连续这么多次读不到点才算松手，约 50ms，滑动手势远比这长
+local RELEASE_POLLS = 3
 local SOUND_VOLUME = 84
 local UAC_FLUSH_PCM_BYTES = 4000
 
-local output_codec, board_output_rate, output_channels, output_bits =
-    bm.get_audio_codec_output_params("audio_dac")
-local OUTPUT_SAMPLE_RATE = int_arg("sample_rate_hz", board_output_rate or 16000)
+-- 配色沿用原来的 2048，首页图标（ui_icon_2048.c）也是照这套取的色
+local C_BG = "#F8F5EF"
+local C_PANEL = "#9D8F84"
+local C_PANEL_DOWN = "#7F736A"
+local C_GRID = "#BBAFA5"
+local C_EMPTY = "#CDC4BB"
+local C_SHADOW = "#DED6CD"
+local C_TEXT = "#FFFAF4"
+local C_SUBTEXT = "#EFE8E0"
+local C_DARK = "#5B544D"
+local C_GOLD = "#EDC22E"
+local C_RED = "#F65E3B"
 
-local panel, io, width, height, panel_if = bm.get_display_lcd_params("display_lcd")
-if not panel then
-    print("[game_2048] ERROR: get_display_lcd_params(display_lcd) failed: " .. tostring(io))
-    return
+local TILE_COLORS = {
+    [2] = "#EEE4DA",
+    [4] = "#EDE0C8",
+    [8] = "#F2B179",
+    [16] = "#F59563",
+    [32] = "#F67C5F",
+    [64] = "#F65E3B",
+    [128] = "#EDCF72",
+    [256] = "#EDCC61",
+    [512] = "#EDC850",
+    [1024] = "#EDC53F",
+    [2048] = "#EDC22E",
+}
+local TILE_BEYOND = "#3A8ACD"
+
+local function tile_color(value)
+    return TILE_COLORS[value] or TILE_BEYOND
 end
 
-local ok, err = pcall(display.init, panel, io, width, height, panel_if)
+local function tile_text_color(value)
+    if value <= 4 then return C_DARK end
+    return C_TEXT
+end
+
+---------------------------------------------------------------- 字号
+
+-- Lua 的 lvgl 每次运行只有一个默认字号（font_load 只认 DATA 分区里的字体），
+-- 所以整个界面用同一个字号，按棋盘格子大小挑。棋盘边长等于短边减去边距，
+-- 横竖屏都一样，所以 lvgl.init 之前就能按面板短边算出来。
+local function pick_font_size()
+    local ok, _, _, w, h = pcall(bm.get_display_lcd_params, "display_lcd")
+    local short = 480
+    if ok and type(w) == "number" and type(h) == "number" and w > 0 and h > 0 then
+        short = math.min(w, h)
+    end
+    if short >= 440 then return 28 end
+    if short >= 320 then return 22 end
+    return 18
+end
+
+local FONT_SIZE = pick_font_size()
+
+---------------------------------------------------------------- 初始化
+
+-- 先要显示会话再拿触摸：board_manager 的 lcd_touch 设备只有在显示起来之后
+-- 才有 handle。
+local ok, err = pcall(lvgl.init, {
+    buffer_lines = 40,
+    tick_ms = 5,
+    task_period_ms = 10,
+    font_size = FONT_SIZE,
+})
 if not ok then
-    print("[game_2048] ERROR: display.init failed: " .. tostring(err))
+    print("[game_2048] ERROR: lvgl.init failed: " .. tostring(err))
     return
 end
 
-local screen_ready = true
-width = display.width
-height = display.height
-
-local touch_handle = nil
-local audio_output = nil
-local sfx = {}
-local pending_sfx = nil
 local key_group = nil
-local running = true
+local audio_output = nil
 
--- 顺序要紧：先退订按键，再关显示会话。按键退订会清掉 single_click 事件上的
--- 所有回调（含 system_ui 首页的那一份），而首页正是在显示会话释放时重新订阅，
--- 所以让 display.deinit() 走在后面，退出后首页按键才是活的。
 local function cleanup()
     if key_group then
         pcall(button.off, key_group)
@@ -80,15 +141,16 @@ local function cleanup()
         pcall(audio_output.close, audio_output)
         audio_output = nil
     end
-    if screen_ready then
-        pcall(display.end_frame)
-        pcall(display.deinit)
-        screen_ready = false
-    end
+    pcall(lvgl.deinit)
 end
 
-if width <= 0 or height <= 0 then
-    print("[game_2048] ERROR: invalid display size")
+local scr = lvgl.create_screen()
+scr:set_style({ bg_color = C_BG, bg_opa = 255 })
+scr:set_scroll({ dir = "none", scrollbar = "off" })
+
+local scr_w, scr_h = scr:get_size()
+if not scr_w or scr_w <= 0 or not scr_h or scr_h <= 0 then
+    print("[game_2048] ERROR: invalid screen size")
     cleanup()
     return
 end
@@ -99,8 +161,7 @@ if not touch_ok then
     return
 end
 
-local touch_err
-touch_handle, touch_err = bm.get_lcd_touch_handle("lcd_touch")
+local touch_handle, touch_err = bm.get_lcd_touch_handle("lcd_touch")
 if not touch_handle then
     print("[game_2048] ERROR: get_lcd_touch_handle(lcd_touch) failed: " .. tostring(touch_err))
     cleanup()
@@ -113,6 +174,15 @@ if not synced then
     cleanup()
     return
 end
+
+---------------------------------------------------------------- 音效
+
+local output_codec, board_output_rate, output_channels, output_bits =
+    bm.get_audio_codec_output_params("audio_dac")
+local OUTPUT_SAMPLE_RATE = int_arg("sample_rate_hz", board_output_rate or 16000)
+
+local sfx = {}
+local pending_sfx = nil
 
 local function build_tone(freq_hz, duration_ms, amp, wave)
     local rate = OUTPUT_SAMPLE_RATE
@@ -198,10 +268,12 @@ end
 
 init_audio()
 
--- 实体按键：MODE 退出，和 meeting_presenter.lua 一个含义，这样任何脚本里
--- MODE 都是「回到刚才那个界面」。VOLUME_UP/DOWN 在本游戏里不参与操作。
+---------------------------------------------------------------- 实体按键
+
+-- MODE 退出，和 meeting_presenter.lua、snake_game.lua 一个含义。
 -- 键位靠 YAML button_labels 认，找不到时按硬件顺序兜底。
 local KEY_ORDER = { "VOLUME_UP", "VOLUME_DOWN", "MODE", "SET" }
+local running = true
 
 local function quit()
     running = false
@@ -227,15 +299,15 @@ local function init_keys()
         by_label[name] = ACTIONS[name] or ACTIONS[KEY_ORDER[i]]
     end
 
-    -- 用 single_click 而不是 press_down：一帧 16ms，抖动一下就会误退出
-    local subscribed, err = pcall(button.on, group, "single_click", function(evt)
+    -- single_click 而不是 press_down：抖动一下就会误退出
+    local subscribed, sub_err = pcall(button.on, group, "single_click", function(evt)
         local action = evt.label and by_label[evt.label]
         if action then
             action()
         end
     end)
     if not subscribed then
-        print("[game_2048] WARN: button.on failed: " .. tostring(err))
+        print("[game_2048] WARN: button.on failed: " .. tostring(sub_err))
         pcall(button.close, group)
         key_group = nil
     end
@@ -243,90 +315,171 @@ end
 
 init_keys()
 
-local stage = math.min(TARGET_SIZE, width, height)
-local sx = math.floor((width - stage) / 2)
-local sy = math.floor((height - stage) / 2)
-local margin = math.max(10, math.floor(stage * 0.028))
-local header_h = math.max(52, math.floor(stage * 0.135))
-local gap = math.max(5, math.floor(stage * 0.014))
-local board_size = stage - margin * 2 - header_h
-board_size = board_size - (board_size % 4)
-local cell = math.floor((board_size - gap * 5) / 4)
-board_size = cell * 4 + gap * 5
-local board_x = sx + math.floor((stage - board_size) / 2)
-local board_y = sy + header_h + math.floor((stage - header_h - board_size) / 2)
+---------------------------------------------------------------- 布局
 
-local BG = rgb(248, 245, 239)
-local STAGE_BG = rgb(248, 245, 239)
-local PANEL = rgb(157, 143, 132)
-local GRID = rgb(187, 175, 165)
-local EMPTY = rgb(205, 196, 187)
-local BOARD_SHADOW = rgb(222, 214, 205)
-local SEPARATOR = rgb(216, 207, 197)
-local TEXT = rgb(255, 250, 244)
-local TITLE_TEXT = rgb(91, 84, 77)
-local SUBTEXT = rgb(239, 232, 224)
-local GOLD = rgb(237, 194, 46)
-local RED = rgb(246, 94, 59)
-local GHOST_COLORS = {
-    rgb(230, 222, 213),
-    rgb(218, 207, 197),
-    rgb(205, 192, 181),
-    rgb(192, 177, 165),
-}
-local GHOST_VALUES = {
-    "0", "1", "2", "3", "4", "5", "6", "7", "8", "9",
-    "16", "32", "64", "128", "256", "512", "1024", "2048",
-}
+-- 竖屏：标题和计分在上，棋盘居中，提示和两个按钮在下，整摞上下居中。
+-- 横屏：棋盘在左，其余一列摆在右边。两种都按 scr:get_size() 算。
+local MARGIN = 16
+local GAP = 24
+local portrait = scr_h >= scr_w
 
-local TILE_COLORS = {
-    [2] = rgb(238, 228, 218),
-    [4] = rgb(237, 224, 200),
-    [8] = rgb(242, 177, 121),
-    [16] = rgb(245, 149, 99),
-    [32] = rgb(246, 124, 95),
-    [64] = rgb(246, 94, 59),
-    [128] = rgb(237, 207, 114),
-    [256] = rgb(237, 204, 97),
-    [512] = rgb(237, 200, 80),
-    [1024] = rgb(237, 197, 63),
-    [2048] = rgb(237, 194, 46),
-}
+local avail_w = scr_w - MARGIN * 2
+local header_h = clamp(math.floor(math.min(scr_w, scr_h) * 0.18), 64, 88)
+local hint_h = FONT_SIZE + 10
+local btn_h = clamp(FONT_SIZE * 2 + 16, 52, 72)
 
-local DARK_TEXT = rgb(91, 84, 77)
+local board_side
+if portrait then
+    board_side = math.min(avail_w, scr_h - MARGIN * 2 - header_h - hint_h - btn_h - GAP * 3)
+else
+    board_side = math.min(scr_h - MARGIN * 2, math.floor(scr_w * 0.58))
+end
+local cell_gap = math.max(8, math.floor(board_side * 0.027))
+local cell = math.floor((board_side - cell_gap * 5) / 4)
+board_side = cell * 4 + cell_gap * 5
+
+local board_x, board_y
+local header_x, header_y, header_w
+local hint_x, hint_y, hint_w
+local btn_y, btn_x, btn_w, btn_gap
+
+if portrait then
+    local total = header_h + GAP + board_side + GAP + hint_h + GAP + btn_h
+    local top = math.max(MARGIN, math.floor((scr_h - total) / 2))
+    board_x = math.floor((scr_w - board_side) / 2)
+    header_x, header_y, header_w = board_x, top, board_side
+    board_y = top + header_h + GAP
+    hint_x, hint_y, hint_w = board_x, board_y + board_side + GAP, board_side
+    btn_y = hint_y + hint_h + GAP
+    btn_x = board_x
+    btn_gap = GAP
+    btn_w = math.floor((board_side - btn_gap) / 2)
+else
+    board_x = MARGIN
+    board_y = math.floor((scr_h - board_side) / 2)
+    local col_x = board_x + board_side + GAP
+    local col_w = scr_w - col_x - MARGIN
+    local total = header_h + GAP + hint_h + GAP + btn_h
+    local top = board_y + math.max(0, math.floor((board_side - total) / 2))
+    header_x, header_y, header_w = col_x, top, col_w
+    hint_x, hint_y, hint_w = col_x, top + header_h + GAP, col_w
+    btn_y = hint_y + hint_h + GAP
+    btn_x = col_x
+    btn_gap = 16
+    btn_w = math.floor((col_w - btn_gap) / 2)
+end
+
+local function no_scroll(obj)
+    obj:set_scroll({ dir = "none", scrollbar = "off" })
+    return obj
+end
+
+local function box(parent, x, y, w, h, color, radius)
+    local obj = lvgl.container(parent, { x = x, y = y, w = w, h = h })
+    obj:set_style({ bg_color = color, bg_opa = 255, radius = radius, border_width = 0, pad = 0 })
+    return no_scroll(obj)
+end
+
+---------------------------------------------------------------- 顶部：标题 + 计分
+
+-- set_style 没有 text_align：label 不给宽度时会收缩到文字大小，再用 align
+-- 摆到卡片中间，视觉上就是文字居中。
+local title = box(scr, header_x, header_y, header_h, header_h, C_GOLD, 8)
+lvgl.label(title, { text = "2048", align = "center", text_color = C_TEXT })
+
+local card_gap = 12
+local card_x = header_x + header_h + card_gap
+local card_w = math.floor((header_x + header_w - card_x - card_gap) / 2)
+
+local function make_card(x, caption)
+    local card = box(scr, x, header_y, card_w, header_h, C_PANEL, 8)
+    lvgl.label(card, { text = caption, align = "top_mid", y = 6, text_color = C_SUBTEXT })
+    return lvgl.label(card, { text = "0", align = "bottom_mid", y = -6, text_color = C_TEXT })
+end
+
+local score_label = make_card(card_x, "分数")
+local best_label = make_card(card_x + card_w + card_gap, "最高")
+
+---------------------------------------------------------------- 棋盘
+
+box(scr, board_x + 3, board_y + 4, board_side, board_side, C_SHADOW, 12)
+local board_obj = box(scr, board_x, board_y, board_side, board_side, C_GRID, 12)
+
+-- 格子在棋盘容器里的坐标（容器内边距为 0），x/y 都从 1 起
+local function cell_pos(x, y)
+    return cell_gap + (x - 1) * (cell + cell_gap), cell_gap + (y - 1) * (cell + cell_gap)
+end
+
+for y = 1, 4 do
+    for x = 1, 4 do
+        local px, py = cell_pos(x, y)
+        box(board_obj, px, py, cell, cell, C_EMPTY, 7)
+    end
+end
+
+-- 16 个方块对象常驻，换数字只改颜色和文字，空格子透明
+local tiles = {}
+for y = 1, 4 do
+    tiles[y] = {}
+    for x = 1, 4 do
+        local px, py = cell_pos(x, y)
+        local obj = box(board_obj, px, py, cell, cell, C_EMPTY, 7)
+        obj:set_style({ opa = 0 })
+        local label = lvgl.label(obj, { text = "", align = "center", text_color = C_DARK })
+        tiles[y][x] = { obj = obj, label = label }
+    end
+end
+
+local overlay = nil
+
+---------------------------------------------------------------- 提示 + 按钮
+
+local hint_box = lvgl.container(scr, { x = hint_x, y = hint_y, w = hint_w, h = hint_h })
+hint_box:set_style({ bg_opa = 0, border_width = 0, pad = 0 })
+no_scroll(hint_box)
+local hint_label = lvgl.label(hint_box, { text = "", align = "center", text_color = C_DARK })
+
+local function make_button(x, text)
+    local obj = box(scr, x, btn_y, btn_w, btn_h, C_PANEL, 10)
+    lvgl.label(obj, { text = text, align = "center", text_color = C_TEXT })
+    return { obj = obj, x = x, y = btn_y, w = btn_w, h = btn_h }
+end
+
+local new_btn = make_button(btn_x, "新游戏")
+local exit_btn = make_button(btn_x + btn_w + btn_gap, "退出")
+local BUTTONS = { { btn = new_btn, action = "new" }, { btn = exit_btn, action = "quit" } }
+
+local function hit(btn, x, y)
+    return x >= btn.x and x < btn.x + btn.w and y >= btn.y and y < btn.y + btn.h
+end
+
+local function set_pressed(btn, pressed)
+    btn.obj:set_style({ bg_color = pressed and C_PANEL_DOWN or C_PANEL })
+end
+
+---------------------------------------------------------------- 游戏状态
 
 local board = {}
 local score = 0
 local best = 0
 local game_over = false
-local won = false
-local touch_down = nil
+local won = false          -- 已经合出过 2048
+local won_overlay = false  -- 「2048!」提示还挂着，下一次滑动只关提示
 
--- 退出按钮的命中区域，由 draw_stage() 按实际布局写入，handle_touch() 读取。
--- 用 table 而非四个局部变量，方便传递且不依赖特定绘制顺序。
-local exit_btn = { x = 0, y = 0, w = 0, h = 0 }
-
-math.randomseed((os.time() or 1) + width * 17 + height * 31 + now_ms())
+math.randomseed((os.time() or 1) + scr_w * 17 + scr_h * 31 + now_ms())
 
 local function empty_board()
     board = {}
     for y = 1, 4 do
-        board[y] = {}
-        for x = 1, 4 do
-            board[y][x] = 0
-        end
+        board[y] = { 0, 0, 0, 0 }
     end
 end
 
-local function tile_xy(x, y)
-    return board_x + gap + (x - 1) * (cell + gap), board_y + gap + (y - 1) * (cell + gap)
-end
-
-local function random_empty_cells(b)
+local function empty_cells()
     local cells = {}
     for y = 1, 4 do
         for x = 1, 4 do
-            if b[y][x] == 0 then
+            if board[y][x] == 0 then
                 cells[#cells + 1] = { x = x, y = y }
             end
         end
@@ -335,15 +488,15 @@ local function random_empty_cells(b)
 end
 
 local function add_random_tile()
-    local cells = random_empty_cells(board)
-    if #cells == 0 then return false end
+    local cells = empty_cells()
+    if #cells == 0 then return nil end
     local pick = cells[math.random(1, #cells)]
     board[pick.y][pick.x] = math.random(1, 10) == 10 and 4 or 2
-    return true
+    return pick
 end
 
 local function has_moves()
-    if #random_empty_cells(board) > 0 then return true end
+    if #empty_cells() > 0 then return true end
     for y = 1, 4 do
         for x = 1, 4 do
             local v = board[y][x]
@@ -352,24 +505,6 @@ local function has_moves()
         end
     end
     return false
-end
-
-local function reset_game()
-    empty_board()
-    score = 0
-    game_over = false
-    won = false
-    add_random_tile()
-    add_random_tile()
-    request_sfx("start")
-end
-
-local function copy_empty()
-    local b = {}
-    for y = 1, 4 do
-        b[y] = { 0, 0, 0, 0 }
-    end
-    return b
 end
 
 local function coords_for(direction, line)
@@ -390,44 +525,37 @@ local function coords_for(direction, line)
     return coords
 end
 
+-- 返回 moved 和合并出的格子列表（用来做弹一下的动画）
 local function slide(direction)
-    local next_board = copy_empty()
-    local movements = {}
+    local next_board = {}
+    for y = 1, 4 do
+        next_board[y] = { 0, 0, 0, 0 }
+    end
+    local merged_cells = {}
     local moved = false
-    local merged = false
 
     for line = 1, 4 do
         local coords = coords_for(direction, line)
         local target_i = 1
         local last_target = nil
-        local target_merged = { false, false, false, false }
+        local last_merged = false
 
         for scan_i = 1, 4 do
             local src = coords[scan_i]
             local value = board[src.y][src.x]
             if value ~= 0 then
-                if last_target and next_board[last_target.y][last_target.x] == value and not target_merged[target_i - 1] then
+                if last_target and not last_merged and next_board[last_target.y][last_target.x] == value then
                     next_board[last_target.y][last_target.x] = value * 2
-                    target_merged[target_i - 1] = true
+                    last_merged = true
                     score = score + value * 2
                     if score > best then best = score end
-                    if value * 2 >= 2048 then won = true end
-                    movements[#movements + 1] = {
-                        from_x = src.x, from_y = src.y,
-                        to_x = last_target.x, to_y = last_target.y,
-                        value = value, merge = true,
-                    }
-                    moved = moved or src.x ~= last_target.x or src.y ~= last_target.y
-                    merged = true
+                    merged_cells[#merged_cells + 1] = last_target
+                    moved = true
                 else
                     local dst = coords[target_i]
                     next_board[dst.y][dst.x] = value
                     last_target = dst
-                    movements[#movements + 1] = {
-                        from_x = src.x, from_y = src.y,
-                        to_x = dst.x, to_y = dst.y,
-                        value = value, merge = false,
-                    }
+                    last_merged = false
                     moved = moved or src.x ~= dst.x or src.y ~= dst.y
                     target_i = target_i + 1
                 end
@@ -435,264 +563,205 @@ local function slide(direction)
         end
     end
 
-    if not moved and not merged then
-        request_sfx("block")
-        return false, {}, false
+    if not moved then
+        return false, {}
     end
-
     board = next_board
-    return true, movements, merged
+    return true, merged_cells
 end
 
-local function tile_color(value)
-    return TILE_COLORS[value] or rgb(58, 138, 205)
-end
+---------------------------------------------------------------- 画面
 
-local function tile_text_color(value)
-    if value <= 4 then return DARK_TEXT end
-    return TEXT
-end
+-- 方块弹一下：新方块从小长大，合并的方块先放大再回落。几帧就完，
+-- 在主循环里逐帧改尺寸，结束时摆回原位。
+local POP_FRAMES = 6
+local pops = {}
 
-local function draw_bold_text_aligned(x, y, w, h, text, style)
-    display.draw_text_aligned(x, y, w, h, text, style)
-    display.draw_text_aligned(x + 1, y, w, h, text, {
-        color = style.color,
-        font_size = style.font_size,
-        align = style.align,
-        valign = style.valign,
-    })
-end
-
-local function draw_bold_text(x, y, text, style)
-    display.draw_text(x, y, text, style)
-    display.draw_text(x + 1, y, text, {
-        color = style.color,
-        font_size = style.font_size,
-    })
-end
-
-local function draw_number_background()
-    local function draw_layer(zone_x, zone_w, spacing, sizes, salt)
-        if zone_w < 24 then return end
-        local cols = math.ceil(zone_w / spacing) + 1
-        local rows = math.ceil(height / spacing) + 1
-        for row = 0, rows - 1 do
-            for col = 0, cols - 1 do
-                local i = row * cols + col + 1
-                local value = GHOST_VALUES[1 + ((i * 7 + col * 5 + row * 3 + salt) % #GHOST_VALUES)]
-                local font_size = sizes[1 + ((i * 5 + row * 3 + salt) % #sizes)]
-                if #value >= 4 then
-                    font_size = math.min(font_size, 16)
-                elseif #value == 3 then
-                    font_size = math.min(font_size, 20)
-                end
-                local text_w = math.max(font_size, math.floor(font_size * 0.55 * #value))
-                local jitter_x = ((row * 11 + col * 7 + salt) % math.max(3, math.floor(spacing * 0.54)))
-                    - math.floor(spacing * 0.27)
-                local jitter_y = ((row * 5 + col * 13 + salt) % math.max(3, math.floor(spacing * 0.46)))
-                    - math.floor(spacing * 0.23)
-                local x = zone_x + col * spacing + jitter_x - math.floor(text_w * 0.18)
-                local y = row * spacing + jitter_y - math.floor(font_size * 0.18)
-                if x < zone_x + zone_w and x + text_w > zone_x then
-                    draw_bold_text(x, y, value, {
-                        color = GHOST_COLORS[1 + ((i + row + salt) % #GHOST_COLORS)],
-                        font_size = font_size,
-                    })
-                end
-            end
-        end
-    end
-
-    local left_w = sx
-    local right_x = sx + stage
-    local right_w = width - right_x
-    draw_layer(0, left_w, 62, { 28, 32, 36, 40, 44, 48 }, 3)
-    draw_layer(0, left_w, 40, { 12, 16, 20, 24, 28 }, 11)
-    draw_layer(right_x, right_w, 62, { 28, 32, 36, 40, 44, 48 }, 7)
-    draw_layer(right_x, right_w, 40, { 12, 16, 20, 24, 28 }, 17)
-end
-
-local function draw_tile_at(px, py, value, scale)
-    if value == 0 then return end
-    scale = scale or 1
+local function place_tile(t, x, y, scale)
     local size = math.floor(cell * scale)
-    local ox = math.floor((cell - size) / 2)
-    local x = px + ox
-    local y = py + ox
-    local radius = math.max(4, math.floor(size * 0.08))
-    local font_size = cell >= 78 and 32 or (cell >= 62 and 28 or (cell >= 46 and 24 or 20))
-    if value >= 1024 then
-        font_size = cell >= 72 and 24 or (cell >= 46 and 16 or 12)
-    elseif value >= 128 then
-        font_size = cell >= 72 and 28 or (cell >= 46 and 20 or 16)
-    end
-    display.fill_round_rect(x, y, size, size, radius, tile_color(value))
-    draw_bold_text_aligned(x, y, size, size, tostring(value), {
-        color = tile_text_color(value),
-        font_size = font_size,
-        align = "center",
-        valign = "middle",
-        bg = tile_color(value),
-    })
+    local px, py = cell_pos(x, y)
+    local off = math.floor((cell - size) / 2)
+    t.obj:set_size(size, size)
+    t.obj:set_pos(px + off, py + off)
 end
 
-local function draw_stage()
-    display.clear(BG)
-    draw_number_background()
-    if sx > 0 or sy > 0 then
-        display.fill_round_rect(sx, sy, stage, stage, 0, STAGE_BG)
+local function paint_tile(x, y)
+    local t = tiles[y][x]
+    local value = board[y][x]
+    if value == 0 then
+        t.obj:set_style({ opa = 0 })
+        return
     end
-    if sx > 0 then
-        display.fill_rect(sx - 2, sy, 5, stage, SEPARATOR)
-        display.fill_rect(sx + stage, sy, 5, stage, SEPARATOR)
-    end
-
-    local compact = stage < 360
-    local score_w = compact and 52 or clamp(math.floor(stage * 0.17), 68, 88)
-    local score_h = compact and 44 or clamp(math.floor(stage * 0.115), 46, 56)
-    local score_gap = compact and 4 or math.max(6, math.floor(stage * 0.015))
-    local score_y = sy + (compact and 8 or 16)
-    local title_w = compact and 48 or clamp(math.floor(board_size * 0.20), 68, 82)
-    local title_color = TILE_COLORS[2048]
-    display.fill_round_rect(board_x, score_y, title_w, score_h, 5, title_color)
-    draw_bold_text_aligned(board_x, score_y, title_w, score_h, "2048", {
-        color = TEXT,
-        font_size = compact and 16 or 24,
-        align = "center",
-        valign = "middle",
-        bg = title_color,
-    })
-
-    local score_x = board_x + board_size - score_w * 2 - score_gap
-
-    -- 退出按钮：放在标题块和计分卡之间的空白里，尺寸与计分卡等高。
-    -- 命中区域写入 exit_btn，供 handle_touch() 判断点击。
-    local hint_x = board_x + title_w + 8
-    local hint_w = score_x - hint_x - 8
-    if hint_w >= 56 then
-        local btn_w = math.min(hint_w, compact and 56 or 80)
-        local btn_x = hint_x + math.floor((hint_w - btn_w) / 2)
-        exit_btn.x = btn_x
-        exit_btn.y = score_y
-        exit_btn.w = btn_w
-        exit_btn.h = score_h
-        display.fill_round_rect(btn_x, score_y, btn_w, score_h, 5, PANEL)
-        display.draw_text_aligned(btn_x, score_y, btn_w, score_h, "EXIT", {
-            color = TEXT,
-            font_size = compact and 12 or 14,
-            align = "center",
-            valign = "middle",
-            bg = PANEL,
-        })
-    else
-        exit_btn.w = 0  -- 空间不足时禁用点击区域
-    end
-
-    display.fill_round_rect(score_x, score_y, score_w, score_h, 5, PANEL)
-    display.draw_text_aligned(score_x, score_y + 3, score_w, math.floor(score_h * 0.36), "SCORE", {
-        color = SUBTEXT,
-        font_size = 12,
-        align = "center",
-        valign = "middle",
-        bg = PANEL,
-    })
-    display.draw_text_aligned(score_x, score_y + math.floor(score_h * 0.34), score_w,
-        math.floor(score_h * 0.58), tostring(score), {
-        color = TEXT,
-        font_size = compact and 16 or 20,
-        align = "center",
-        valign = "middle",
-        bg = PANEL,
-    })
-
-    local best_x = score_x + score_w + score_gap
-    display.fill_round_rect(best_x, score_y, score_w, score_h, 5, PANEL)
-    display.draw_text_aligned(best_x, score_y + 3, score_w, math.floor(score_h * 0.36), "BEST", {
-        color = SUBTEXT,
-        font_size = 12,
-        align = "center",
-        valign = "middle",
-        bg = PANEL,
-    })
-    display.draw_text_aligned(best_x, score_y + math.floor(score_h * 0.34), score_w,
-        math.floor(score_h * 0.58), tostring(best), {
-        color = TEXT,
-        font_size = compact and 16 or 20,
-        align = "center",
-        valign = "middle",
-        bg = PANEL,
-    })
-
-    display.fill_round_rect(board_x + 3, board_y + 4, board_size, board_size, 10, BOARD_SHADOW)
-    display.fill_round_rect(board_x, board_y, board_size, board_size, 10, GRID)
-    for y = 1, 4 do
-        for x = 1, 4 do
-            local px, py = tile_xy(x, y)
-            display.fill_round_rect(px, py, cell, cell, 7, EMPTY)
-        end
-    end
+    t.obj:set_style({ opa = 255, bg_color = tile_color(value) })
+    t.label:set_text(tostring(value))
+    t.label:set_style({ text_color = tile_text_color(value) })
 end
 
-local function draw_board(skip_dest)
-    for y = 1, 4 do
-        for x = 1, 4 do
-            if not (skip_dest and skip_dest[y] and skip_dest[y][x]) then
-                local px, py = tile_xy(x, y)
-                draw_tile_at(px, py, board[y][x], 1)
+local function start_pop(x, y, kind)
+    pops[#pops + 1] = { x = x, y = y, kind = kind, frame = 0 }
+end
+
+local function step_pops()
+    if #pops == 0 then return end
+    local still = {}
+    for _, p in ipairs(pops) do
+        p.frame = p.frame + 1
+        local t = tiles[p.y][p.x]
+        local k = p.frame / POP_FRAMES
+        if k >= 1 then
+            place_tile(t, p.x, p.y, 1)
+        else
+            local scale
+            if p.kind == "new" then
+                scale = 0.5 + 0.5 * k
+            else
+                scale = 1 + 0.12 * (1 - math.abs(2 * k - 1))
             end
+            place_tile(t, p.x, p.y, scale)
+            still[#still + 1] = p
         end
+    end
+    pops = still
+end
+
+local function clear_pops()
+    for _, p in ipairs(pops) do
+        place_tile(tiles[p.y][p.x], p.x, p.y, 1)
+    end
+    pops = {}
+end
+
+local function hide_overlay()
+    if overlay and overlay:is_valid() then
+        overlay:delete()
+    end
+    overlay = nil
+end
+
+local function show_overlay(title_text, sub_text, color)
+    hide_overlay()
+    local w = math.floor(board_side * 0.8)
+    local h = FONT_SIZE * 2 + 96
+    overlay = lvgl.container(board_obj, { w = w, h = h, align = "center" })
+    overlay:set_style({
+        bg_color = C_BG,
+        bg_opa = 235,
+        radius = 12,
+        border_color = color,
+        border_width = 4,
+        pad = 0,
+    })
+    no_scroll(overlay)
+    lvgl.label(overlay, { text = title_text, align = "top_mid", y = 28, text_color = color })
+    lvgl.label(overlay, { text = sub_text, align = "bottom_mid", y = -28, text_color = C_DARK })
+end
+
+local function update_hud()
+    score_label:set_text(tostring(score))
+    best_label:set_text(tostring(best))
+    if game_over then
+        hint_label:set_text("没有可走的了")
+    else
+        hint_label:set_text("滑动合并相同数字")
     end
 end
 
-local function draw_overlay()
-    if not game_over and not won then return end
-    local title = game_over and "GAME OVER" or "2048!"
-    local sub = game_over and "swipe to restart" or "keep going"
-    local panel_w = math.floor(board_size * 0.72)
-    local panel_h = 104
-    local x = board_x + math.floor((board_size - panel_w) / 2)
-    local y = board_y + math.floor((board_size - panel_h) / 2)
-    local c = game_over and RED or GOLD
-    display.fill_round_rect(x, y, panel_w, panel_h, 10, STAGE_BG)
-    display.draw_round_rect(x, y, panel_w, panel_h, 10, c)
-    draw_bold_text_aligned(x, y + 18, panel_w, 34, title, {
-        color = c,
-        font_size = 28,
-        align = "center",
-        valign = "middle",
-        bg = STAGE_BG,
-    })
-    draw_bold_text_aligned(x, y + 58, panel_w, 24, sub, {
-        color = TITLE_TEXT,
-        font_size = 16,
-        align = "center",
-        valign = "middle",
-        bg = STAGE_BG,
-    })
+local function paint_all()
+    for y = 1, 4 do
+        for x = 1, 4 do
+            paint_tile(x, y)
+        end
+    end
+    update_hud()
 end
 
-local function render()
-    display.begin_frame({ clear = true, color = BG })
-    draw_stage()
-    draw_board(nil)
-    draw_overlay()
-    display.present()
-    display.end_frame()
+local function reset_game()
+    clear_pops()
+    hide_overlay()
+    empty_board()
+    score = 0
+    game_over = false
+    won = false
+    won_overlay = false
+    local first = add_random_tile()
+    local second = add_random_tile()
+    paint_all()
+    if first then start_pop(first.x, first.y, "new") end
+    if second then start_pop(second.x, second.y, "new") end
+    request_sfx("start")
 end
 
-local function finish_move(merged)
-    add_random_tile()
+local function reached_2048()
+    for y = 1, 4 do
+        for x = 1, 4 do
+            if board[y][x] >= 2048 then return true end
+        end
+    end
+    return false
+end
+
+local function on_swipe(direction)
+    if game_over then
+        reset_game()
+        return
+    end
+    if won_overlay then
+        won_overlay = false
+        hide_overlay()
+        return
+    end
+
+    local moved, merged_cells = slide(direction)
+    if not moved then
+        if has_moves() then
+            request_sfx("block")
+        else
+            game_over = true
+            show_overlay("游戏结束", "滑动任意方向重开", C_RED)
+            update_hud()
+            request_sfx("over")
+        end
+        return
+    end
+
+    clear_pops()
+    local spawned = add_random_tile()
+    paint_all()
+    for _, c in ipairs(merged_cells) do
+        start_pop(c.x, c.y, "merge")
+    end
+    if spawned then
+        start_pop(spawned.x, spawned.y, "new")
+    end
+
+    if not won and reached_2048() then
+        won = true
+        won_overlay = true
+        show_overlay("2048!", "继续滑动冲更高分", C_GOLD)
+        print("[game_2048] reached 2048, score=" .. score)
+    end
+
     if not has_moves() then
         game_over = true
+        won_overlay = false
+        show_overlay("游戏结束", "滑动任意方向重开", C_RED)
+        update_hud()
         request_sfx("over")
-    elseif merged then
+        print("[game_2048] game over, score=" .. score)
+    elseif #merged_cells > 0 then
         request_sfx("merge")
     else
         request_sfx("move")
     end
 end
 
-local function direction_from_swipe(dx, dy)
+---------------------------------------------------------------- 触摸
+
+-- 手指一移动超过阈值就出方向，不等松手，手感更跟手；一次按下只出一次。
+-- 没移动够就松手算点击，点在按钮上才有动作。
+local touch = { down = false, fired = false, sx = 0, sy = 0, lx = 0, ly = 0, miss = 0, btn = nil }
+
+local function direction_of(dx, dy)
     if math.abs(dx) < SWIPE_THRESHOLD and math.abs(dy) < SWIPE_THRESHOLD then
         return nil
     end
@@ -702,49 +771,73 @@ local function direction_from_swipe(dx, dy)
     return dy > 0 and "down" or "up"
 end
 
-local function handle_touch()
+local function button_at(x, y)
+    for _, entry in ipairs(BUTTONS) do
+        if hit(entry.btn, x, y) then
+            return entry
+        end
+    end
+    return nil
+end
+
+-- 返回 nil（无动作）、"error"、"quit"、"new" 或方向
+local function poll_touch()
     local polled, info = pcall(lcd_touch.poll, touch_handle)
     if not polled then
         print("[game_2048] ERROR: lcd_touch.poll failed: " .. tostring(info))
-        return nil
+        return "error"
     end
 
     if info.pressed then
-        if not touch_down then
-            touch_down = { x = info.x, y = info.y }
-        end
-        return false
-    elseif info.just_released then
-        if touch_down then
-            local dx = info.x - touch_down.x
-            local dy = info.y - touch_down.y
-            local start_x = touch_down.x
-            local start_y = touch_down.y
-            touch_down = nil
-
-            -- 先判断是否点击了退出按钮（位移很小，且起始点在按钮区域内）
-            if exit_btn.w > 0
-                and math.abs(dx) < SWIPE_THRESHOLD
-                and math.abs(dy) < SWIPE_THRESHOLD
-                and start_x >= exit_btn.x and start_x <= exit_btn.x + exit_btn.w
-                and start_y >= exit_btn.y and start_y <= exit_btn.y + exit_btn.h
-            then
-                return "quit"
+        local x, y = info.x or 0, info.y or 0
+        touch.miss = 0
+        if not touch.down then
+            touch.down = true
+            touch.fired = false
+            touch.sx, touch.sy = x, y
+            touch.btn = button_at(x, y)
+            if touch.btn then
+                set_pressed(touch.btn.btn, true)
             end
-
-            local direction = direction_from_swipe(dx, dy)
-            return direction or false
         end
-        touch_down = nil
+        touch.lx, touch.ly = x, y
+        if not touch.fired and not touch.btn then
+            local direction = direction_of(x - touch.sx, y - touch.sy)
+            if direction then
+                touch.fired = true
+                return direction
+            end
+        end
+        return nil
     end
 
-    return false
+    if not touch.down then
+        return nil
+    end
+    touch.miss = touch.miss + 1
+    if touch.miss < RELEASE_POLLS then
+        return nil
+    end
+
+    touch.down = false
+    local entry = touch.btn
+    touch.btn = nil
+    if entry then
+        set_pressed(entry.btn, false)
+        if hit(entry.btn, touch.lx, touch.ly) then
+            return entry.action
+        end
+    end
+    return nil
 end
 
+---------------------------------------------------------------- 主循环
+
 reset_game()
-render()
-print(string.format("[game_2048] ready screen=%dx%d stage=%dx%d run_ms=%d", width, height, stage, stage, RUN_TIME_MS))
-print("[game_2048] swipe on the LCD to slide tiles")
+scr:load()
+print(string.format("[game_2048] ready screen=%dx%d board=%d cell=%d font=%d run_ms=%d",
+    scr_w, scr_h, board_side, cell, FONT_SIZE, RUN_TIME_MS))
+print("[game_2048] swipe on the board to slide tiles")
 
 local run_ok, run_err = xpcall(function()
     local start = now_ms()
@@ -754,30 +847,26 @@ local run_ok, run_err = xpcall(function()
             if not running then break end
         end
         drain_sfx()
-        local direction = handle_touch()
-        if direction == nil then break end
-        if direction == "quit" then
+        local action = poll_touch()
+        if action == "error" then
+            break
+        elseif action == "quit" then
             running = false
-        elseif direction then
-            if game_over then
-                reset_game()
-            else
-                local moved, _, merged = slide(direction)
-                if moved then
-                    finish_move(merged)
-                elseif not has_moves() then
-                    game_over = true
-                    request_sfx("over")
-                end
-            end
-            render()
+        elseif action == "new" then
+            reset_game()
+        elseif action then
+            on_swipe(action)
         end
+        step_pops()
+        lvgl.process_events(0)
         delay.delay_ms(FRAME_MS)
     end
 end, debug.traceback)
 
+-- 顺序要紧：先退订按键再关显示会话，理由见文件头
+hide_overlay()
 cleanup()
 if not run_ok then
     print("[game_2048] ERROR: " .. tostring(run_err))
 end
-print("[game_2048] done")
+print("[game_2048] done, score=" .. score)
