@@ -123,3 +123,16 @@ Typical failures are:
 - `mouse_report_id`
 - `text_scope`
 - `text_unicode`
+### Shared-host media pairing fix (2026-10-14)
+
+In attached mode, input Report Reference descriptors map report IDs to actual
+ATT handles. An input report subscription selects the HID peer and initiates
+SMP; encryption alone does not select bridge clients. Report notifications go
+to that encrypted subscriber explicitly. Bridge subscriptions and disconnects
+do not clear the selected phone's state. This fixes the observed iPhone state
+`notify_enabled=true`, `connected=false`, `encrypted=false` on 26261e3d.
+
+Validation: the esp32_s31_korvo1 IDF 6.1 build and 15 extracted C function host
+checks passed. Physical pairing and media results remain separate acceptance
+gates until measured on the device.
+

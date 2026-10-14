@@ -18,6 +18,7 @@
 #include "freertos/semphr.h"
 #include "freertos/task.h"
 #include "host/ble_gap.h"
+#include "host/ble_gatt.h"
 #include "host/ble_hs.h"
 #include "host/ble_hs_adv.h"
 #include "host/ble_hs_id.h"
@@ -37,6 +38,11 @@
 #define REPORT_ID_CONSUMER 1
 #define REPORT_ID_KEYBOARD 2
 #define REPORT_ID_MOUSE 3
+#define HID_INPUT_REPORT_COUNT 3
+#define HID_SERVICE_UUID16 0x1812
+#define HID_REPORT_UUID16 0x2a4d
+#define HID_REPORT_REFERENCE_UUID16 0x2908
+#define HID_INPUT_REPORT_TYPE 1
 #define CONSUMER_REPORT_SIZE 1
 #define KEYBOARD_REPORT_SIZE 8
 #define KEYBOARD_MAX_KEYS 6
@@ -91,7 +97,11 @@ typedef struct {
     bool encrypted;
     bool bonded;
     bool notify_enabled;
+    uint8_t notify_mask;
 } ble_hid_connection_t;
+
+/* Filled from Report Reference descriptors, never from fixed ATT handles. */
+static uint16_t s_input_handles[HID_INPUT_REPORT_COUNT];
 
 typedef int (*ble_hid_gap_event_handler_t)(struct ble_gap_event *event);
 
@@ -194,12 +204,16 @@ static void ble_hid_connection_clear(void)
     s_conn.encrypted = false;
     s_conn.bonded = false;
     s_conn.notify_enabled = false;
+    s_conn.notify_mask = 0;
     s_status.connected = false;
     s_status.bonded = false;
 }
 
 static void ble_hid_connection_update_security(uint16_t conn_handle)
 {
+    if (s_attached && conn_handle != s_conn.conn_handle) {
+        return;
+    }
     struct ble_gap_conn_desc desc;
     int rc = ble_gap_conn_find(conn_handle, &desc);
 
@@ -253,12 +267,10 @@ static void ble_hid_connection_ensure(uint16_t conn_handle)
         return;
     }
 
-    /* Attached mode: our passive listener sees every peer on the shared host,
-     * including ones that only care about the owner's services. A HOGP host
-     * always encrypts the link before using reports, so treat encryption as the
-     * signal that this peer is the HID host and leave the others alone. */
-    if (s_attached && !desc.sec_state.encrypted &&
-            s_conn.conn_handle != conn_handle) {
+    /* Shared-host peers are selected by HID report subscription. Encryption
+     * alone cannot distinguish a phone from a bridge-only client; waiting for
+     * it before initiating SMP also deadlocks hosts that wait for our request. */
+    if (s_attached && s_conn.conn_handle != conn_handle) {
         return;
     }
 
@@ -317,6 +329,27 @@ static void ble_hid_gatts_register_cb(struct ble_gatt_register_ctxt *ctxt, void 
         s_external_gatts_register_cb(ctxt, s_external_gatts_register_arg);
     }
     (void)arg;
+    if (ctxt->op == BLE_GATT_REGISTER_OP_DSC &&
+            ble_uuid_u16(ctxt->dsc.svc_def->uuid) == HID_SERVICE_UUID16 &&
+            ble_uuid_u16(ctxt->dsc.chr_def->uuid) == HID_REPORT_UUID16 &&
+            ble_uuid_u16(ctxt->dsc.dsc_def->uuid) == HID_REPORT_REFERENCE_UUID16 &&
+            ctxt->dsc.chr_def->val_handle) {
+        struct os_mbuf *om = NULL;
+        uint8_t ref[2];
+        uint16_t copied = 0;
+        int rc = ble_att_svr_read_local(ctxt->dsc.handle, &om);
+        if (rc == 0) {
+            rc = ble_hs_mbuf_to_flat(om, ref, sizeof(ref), &copied);
+        }
+        if (om) {
+            os_mbuf_free_chain(om);
+        }
+        if (rc == 0 && copied == sizeof(ref) && ref[1] == HID_INPUT_REPORT_TYPE &&
+                ref[0] >= REPORT_ID_CONSUMER && ref[0] <= REPORT_ID_MOUSE) {
+            s_input_handles[ref[0] - 1] = *ctxt->dsc.chr_def->val_handle;
+            ESP_LOGI(TAG, "input report id=%u attr=%u", ref[0], s_input_handles[ref[0] - 1]);
+        }
+    }
 }
 
 static int ble_hid_handle_gap_connect(struct ble_gap_event *event)
@@ -356,6 +389,9 @@ static int ble_hid_handle_gap_disconnect(struct ble_gap_event *event)
     ESP_LOGI(TAG, "gap disconnect conn_handle=%u reason=%d",
              event->disconnect.conn.conn_handle,
              event->disconnect.reason);
+    if (s_attached && event->disconnect.conn.conn_handle != s_conn.conn_handle) {
+        return 0;
+    }
     ble_hid_connection_clear();
     s_mouse_buttons = 0;
     /* Attached mode: the host owner restarts its own advertising. */
@@ -374,6 +410,9 @@ static int ble_hid_handle_gap_enc_change(struct ble_gap_event *event)
              event->enc_change.conn_handle,
              event->enc_change.status);
     ble_hid_connection_ensure(event->enc_change.conn_handle);
+    if (s_attached && event->enc_change.conn_handle != s_conn.conn_handle) {
+        return 0;
+    }
     if (event->enc_change.status == 0) {
         ble_hid_connection_update_security(event->enc_change.conn_handle);
     } else {
@@ -422,8 +461,34 @@ static int ble_hid_handle_gap_subscribe(struct ble_gap_event *event)
              event->subscribe.attr_handle,
              event->subscribe.prev_notify,
              event->subscribe.cur_notify);
+    uint8_t mask = 0;
+    for (size_t i = 0; i < HID_INPUT_REPORT_COUNT; i++) {
+        if (s_input_handles[i] && event->subscribe.attr_handle == s_input_handles[i]) {
+            mask = (uint8_t)(1U << i);
+            break;
+        }
+    }
+    if (!mask) {
+        return 0;
+    }
+    bool enabled = event->subscribe.cur_notify != 0;
+    if (s_attached && event->subscribe.conn_handle != s_conn.conn_handle) {
+        if (!enabled || (s_conn.connected &&
+                ble_gap_conn_find(s_conn.conn_handle, NULL) == 0)) {
+            return 0;
+        }
+        ble_hid_connection_clear();
+        s_conn.conn_handle = event->subscribe.conn_handle;
+    }
     ble_hid_connection_ensure(event->subscribe.conn_handle);
-    s_conn.notify_enabled = event->subscribe.cur_notify || event->subscribe.cur_indicate;
+    if (event->subscribe.conn_handle == s_conn.conn_handle) {
+        if (enabled) {
+            s_conn.notify_mask |= mask;
+        } else {
+            s_conn.notify_mask &= (uint8_t)~mask;
+        }
+        s_conn.notify_enabled = s_conn.notify_mask != 0;
+    }
     return 0;
 }
 
@@ -863,7 +928,7 @@ static void hidd_event_handler(void *arg, esp_event_base_t base, int32_t id, voi
         s_status.connected = s_conn.connected;
         break;
     case ESP_HIDD_DISCONNECT_EVENT:
-        s_status.connected = false;
+        s_status.connected = s_conn.connected;
         s_mouse_buttons = 0;
         ESP_LOGI(TAG, "HID disconnected");
         break;
@@ -919,6 +984,9 @@ static bool ble_hid_link_ready(void)
     if (!s_conn.encrypted) {
         return false;
     }
+    if (s_attached && !s_conn.notify_enabled) {
+        return false;
+    }
     if (ble_gap_conn_find(s_conn.conn_handle, &desc) != 0) {
         ble_hid_connection_clear();
         return false;
@@ -939,6 +1007,21 @@ static esp_err_t send_report(size_t report_id, uint8_t *data, size_t len)
     }
     if (!ble_hid_link_ready()) {
         return ESP_ERR_INVALID_STATE;
+    }
+    if (s_attached) {
+        /* esp_hid keeps the last shared-host connection, even for bridge-only
+         * peers. Send to the selected, encrypted subscriber explicitly. */
+        if (report_id < REPORT_ID_CONSUMER || report_id > REPORT_ID_MOUSE ||
+                !s_input_handles[report_id - 1] ||
+                !(s_conn.notify_mask & (1U << (report_id - 1)))) {
+            return ESP_ERR_INVALID_STATE;
+        }
+        struct os_mbuf *om = ble_hs_mbuf_from_flat(data, len);
+        if (!om) {
+            return ESP_ERR_NO_MEM;
+        }
+        int rc = ble_gatts_notify_custom(s_conn.conn_handle, s_input_handles[report_id - 1], om);
+        return rc == 0 ? ESP_OK : ESP_FAIL;
     }
     return esp_hidd_dev_input_set(s_hid_dev, LUA_HID_MAP_INDEX, report_id, data, len);
 }
@@ -1112,6 +1195,11 @@ esp_err_t lua_module_ble_hid_attach(const lua_module_ble_hid_attach_config_t *co
         return ESP_FAIL;
     }
     s_gap_listener_registered = true;
+
+    s_external_gatts_register_cb = ble_hs_cfg.gatts_register_cb;
+    s_external_gatts_register_arg = ble_hs_cfg.gatts_register_arg;
+    ble_hs_cfg.gatts_register_cb = ble_hid_gatts_register_cb;
+    ble_hs_cfg.gatts_register_arg = NULL;
 
     strlcpy(s_adv_name, name, sizeof(s_adv_name));
     s_adv_appearance = ESP_HID_APPEARANCE_MOUSE;
