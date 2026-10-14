@@ -105,23 +105,44 @@ end
 
 ---------------------------------------------------------------- 布局
 
--- 顶栏 + 内容区。棋盘在左，方向键在右——800x480 横屏下比在底部挤一排按键
--- 舒展得多，也留出了放计分卡的地方。
+-- 顶栏 + 内容区。横屏（800x480）棋盘在左、方向键在右，比在底部挤一排按键
+-- 舒展得多，也留出了放计分卡的地方。竖屏（480x800）宽度只够放棋盘，
+-- 棋盘占满宽度，方向键和退出键依次排在下面。
 local TOP_H = 56
 local MARGIN = 20
+local portrait = scr_h > scr_w
 
 local COLS, ROWS = 16, 16
 local CELL_GAP = 2
 
-local board_side = scr_h - TOP_H - MARGIN * 2
-if board_side > math.floor(scr_w * 0.55) then
-    board_side = math.floor(scr_w * 0.55)
+-- 竖屏方向键和退出键的尺寸先定下来，棋盘用剩下的高度
+local EXIT_H = 44
+local HINT_H = 22
+local KEY_GAP = 8
+local P_KEY_H = 68
+local P_PAD_GAP = 24
+local P_BELOW = P_PAD_GAP + P_KEY_H * 2 + KEY_GAP + 8 + HINT_H + 8 + EXIT_H + MARGIN
+
+local board_side
+if portrait then
+    board_side = math.min(scr_w - MARGIN * 2, scr_h - TOP_H - MARGIN - P_BELOW)
+else
+    board_side = scr_h - TOP_H - MARGIN * 2
+    if board_side > math.floor(scr_w * 0.55) then
+        board_side = math.floor(scr_w * 0.55)
+    end
 end
 local cell = math.floor((board_side - (COLS + 1) * CELL_GAP) / COLS)
 local board_w = COLS * cell + (COLS + 1) * CELL_GAP
 local board_h = ROWS * cell + (ROWS + 1) * CELL_GAP
-local board_x = MARGIN
-local board_y = TOP_H + math.floor((scr_h - TOP_H - board_h) / 2)
+local board_x, board_y
+if portrait then
+    board_x = math.floor((scr_w - board_w) / 2)
+    board_y = TOP_H + MARGIN
+else
+    board_x = MARGIN
+    board_y = TOP_H + math.floor((scr_h - TOP_H - board_h) / 2)
+end
 
 -- 棋盘左上角是容器内边距为 0 的坐标，格子 (col,row) 都是 1 起
 local function cell_x(col)
@@ -148,7 +169,13 @@ top_bar:set_scroll({ dir = "none", scrollbar = "off" })
 local top_tick = lvgl.container(top_bar, { w = 9, h = 34, align = "left_mid", x = 14 })
 top_tick:set_style({ bg_color = C_ACCENT_HI, bg_opa = 255, radius = 2, border_width = 0 })
 
-lvgl.label(top_bar, { text = "贪吃蛇  SNAKE", align = "left_mid", x = 40, text_color = C_TEXT })
+-- 竖屏顶栏要同时放两张计分卡，标题只留中文
+lvgl.label(top_bar, {
+    text = portrait and "贪吃蛇" or "贪吃蛇  SNAKE",
+    align = "left_mid",
+    x = 40,
+    text_color = C_TEXT,
+})
 
 -- 计分卡。set_style 没有 text_align，宽 label 里的字是左对齐的，所以用
 -- align="center" 把自动收缩到内容大小的 label 摆到卡片正中——对象居中，
@@ -188,30 +215,44 @@ board:set_style({
 })
 board:set_scroll({ dir = "none", scrollbar = "off" })
 
----------------------------------------------------------------- 右侧控制区
+---------------------------------------------------------------- 控制区
 
-local rx = board_x + board_w + 24
-local rw = scr_w - rx - MARGIN
-
--- 退出键压到整摞控件最底下，方向键那几行按剩余高度居中
-local EXIT_H = 44
-local HINT_H = 22
+-- 横屏在棋盘右侧，竖屏在棋盘下方。退出键压到最底下。
 local EXIT_GAP = 26
 
-local KEY_W = 92
-local KEY_H = 60
-local KEY_GAP = 8
-if rw < KEY_W * 3 + KEY_GAP * 2 then
-    KEY_W = math.max(56, math.floor((rw - KEY_GAP * 2) / 3))
-    KEY_H = math.max(44, math.floor(KEY_W * 0.65))
+local rx, rw
+if portrait then
+    rx = MARGIN
+    rw = scr_w - MARGIN * 2
+else
+    rx = board_x + board_w + 24
+    rw = scr_w - rx - MARGIN
+end
+
+local KEY_W, KEY_H
+if portrait then
+    KEY_W = math.min(128, math.floor((rw - KEY_GAP * 2) / 3))
+    KEY_H = P_KEY_H
+else
+    KEY_W = 92
+    KEY_H = 60
+    if rw < KEY_W * 3 + KEY_GAP * 2 then
+        KEY_W = math.max(56, math.floor((rw - KEY_GAP * 2) / 3))
+        KEY_H = math.max(44, math.floor(KEY_W * 0.65))
+    end
 end
 local dpad_w = KEY_W * 3 + KEY_GAP * 2
 local pad_x = rx + math.max(0, math.floor((rw - dpad_w) / 2))
 
 local exit_y = scr_h - MARGIN - EXIT_H
-local pad_area_bottom = exit_y - EXIT_GAP
 local pad_h = KEY_H * 2 + KEY_GAP
-local pad_y = TOP_H + math.max(MARGIN, math.floor((pad_area_bottom - TOP_H - pad_h) / 2))
+local pad_y
+if portrait then
+    pad_y = board_y + board_h + P_PAD_GAP
+else
+    local pad_area_bottom = exit_y - EXIT_GAP
+    pad_y = TOP_H + math.max(MARGIN, math.floor((pad_area_bottom - TOP_H - pad_h) / 2))
+end
 
 local function make_key(text, x, y)
     local key = lvgl.button(scr, {
