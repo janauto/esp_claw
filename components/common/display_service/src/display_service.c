@@ -511,6 +511,11 @@ esp_err_t display_service_start(const display_service_config_t *config)
     ESP_GOTO_ON_FALSE(s_display.display != NULL, ESP_FAIL, fail, TAG, "register LVGL adapter display failed");
 
     ESP_GOTO_ON_ERROR(display_service_lock(), fail, TAG, "lock failed");
+    lv_obj_t *active_screen = lv_screen_active();
+    if (active_screen != NULL) {
+        lv_obj_set_style_bg_color(active_screen, lv_color_black(), LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_bg_opa(active_screen, LV_OPA_COVER, LV_PART_MAIN | LV_STATE_DEFAULT);
+    }
     if (s_display.touch) {
         s_display.touch_indev = lv_indev_create();
         if (s_display.touch_indev) {

@@ -1,0 +1,16 @@
+# Flutter / Dart
+.dart_tool/
+.packages
+build/
+pubspec.lock
+
+# 平台目录由 tool/setup_android.sh 生成，不进版本库：
+# 内容完全由 flutter create + patch_android.py 决定，提交进来只会带来
+# Flutter 版本升级时的无谓冲突。
+android/
+ios/
+
+# 签名配置，绝不能提交
+android/key.properties
+*.jks
+*.keystore

@@ -3,3 +3,11 @@ dependencies:
     path: ../../../../components/claw_capabilities/cap_lua
   espressif/cjson:
     version: "^1.7.19"
+  system_ui:
+    path: ../../../../components/common/system_ui
+  # HID lives in this component's GATT server, so its attach API has to be
+  # resolvable whenever the module is enabled.
+  lua_module_ble_hid:
+    rules:
+      - if: $CONFIG{APP_CLAW_LUA_MODULE_BLE_HID} == True
+    path: ../../../../components/lua_modules/lua_module_ble_hid

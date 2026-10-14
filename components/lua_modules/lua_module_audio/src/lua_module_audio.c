@@ -65,6 +65,9 @@ int luaopen_audio(lua_State *L)
         {"player",     lua_audio_player_new},
         {"recorder",   lua_audio_recorder_new},
         {"analyzer",   lua_audio_analyzer_new},
+        {"shared_write", lua_audio_shared_write},
+        {"shared_read",  lua_audio_shared_read},
+        {"shared_info",  lua_audio_shared_info_lua},
         {NULL, NULL},
     };
 

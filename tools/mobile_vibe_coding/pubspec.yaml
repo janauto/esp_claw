@@ -1,0 +1,38 @@
+name: esp_claw_vibe
+description: ESP-Claw 安卓端上位机：自然语言生成设备 Lua，经 BLE bridge 上传执行。
+publish_to: none
+version: 0.1.0
+
+environment:
+  sdk: ">=3.4.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  # BLE GATT。Android 上没有可用的 bleak 等价物，这个包是维护最活跃的选择。
+  # 用范围而不是精确版本：这份工程不锁 pubspec.lock，让 pub 解析当前可用的版本。
+  # 1.x 的 API（Guid/remoteId/platformName/onValueReceived）在 ble_bridge.dart
+  # 里用到，升到 2.x 需要复核那个文件。
+  flutter_blue_plus: ^1.32.0
+  # Android 12+ 的 BLUETOOTH_SCAN / BLUETOOTH_CONNECT 属于运行时权限。
+  permission_handler: ^11.3.0
+  # LLM 请求要读 SSE 流，需要 StreamedResponse；dart:io 的 HttpClient 也能做，
+  # 但 http 的 Client 在测试里可以直接换成假实现（package:http/testing.dart）。
+  http: ^1.2.0
+  shared_preferences: ^2.2.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    # 由 tool/sync_assets.py 从 tools/host_vibe_coding 导出，不要手改。
+    - assets/catalog.json
+    - assets/manifest.json
+    - assets/playbooks/
+    - assets/lua_modules/
+    # 示例 Lua 脚本
+    - assets/examples/

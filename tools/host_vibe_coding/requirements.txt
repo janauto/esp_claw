@@ -1,1 +1,8 @@
 bleak>=0.23.0
+opuslib>=3.0.1
+sounddevice>=0.4.6
+numpy>=1.26.0
+#: LLM 请求走 requests：原生支持连接复用、代理、Retry-After，SSE 也能自己
+#: 控制缓冲边界（静默超时的依据是"多久没收到新字节"）。换回 stdlib urllib
+#: 的话，连接复用和代理都要手写，且分块流的边界更易踩坑。
+requests>=2.31.0

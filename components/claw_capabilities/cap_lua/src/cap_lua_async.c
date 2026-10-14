@@ -1519,7 +1519,7 @@ esp_err_t cap_lua_async_stop_all_jobs(const char *exclusive_filter,
                      stopped, timed_out, filter_label);
         }
     }
-    return ESP_OK;
+    return timed_out > 0 ? ESP_ERR_TIMEOUT : ESP_OK;
 }
 
 esp_err_t cap_lua_async_wait_settle(const char *job_id,

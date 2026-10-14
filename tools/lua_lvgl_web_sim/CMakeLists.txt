@@ -85,8 +85,10 @@ set(ESP_CLAW_SIM_SOURCES
 
 # Keep SDL as a final-link option. Putting USE_SDL in global compile flags makes every parallel emcc compile try to initialize the same Emscripten port cache.
 set(ESP_CLAW_SIM_COMMON_LINK_FLAGS "-O3 --shell-file ${PROJECT_SOURCE_DIR}/esp_claw_shell.html -s USE_SDL=2 -s ASYNCIFY=1 -s ASYNCIFY_STACK_SIZE=262144 -s EXPORTED_RUNTIME_METHODS=['ccall','FS']")
-set(ESP_CLAW_SIM_RUNTIME_ASSETS "--preload-file ${PROJECT_SOURCE_DIR}/sim/lvgl_web_shim.lua@/sim/lvgl_web_shim.lua --preload-file ${PROJECT_SOURCE_DIR}/sim_assets/fonts@/fonts")
-set(ESP_CLAW_SIM_EMBED_ASSETS "--embed-file ${PROJECT_SOURCE_DIR}/sim/lvgl_web_shim.lua@/sim/lvgl_web_shim.lua --embed-file ${PROJECT_SOURCE_DIR}/sim_assets/fonts@/fonts")
+set(ESP_CLAW_SIM_FONT_ASSETS "--preload-file ${PROJECT_SOURCE_DIR}/sim_assets/fonts@/system/fonts --preload-file ${PROJECT_SOURCE_DIR}/sim_assets/fonts/fusion-pixel-12px.ttf@/system/fonts/NotoSansSC-Regular-sub.ttf")
+set(ESP_CLAW_SIM_EMBED_FONT_ASSETS "--embed-file ${PROJECT_SOURCE_DIR}/sim_assets/fonts@/system/fonts --embed-file ${PROJECT_SOURCE_DIR}/sim_assets/fonts/fusion-pixel-12px.ttf@/system/fonts/NotoSansSC-Regular-sub.ttf")
+set(ESP_CLAW_SIM_RUNTIME_ASSETS "--preload-file ${PROJECT_SOURCE_DIR}/sim/lvgl_web_shim.lua@/sim/lvgl_web_shim.lua ${ESP_CLAW_SIM_FONT_ASSETS}")
+set(ESP_CLAW_SIM_EMBED_ASSETS "--embed-file ${PROJECT_SOURCE_DIR}/sim/lvgl_web_shim.lua@/sim/lvgl_web_shim.lua ${ESP_CLAW_SIM_EMBED_FONT_ASSETS}")
 
 function(configure_esp_claw_sim_target target_name)
 target_include_directories(${target_name} PRIVATE

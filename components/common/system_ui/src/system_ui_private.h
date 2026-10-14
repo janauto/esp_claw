@@ -137,7 +137,16 @@ typedef enum {
     SYSTEM_UI_WORK_EVENT_JOBS_ACTION,
     SYSTEM_UI_WORK_EVENT_NETWORK_STATUS,
     SYSTEM_UI_WORK_EVENT_APP_EXIT_SWIPE,
+    SYSTEM_UI_WORK_EVENT_HOME_KEY,
 } system_ui_work_event_type_t;
+
+/* Physical key actions on the home carousel. These mirror the screen's own
+ * "PREV" / "NEXT" / "M OPEN" hit targets. */
+typedef enum {
+    SYSTEM_UI_HOME_KEY_PREV = 0,
+    SYSTEM_UI_HOME_KEY_NEXT,
+    SYSTEM_UI_HOME_KEY_SELECT,
+} system_ui_home_key_t;
 
 typedef enum {
     SYSTEM_UI_TOUCH_GESTURE_NONE = 0,
@@ -162,6 +171,7 @@ typedef struct {
             bool sta_connected;
             char ap_ssid[64];
         } network_status;
+        system_ui_home_key_t home_key;
     };
     char launcher_id[SYSTEM_UI_LAUNCHER_ID_LEN];
     char launcher_title[SYSTEM_UI_LAUNCHER_TITLE_LEN];
@@ -181,9 +191,16 @@ typedef struct {
 
 typedef struct {
     lv_obj_t *home_screen;
+    lv_obj_t *boot_screen;
     lv_obj_t *home_tile;
     lv_obj_t *tileview;
     lv_obj_t *launcher_first_tile;
+    /* workbuddy: a shared-LVGL screen of its own, shown in place of the carousel
+     * rather than in an exclusive session, so the physical keys keep working. */
+    lv_obj_t *workbuddy_screen;
+    lv_obj_t *businesscard_screen;
+    lv_obj_t *meeting_minutes_screen;
+    lv_obj_t *infrared_remote_screen;
     lv_obj_t *status_label;
     lv_obj_t *time_label;
     lv_obj_t *date_label;
@@ -236,6 +253,10 @@ typedef struct {
     bool event_task_stop;
     system_ui_touch_gesture_t touch_gesture;
     bool jobs_visible;
+    bool workbuddy_visible;
+    bool businesscard_visible;
+    bool meeting_minutes_visible;
+    bool infrared_remote_visible;
     bool sta_connected;
     char ap_ssid[64];
     char font_path[SYSTEM_UI_PATH_MAX];
@@ -263,6 +284,40 @@ esp_err_t system_ui_create_home_locked(void);
 void system_ui_home_update_locked(void);
 void system_ui_delete_home_locked(void);
 void system_ui_load_screen_locked(lv_obj_t *screen);
+esp_err_t system_ui_create_boot_locked(void);
+void system_ui_delete_boot_locked(void);
+void system_ui_run_boot_animation(void);
+
+/* workbuddy screen. system_ui_create_workbuddy_locked() builds it once with the
+ * home screen; show/hide then just swap which screen the display shows, so the
+ * carousel behind it is never destroyed. All three need the LVGL lock held. */
+esp_err_t system_ui_create_workbuddy_locked(void);
+void system_ui_delete_workbuddy_locked(void);
+esp_err_t system_ui_show_workbuddy(void);
+esp_err_t system_ui_hide_workbuddy(void);
+
+/* businesscard screen. Similar to workbuddy, a native C screen for the
+ * "Business card sharing" carousel page. VOL-/VOL+ navigate between cards. */
+esp_err_t system_ui_create_businesscard_locked(void);
+void system_ui_delete_businesscard_locked(void);
+esp_err_t system_ui_show_businesscard(void);
+esp_err_t system_ui_hide_businesscard(void);
+void system_ui_businesscard_prev_locked(void);
+void system_ui_businesscard_next_locked(void);
+
+/* meeting minutes screen. Native C screen for the "Meeting Minutes" carousel
+ * page generated from tools/add_ui/ui_Screen2.c. */
+esp_err_t system_ui_create_meeting_minutes_locked(void);
+void system_ui_delete_meeting_minutes_locked(void);
+esp_err_t system_ui_show_meeting_minutes(void);
+esp_err_t system_ui_hide_meeting_minutes(void);
+
+/* infrared remote screen. Native C screen for the "Infrared remote control"
+ * carousel page generated from tools/add_ui/ui_Screen3.c. */
+esp_err_t system_ui_create_infrared_remote_locked(void);
+void system_ui_delete_infrared_remote_locked(void);
+esp_err_t system_ui_show_infrared_remote(void);
+esp_err_t system_ui_hide_infrared_remote(void);
 
 esp_err_t system_ui_launcher_load_locked(void);
 esp_err_t system_ui_launcher_create_pages_locked(void);
@@ -274,6 +329,15 @@ void system_ui_delete_overlay_locked(void);
 esp_err_t system_ui_vibration_init(void);
 void system_ui_vibration_deinit(void);
 void system_ui_add_click_feedback(lv_obj_t *obj);
+void system_ui_click_feedback(void);
+
+/* Board ADC keys -> home carousel. All of these are no-ops when the board
+ * declares no button device, so a board without physical keys needs no extra
+ * handling. */
+esp_err_t system_ui_home_key_init(void);
+void system_ui_home_key_deinit(void);
+void system_ui_home_key_rearm(void);
+void system_ui_home_key_apply_locked(system_ui_home_key_t key);
 
 esp_err_t system_ui_create_jobs_locked(void);
 void system_ui_delete_jobs_locked(void);

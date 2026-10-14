@@ -482,10 +482,16 @@ static int lua_lvgl_process_events(lua_State *L)
     if (!s_lvgl.runtime_initialized) {
         return luaL_error(L, "lvgl runtime is not initialized");
     }
+    if (cap_lua_runtime_stop_requested(L)) {
+        return luaL_error(L, "stopped by user");
+    }
     if (timeout_ms < 0) {
         timeout_ms = 0;
     }
     count = lua_lvgl_drain_events_for(L, timeout_ms);
+    if (cap_lua_runtime_stop_requested(L)) {
+        return luaL_error(L, "stopped by user");
+    }
     lua_pushinteger(L, count);
     return 1;
 }
@@ -507,8 +513,7 @@ static int lua_lvgl_run(lua_State *L)
     while (!cap_lua_runtime_stop_requested(L)) {
         total += lua_lvgl_drain_events_for(L, period_ms);
     }
-    lua_pushinteger(L, total);
-    return 1;
+    return luaL_error(L, "stopped by user");
 }
 
 const luaL_Reg lua_lvgl_event_module_funcs[] = {

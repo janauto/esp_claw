@@ -1,8 +1,20 @@
 
-
 idf_component_register(
-    SRC_DIRS
-        "src"
+    SRCS
+        "src/activity_overlay.c"
+        "src/boot_splash.c"
+        "src/businesscard_screen.c"
+        "src/font_assets.c"
+        "src/home_key.c"
+        "src/infrared_remote_commands.c"
+        "src/home_screen.c"
+        "src/infrared_remote_screen.c"
+        "src/launcher.c"
+        "src/meeting_minutes_screen.c"
+        "src/system_ui.c"
+        "src/task_panel.c"
+        "src/vibration_feedback.c"
+        "src/workbuddy_screen.c"
     INCLUDE_DIRS
         "include"
     PRIV_INCLUDE_DIRS
@@ -12,10 +24,16 @@ idf_component_register(
         claw_core
         claw_skill
         display_service
+        esp_audio_codec
         esp_board_manager
+        esp-dsp
         esp_lcd
         esp_timer
+        lua_module_audio
         lvgl
+        ui_squareline
     PRIV_REQUIRES
         esp_driver_gpio
+        georgik__lua
+        cap_lua
 )

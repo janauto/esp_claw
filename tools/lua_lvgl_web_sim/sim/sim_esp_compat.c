@@ -613,9 +613,23 @@ uint32_t lv_eaf_get_frame_delay(lv_obj_t *obj)
 
 void sim_esp_compat_pump_once(void)
 {
+    static int64_t last_lv_tick_us;
+
     sim_pump_timers();
     if (lv_is_initialized()) {
+        int64_t now_us = esp_timer_get_time();
+        if (last_lv_tick_us == 0) {
+            last_lv_tick_us = now_us;
+        } else if (now_us > last_lv_tick_us) {
+            uint32_t delta_ms = (uint32_t)((now_us - last_lv_tick_us) / 1000);
+            if (delta_ms > 0) {
+                lv_tick_inc(delta_ms);
+                last_lv_tick_us += (int64_t)delta_ms * 1000;
+            }
+        }
         (void)lv_timer_handler();
+    } else {
+        last_lv_tick_us = 0;
     }
 }
 

@@ -6,6 +6,9 @@ include("${CMAKE_SOURCE_DIR}/tools/cmake/flash_partition_defaults.cmake")
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 project(edge_agent VERSION 0.1.0)
 
+# Allow LVGL deprecation warning without treating it as error
+add_compile_options(-Wno-error=cpp)
+
 set(EDGE_AGENT_FATFS_IMAGE_ROOT "${CMAKE_SOURCE_DIR}/fatfs_image")
 set(EDGE_AGENT_FATFS_SOURCE_ROOT "${EDGE_AGENT_FATFS_IMAGE_ROOT}/storage")
 set(EDGE_AGENT_FATFS_BUILD_ROOT "${CMAKE_BINARY_DIR}/fatfs_image")

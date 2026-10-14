@@ -8,5 +8,11 @@ dependencies:
     path: ../../claw_modules/claw_skill
   display_service:
     path: ../display_service
+  lua_module_audio:
+    path: ../../lua_modules/lua_module_audio
+  ui_squareline:
+    path: ../ui_squareline
+  espressif/esp_audio_codec: "*"
+  espressif/esp-dsp: "*"
   espressif/esp_new_jpeg: "*"
   lvgl/lvgl: ^9.5.0

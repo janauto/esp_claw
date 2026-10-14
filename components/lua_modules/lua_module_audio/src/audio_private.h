@@ -184,3 +184,7 @@ int lua_audio_analyzer_close(lua_State *L);
 int lua_audio_analyzer_gc(lua_State *L);
 int lua_audio_analyzer_read_level(lua_State *L);
 int lua_audio_analyzer_read_spectrum(lua_State *L);
+
+int lua_audio_shared_write(lua_State *L);
+int lua_audio_shared_read(lua_State *L);
+int lua_audio_shared_info_lua(lua_State *L);

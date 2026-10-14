@@ -1,0 +1,664 @@
+{
+  "tier_labels": {
+    "core": "基础设施",
+    "ui": "显示与图形",
+    "input": "输入",
+    "sensor": "传感器",
+    "io": "通用外设 IO",
+    "media": "多媒体",
+    "net": "通信与网络"
+  },
+  "implied": {
+    "display": [
+      "board_manager",
+      "delay"
+    ],
+    "lvgl": [
+      "board_manager"
+    ],
+    "lcd_touch": [
+      "board_manager"
+    ],
+    "lcd": [
+      "board_manager"
+    ],
+    "motion_detect": [
+      "image"
+    ]
+  },
+  "per_doc_limit": 12000,
+  "total_limit": 26000,
+  "modules": [
+    {
+      "require": "board_manager",
+      "component": "lua_module_board_manager",
+      "tier": "core",
+      "summary": "取板级外设句柄（屏幕、触摸、I2C 总线等），display/lvgl/lcd_touch 初始化的前置依赖。",
+      "keywords": [
+        "board",
+        "板级",
+        "句柄",
+        "handle",
+        "外设",
+        "初始化"
+      ]
+    },
+    {
+      "require": "delay",
+      "component": "lua_module_delay",
+      "tier": "core",
+      "summary": "delay.delay_ms(n) 毫秒延时；主循环、动画节拍、保持画面都要用。",
+      "keywords": [
+        "delay",
+        "延时",
+        "睡眠",
+        "sleep",
+        "等待",
+        "循环",
+        "loop",
+        "动画",
+        "帧",
+        "fps",
+        "节拍"
+      ]
+    },
+    {
+      "require": "system",
+      "component": "lua_module_system",
+      "tier": "core",
+      "summary": "时间、运行时长、IP、内存/堆、任务栈、Wi-Fi 状态查询。",
+      "keywords": [
+        "system",
+        "系统",
+        "内存",
+        "memory",
+        "heap",
+        "堆",
+        "uptime",
+        "时间",
+        "ip",
+        "wifi",
+        "网络",
+        "状态"
+      ]
+    },
+    {
+      "require": "storage",
+      "component": "lua_module_storage",
+      "tier": "core",
+      "summary": "文件系统读写：读写文件、列目录，用于存档、配置、最高分。",
+      "keywords": [
+        "storage",
+        "文件",
+        "file",
+        "保存",
+        "存档",
+        "读写",
+        "目录",
+        "配置",
+        "最高分",
+        "排行"
+      ]
+    },
+    {
+      "require": "json",
+      "component": "lua_module_json",
+      "tier": "core",
+      "summary": "JSON 编解码辅助库。",
+      "keywords": [
+        "json",
+        "编码",
+        "解码",
+        "序列化",
+        "parse"
+      ]
+    },
+    {
+      "require": "thread",
+      "component": "lua_module_thread",
+      "tier": "core",
+      "summary": "Lua 任务管理与命名队列/信号量/事件组，用于多任务协作。",
+      "keywords": [
+        "thread",
+        "线程",
+        "任务",
+        "task",
+        "并发",
+        "队列",
+        "queue",
+        "信号量",
+        "semaphore",
+        "事件组"
+      ]
+    },
+    {
+      "require": "capability",
+      "component": "lua_module_call_capability",
+      "tier": "core",
+      "summary": "在 Lua 里直接调用已注册的 Capability，访问模块未覆盖的设备能力。",
+      "keywords": [
+        "capability",
+        "能力",
+        "调用",
+        "cap",
+        "capability.call"
+      ]
+    },
+    {
+      "require": "arg_schema",
+      "component": "lua_module_system",
+      "tier": "core",
+      "summary": "纯 Lua 参数归一化助手。",
+      "keywords": [
+        "arg_schema",
+        "参数校验",
+        "参数归一"
+      ]
+    },
+    {
+      "require": "display",
+      "component": "lua_module_display",
+      "tier": "ui",
+      "summary": "低层绘制：文字、直线、矩形、圆、像素缓冲、帧生命周期。仅用于静态显示或简单动画。",
+      "keywords": [
+        "display",
+        "显示",
+        "屏幕",
+        "画面",
+        "绘制",
+        "画",
+        "draw",
+        "文字",
+        "text",
+        "矩形",
+        "圆",
+        "像素",
+        "帧",
+        "frame",
+        "静态",
+        "简单动画",
+        "hello",
+        "刷新",
+        "clear"
+      ]
+    },
+    {
+      "require": "lvgl",
+      "component": "lua_module_lvgl",
+      "tier": "ui",
+      "summary": "LVGL 控件框架：按钮、标签、事件回调、触摸游戏。游戏/交互界面首选（设备端推荐）。",
+      "keywords": [
+        "lvgl",
+        "控件",
+        "widget",
+        "按钮",
+        "button",
+        "标签",
+        "label",
+        "列表",
+        "list",
+        "滑块",
+        "slider",
+        "开关",
+        "switch",
+        "复选",
+        "菜单",
+        "menu",
+        "界面框架",
+        "交互界面",
+        "ui框架",
+        "表单",
+        "键盘",
+        "图表",
+        "chart",
+        "进度条",
+        "arc",
+        "roller",
+        "游戏",
+        "game",
+        "点击",
+        "触摸",
+        "touch",
+        "tap",
+        "跳跃",
+        "jump",
+        "贪吃蛇",
+        "snake",
+        "俄罗斯方块",
+        "tetris",
+        "乒乓",
+        "pong",
+        "分数",
+        "score",
+        "障碍物",
+        "obstacle",
+        "交互",
+        "interact",
+        "事件",
+        "event",
+        "clicked",
+        "pressed"
+      ]
+    },
+    {
+      "require": "lcd",
+      "component": "lua_module_lcd",
+      "tier": "ui",
+      "summary": "LCD 面板初始化、背光与显示辅助（比 display 更贴近面板层）。",
+      "keywords": [
+        "lcd",
+        "面板",
+        "背光",
+        "backlight",
+        "panel",
+        "亮度"
+      ]
+    },
+    {
+      "require": "image",
+      "component": "lua_module_image",
+      "tier": "ui",
+      "summary": "图像帧类型、格式转换、缩放、文件读写；中文/Unicode 文字需先渲染成图再绘制。",
+      "keywords": [
+        "image",
+        "图片",
+        "图像",
+        "jpeg",
+        "jpg",
+        "png",
+        "缩放",
+        "转换",
+        "位图",
+        "中文",
+        "unicode",
+        "图标"
+      ]
+    },
+    {
+      "require": "ssd1306",
+      "component": "lua_driver_i2c",
+      "tier": "ui",
+      "summary": "纯 Lua SSD1306 I2C OLED 驱动。",
+      "keywords": [
+        "ssd1306",
+        "oled",
+        "小屏"
+      ]
+    },
+    {
+      "require": "lcd_touch",
+      "component": "lua_module_lcd_touch",
+      "tier": "input",
+      "summary": "读屏幕触摸坐标（sync + poll），触屏交互和触屏游戏操作要用。",
+      "keywords": [
+        "lcd_touch",
+        "触摸",
+        "触屏",
+        "touch",
+        "点击",
+        "坐标",
+        "滑动",
+        "手势",
+        "按下"
+      ]
+    },
+    {
+      "require": "button",
+      "component": "lua_module_button",
+      "tier": "input",
+      "summary": "物理按键事件与回调（单击、长按等）。",
+      "keywords": [
+        "button",
+        "按键",
+        "按钮事件",
+        "长按",
+        "单击",
+        "双击",
+        "实体按键"
+      ]
+    },
+    {
+      "require": "knob",
+      "component": "lua_module_knob",
+      "tier": "input",
+      "summary": "旋转编码器 / 旋钮事件。",
+      "keywords": [
+        "knob",
+        "旋钮",
+        "编码器",
+        "encoder",
+        "旋转"
+      ]
+    },
+    {
+      "require": "touch",
+      "component": "lua_driver_touch",
+      "tier": "input",
+      "summary": "芯片电容触摸按键读取（TouchPad 外设，非屏幕触摸）。",
+      "keywords": [
+        "touchpad",
+        "电容触摸",
+        "触摸按键"
+      ]
+    },
+    {
+      "require": "lib_si12t_touch",
+      "component": "lua_driver_i2c",
+      "tier": "input",
+      "summary": "纯 Lua Si12T I2C 电容触摸驱动。",
+      "keywords": [
+        "si12t"
+      ]
+    },
+    {
+      "require": "imu",
+      "component": "lua_module_imu",
+      "tier": "sensor",
+      "summary": "IMU 加速度计与陀螺仪读取，可做体感/倾斜控制。",
+      "keywords": [
+        "imu",
+        "加速度",
+        "陀螺仪",
+        "姿态",
+        "体感",
+        "倾斜",
+        "摇晃",
+        "重力",
+        "accel",
+        "gyro"
+      ]
+    },
+    {
+      "require": "environmental_sensor",
+      "component": "lua_module_environmental_sensor",
+      "tier": "sensor",
+      "summary": "BME690 温度、湿度、气压、气体数据。",
+      "keywords": [
+        "环境",
+        "温度",
+        "湿度",
+        "气压",
+        "空气",
+        "bme690",
+        "temperature",
+        "humidity"
+      ]
+    },
+    {
+      "require": "magnetometer",
+      "component": "lua_module_magnetometer",
+      "tier": "sensor",
+      "summary": "磁力计 / 电子罗盘读取。",
+      "keywords": [
+        "磁力计",
+        "罗盘",
+        "指南针",
+        "compass",
+        "magnet"
+      ]
+    },
+    {
+      "require": "lib_fuel_gauge",
+      "component": "lua_module_fuel_gauge",
+      "tier": "sensor",
+      "summary": "纯 Lua 电量计库（BQ27220 / MAX17048 等）。",
+      "keywords": [
+        "电量",
+        "电池",
+        "battery",
+        "剩余电量",
+        "fuel gauge",
+        "充电"
+      ]
+    },
+    {
+      "require": "sci",
+      "component": "lua_module_sci",
+      "tier": "sensor",
+      "summary": "DFRobot SCI 采集模块（DFR0999）I2C 读取。",
+      "keywords": [
+        "sci",
+        "dfrobot",
+        "dfr0999"
+      ]
+    },
+    {
+      "require": "gpio",
+      "component": "lua_driver_gpio",
+      "tier": "io",
+      "summary": "GPIO 电平读写与方向配置。",
+      "keywords": [
+        "gpio",
+        "引脚",
+        "电平",
+        "高低",
+        "输入输出",
+        "pin",
+        "开关灯"
+      ]
+    },
+    {
+      "require": "adc",
+      "component": "lua_driver_adc",
+      "tier": "io",
+      "summary": "ADC 单次采样，返回校准后的毫伏值（电位器、模拟传感器）。",
+      "keywords": [
+        "adc",
+        "模拟",
+        "采样",
+        "电位器",
+        "电压",
+        "毫伏",
+        "analog",
+        "摇杆"
+      ]
+    },
+    {
+      "require": "i2c",
+      "component": "lua_driver_i2c",
+      "tier": "io",
+      "summary": "I2C 总线扫描与逐设备读写。",
+      "keywords": [
+        "i2c",
+        "总线",
+        "扫描",
+        "从机",
+        "寄存器"
+      ]
+    },
+    {
+      "require": "uart",
+      "component": "lua_driver_uart",
+      "tier": "io",
+      "summary": "UART 串口收发（轮询读写）。",
+      "keywords": [
+        "uart",
+        "串口",
+        "serial",
+        "波特率",
+        "收发"
+      ]
+    },
+    {
+      "require": "mcpwm",
+      "component": "lua_driver_mcpwm",
+      "tier": "io",
+      "summary": "通用 PWM 输出（频率/占空比），可驱动电机、舵机。",
+      "keywords": [
+        "mcpwm",
+        "pwm",
+        "占空比",
+        "电机",
+        "舵机",
+        "servo",
+        "motor",
+        "调速"
+      ]
+    },
+    {
+      "require": "ledc",
+      "component": "lua_module_ledc",
+      "tier": "io",
+      "summary": "LEDC PWM 通道，常用于 LED 调光与背光。",
+      "keywords": [
+        "ledc",
+        "调光",
+        "亮度",
+        "呼吸灯",
+        "pwm led"
+      ]
+    },
+    {
+      "require": "pcnt",
+      "component": "lua_driver_pcnt",
+      "tier": "io",
+      "summary": "PCNT 脉冲计数 / 编码器计数读取。",
+      "keywords": [
+        "pcnt",
+        "脉冲",
+        "计数",
+        "转速"
+      ]
+    },
+    {
+      "require": "rmt",
+      "component": "lua_driver_rmt",
+      "tier": "io",
+      "summary": "RMT 收发红外/自定义时序波形。",
+      "keywords": [
+        "rmt",
+        "波形",
+        "时序",
+        "载波"
+      ]
+    },
+    {
+      "require": "led_strip",
+      "component": "lua_module_led_strip",
+      "tier": "io",
+      "summary": "可寻址灯带（WS2812 等）颜色控制。",
+      "keywords": [
+        "led_strip",
+        "灯带",
+        "ws2812",
+        "彩灯",
+        "rgb灯",
+        "流水灯",
+        "氛围灯"
+      ]
+    },
+    {
+      "require": "ir",
+      "component": "lua_module_ir",
+      "tier": "io",
+      "summary": "红外接收、学习与发射。",
+      "keywords": [
+        "ir",
+        "红外",
+        "遥控",
+        "学习码"
+      ]
+    },
+    {
+      "require": "audio",
+      "component": "lua_module_audio",
+      "tier": "media",
+      "summary": "PCM/WAV 播放与录音、频谱分析；游戏音效、提示音要用。",
+      "keywords": [
+        "audio",
+        "音频",
+        "声音",
+        "播放",
+        "录音",
+        "喇叭",
+        "音效",
+        "wav",
+        "pcm",
+        "频谱",
+        "提示音",
+        "蜂鸣"
+      ]
+    },
+    {
+      "require": "camera",
+      "component": "lua_module_camera",
+      "tier": "media",
+      "summary": "摄像头拍照与取流。",
+      "keywords": [
+        "camera",
+        "摄像头",
+        "拍照",
+        "拍摄",
+        "取流",
+        "画面采集"
+      ]
+    },
+    {
+      "require": "motion_detect",
+      "component": "lua_module_vision",
+      "tier": "media",
+      "summary": "基于 image.frame 的运动检测。",
+      "keywords": [
+        "运动检测",
+        "motion",
+        "移动侦测",
+        "视觉"
+      ]
+    },
+    {
+      "require": "ble",
+      "component": "lua_module_ble",
+      "tier": "net",
+      "summary": "BLE 通用收发（GATT 服务/客户端）。",
+      "keywords": [
+        "ble",
+        "蓝牙",
+        "gatt",
+        "广播",
+        "从机",
+        "主机"
+      ]
+    },
+    {
+      "require": "ble_hid",
+      "component": "lua_module_ble_hid",
+      "tier": "net",
+      "summary": "BLE HID 复合设备（媒体控制、键盘、鼠标）。",
+      "keywords": [
+        "hid",
+        "键盘",
+        "鼠标",
+        "媒体控制",
+        "手柄"
+      ]
+    },
+    {
+      "require": "http_server",
+      "component": "lua_module_http_server",
+      "tier": "net",
+      "summary": "在已有 HTTP server 上挂静态文件和 HTTP 回调。",
+      "keywords": [
+        "http",
+        "web",
+        "网页",
+        "接口",
+        "服务器",
+        "url",
+        "路由"
+      ]
+    },
+    {
+      "require": "event_publisher",
+      "component": "lua_module_event_publisher",
+      "tier": "net",
+      "summary": "从 Lua 往 Event Router 发事件。",
+      "keywords": [
+        "event",
+        "事件",
+        "发布",
+        "router",
+        "上报"
+      ]
+    }
+  ]
+}

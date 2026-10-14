@@ -124,6 +124,12 @@ static bool s_controller_enabled_by_ble_hid;
 static bool s_nimble_inited;
 static bool s_host_task_started;
 static bool s_advertising_requested;
+/* Set when the HID services live on a NimBLE host owned by another component.
+ * In this mode the module must not touch the controller, the host task or
+ * advertising; GAP state arrives through a passive listener instead. */
+static bool s_attached;
+static struct ble_gap_event_listener s_gap_listener;
+static bool s_gap_listener_registered;
 static uint8_t s_own_addr_type;
 static char s_adv_name[LUA_HID_NAME_MAX + 1] = LUA_HID_DEFAULT_NAME;
 static uint16_t s_adv_appearance;
@@ -247,6 +253,15 @@ static void ble_hid_connection_ensure(uint16_t conn_handle)
         return;
     }
 
+    /* Attached mode: our passive listener sees every peer on the shared host,
+     * including ones that only care about the owner's services. A HOGP host
+     * always encrypts the link before using reports, so treat encryption as the
+     * signal that this peer is the HID host and leave the others alone. */
+    if (s_attached && !desc.sec_state.encrypted &&
+            s_conn.conn_handle != conn_handle) {
+        return;
+    }
+
     s_conn.connected = true;
     s_conn.conn_handle = conn_handle;
     s_status.connected = true;
@@ -343,7 +358,8 @@ static int ble_hid_handle_gap_disconnect(struct ble_gap_event *event)
              event->disconnect.reason);
     ble_hid_connection_clear();
     s_mouse_buttons = 0;
-    if (s_advertising_requested) {
+    /* Attached mode: the host owner restarts its own advertising. */
+    if (s_advertising_requested && !s_attached) {
         err = ble_hid_adv_apply(s_adv_name, s_adv_appearance, s_adv_uuid16_list, s_adv_uuid16_count);
         if (err != ESP_OK) {
             ESP_LOGW(TAG, "restart advertising after disconnect failed: %s", esp_err_to_name(err));
@@ -547,7 +563,7 @@ static esp_err_t ble_hid_stack_start(void)
     ble_hs_cfg.store_status_cb = ble_store_util_status_rr;
     ble_hs_cfg.sm_io_cap = BLE_SM_IO_CAP_NO_IO;
     ble_hs_cfg.sm_bonding = 1;
-    ble_hs_cfg.sm_sc = 1;
+    ble_hs_cfg.sm_sc = 0;
     ble_hs_cfg.sm_mitm = 0;
     ble_hs_cfg.sm_our_key_dist |= BLE_SM_PAIR_KEY_DIST_ENC;
     ble_hs_cfg.sm_their_key_dist |= BLE_SM_PAIR_KEY_DIST_ENC;
@@ -993,7 +1009,10 @@ static esp_err_t release_all(bool notify)
     return send_mouse(0, 0, 0, 0);
 }
 
-static esp_err_t init_hid_device(const char *name)
+/* Registers the HID/BAS/DIS/SPS GATT services on the current NimBLE host.
+ * NimBLE only accepts new services while its GATT database is still mutable, so
+ * every caller has to reach this before advertising starts. */
+static esp_err_t hid_dev_create(const char *name)
 {
     esp_hid_device_config_t config = {
         .vendor_id = 0x303a,
@@ -1010,14 +1029,31 @@ static esp_err_t init_hid_device(const char *name)
     if (s_hid_dev) {
         return ESP_OK;
     }
-    err = ble_hid_stack_prepare();
-    if (err != ESP_OK) {
-        return err;
-    }
     err = esp_hidd_dev_init(&config, ESP_HID_TRANSPORT_BLE, hidd_event_handler, &s_hid_dev);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "esp_hidd_dev_init failed: %s", esp_err_to_name(err));
         s_hid_dev = NULL;
+    }
+    return err;
+}
+
+static esp_err_t init_hid_device(const char *name)
+{
+    esp_err_t err;
+
+    /* Attached mode brings the device up at boot against the owner's host. */
+    if (s_attached) {
+        return ESP_OK;
+    }
+    if (s_hid_dev) {
+        return ESP_OK;
+    }
+    err = ble_hid_stack_prepare();
+    if (err != ESP_OK) {
+        return err;
+    }
+    err = hid_dev_create(name);
+    if (err != ESP_OK) {
         return err;
     }
     err = ble_hid_stack_start();
@@ -1029,6 +1065,70 @@ static esp_err_t init_hid_device(const char *name)
     s_status.initialized = true;
     s_status.connected = esp_hidd_dev_connected(s_hid_dev);
     return ESP_OK;
+}
+
+esp_err_t lua_module_ble_hid_attach(const lua_module_ble_hid_attach_config_t *config)
+{
+    const char *name = (config && config->device_name && config->device_name[0])
+                       ? config->device_name : LUA_HID_DEFAULT_NAME;
+    esp_err_t err;
+    int rc;
+
+    if (s_attached) {
+        return ESP_OK;
+    }
+    if (s_nimble_inited || s_host_task_started || s_stack_inited) {
+        ESP_LOGE(TAG, "cannot attach: module already owns a NimBLE stack");
+        return ESP_ERR_INVALID_STATE;
+    }
+    if (strlen(name) > LUA_HID_NAME_MAX) {
+        return ESP_ERR_INVALID_SIZE;
+    }
+
+    /* HOGP serves its reports over an encrypted link, so the shared host needs
+     * bonding even when the owner itself does not require it. */
+    ble_hs_cfg.store_status_cb = ble_store_util_status_rr;
+    ble_hs_cfg.sm_io_cap = BLE_SM_IO_CAP_NO_IO;
+    ble_hs_cfg.sm_bonding = 1;
+    ble_hs_cfg.sm_sc = 0;
+    ble_hs_cfg.sm_mitm = 0;
+    ble_hs_cfg.sm_our_key_dist |= BLE_SM_PAIR_KEY_DIST_ENC | BLE_SM_PAIR_KEY_DIST_ID;
+    ble_hs_cfg.sm_their_key_dist |= BLE_SM_PAIR_KEY_DIST_ENC | BLE_SM_PAIR_KEY_DIST_ID;
+
+    /* esp_hidd_dev_init() chains ble_hs_cfg.sync_cb/reset_cb onto whatever the
+     * owner installed, so the owner must set those before calling us. */
+    err = hid_dev_create(name);
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    /* The owner drives advertising and owns the GAP callback for its own
+     * connections, so track link state passively instead. */
+    rc = ble_gap_event_listener_register(&s_gap_listener, ble_hid_gap_event, NULL);
+    if (rc != 0 && rc != BLE_HS_EALREADY) {
+        ESP_LOGE(TAG, "ble_gap_event_listener_register failed rc=%d", rc);
+        (void)esp_hidd_dev_deinit(s_hid_dev);
+        s_hid_dev = NULL;
+        return ESP_FAIL;
+    }
+    s_gap_listener_registered = true;
+
+    strlcpy(s_adv_name, name, sizeof(s_adv_name));
+    s_adv_appearance = ESP_HID_APPEARANCE_MOUSE;
+    s_attached = true;
+    s_status.initialized = true;
+    ESP_LOGI(TAG, "attached to external NimBLE host name=%s", name);
+    return ESP_OK;
+}
+
+bool lua_module_ble_hid_is_attached(void)
+{
+    return s_attached;
+}
+
+uint16_t lua_module_ble_hid_appearance(void)
+{
+    return ESP_HID_APPEARANCE_MOUSE;
 }
 
 static int lua_ble_hid_init(lua_State *L)
@@ -1051,6 +1151,15 @@ static int lua_ble_hid_init(lua_State *L)
 static int lua_ble_hid_deinit(lua_State *L)
 {
     esp_err_t err = ESP_OK;
+
+    /* Attached mode: the HID services are part of the owner's GATT server and
+     * cannot be removed without tearing down its stack too. Release the keys so
+     * nothing stays stuck down, but keep the device registered. */
+    if (s_attached) {
+        (void)release_all(true);
+        lua_pushboolean(L, 1);
+        return 1;
+    }
 
     (void)release_all(true);
     (void)ble_hid_stack_stop();
@@ -1084,6 +1193,13 @@ static int lua_ble_hid_start(lua_State *L)
     if (!s_status.initialized) {
         return luaL_error(L, "ble_hid.init() must succeed before ble_hid.start()");
     }
+    /* Attached mode: advertising belongs to the host owner, which already
+     * advertises the HID appearance and UUID. Starting our own would stop
+     * theirs and drop the bridge's discoverability. */
+    if (s_attached) {
+        lua_pushboolean(L, 1);
+        return 1;
+    }
     err = ble_hid_adv_start(name, ESP_HID_APPEARANCE_MOUSE, &uuid16, 1);
     if (err == ESP_OK) {
         s_status.advertising = true;
@@ -1093,7 +1209,14 @@ static int lua_ble_hid_start(lua_State *L)
 
 static int lua_ble_hid_stop(lua_State *L)
 {
-    esp_err_t err = ble_hid_adv_stop();
+    esp_err_t err;
+
+    /* Attached mode: stopping advertising would take the bridge offline too. */
+    if (s_attached) {
+        lua_pushboolean(L, 1);
+        return 1;
+    }
+    err = ble_hid_adv_stop();
     if (err == ESP_OK) {
         s_status.advertising = false;
     }
@@ -1262,12 +1385,16 @@ static int lua_ble_hid_status(lua_State *L)
     bool encrypted = connected && s_conn.encrypted;
     bool ready = ble_hid_link_ready();
 
+    /* Attached mode: the host owner drives advertising, so report the real
+     * stack state rather than our own unused flag. */
+    bool advertising = s_attached ? ble_gap_adv_active() : s_status.advertising;
+
     s_status.connected = connected;
     s_status.bonded = s_conn.bonded;
     lua_newtable(L);
     lua_pushboolean(L, s_status.initialized);
     lua_setfield(L, -2, "initialized");
-    lua_pushboolean(L, s_status.advertising);
+    lua_pushboolean(L, advertising);
     lua_setfield(L, -2, "advertising");
     lua_pushboolean(L, connected);
     lua_setfield(L, -2, "connected");
@@ -1279,6 +1406,8 @@ static int lua_ble_hid_status(lua_State *L)
     lua_setfield(L, -2, "bonded");
     lua_pushboolean(L, ready);
     lua_setfield(L, -2, "ready");
+    lua_pushboolean(L, s_attached);
+    lua_setfield(L, -2, "attached");
     return 1;
 }
 

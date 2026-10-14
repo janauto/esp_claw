@@ -29,6 +29,13 @@ static int32_t s_touch_start_y;
 #define SYSTEM_UI_EVENT_TASK_STACK 6144
 #define SYSTEM_UI_EVENT_TASK_PRIO 4
 
+/* 底部上滑退出手势开关。宏存在（默认）时手势被禁用；
+ * 注释掉此行则重新启用该手势。 */
+#define SYSTEM_UI_BOTTOM_SWIPE_EXIT_DISABLED
+
+/* 开机动画开关。关闭此宏则直接进入主界面。 */
+#define SYSTEM_UI_BOOT_SPLASH_ENABLED
+
 static int32_t system_ui_abs_i32(int32_t value)
 {
     return value < 0 ? -value : value;
@@ -194,6 +201,14 @@ static void system_ui_event_task(void *arg)
             }
             break;
         }
+        case SYSTEM_UI_WORK_EVENT_HOME_KEY:
+            if (system_ui_lock() == ESP_OK) {
+                if (event.generation == s_ui.generation) {
+                    system_ui_home_key_apply_locked(event.home_key);
+                }
+                system_ui_unlock();
+            }
+            break;
         case SYSTEM_UI_WORK_EVENT_STOP:
         default:
             break;
@@ -270,9 +285,12 @@ static void system_ui_touch_observer_cb(const display_service_touch_sample_t *sa
             bool exclusive = display_service_has_exclusive_session();
             s_touch_start_x = sample->x;
             s_touch_start_y = sample->y;
+#ifndef SYSTEM_UI_BOTTOM_SWIPE_EXIT_DISABLED
             if (exclusive && s_touch_start_y >= (int32_t)s_ui.height - SYSTEM_UI_BOTTOM_SWIPE_EDGE_PX) {
                 s_ui.touch_gesture = SYSTEM_UI_TOUCH_GESTURE_EXIT_APP;
-            } else if (!exclusive && system_ui_system_overlay_allowed() && s_touch_start_y <= SYSTEM_UI_JOBS_SWIPE_EDGE_PX) {
+            } else
+#endif
+            if (!exclusive && system_ui_system_overlay_allowed() && s_touch_start_y <= SYSTEM_UI_JOBS_SWIPE_EDGE_PX) {
                 s_ui.touch_gesture = SYSTEM_UI_TOUCH_GESTURE_SHOW_JOBS;
             }
         } else if (s_ui.touch_gesture == SYSTEM_UI_TOUCH_GESTURE_SHOW_JOBS &&
@@ -329,6 +347,10 @@ static void system_ui_state_observer_cb(display_service_state_event_t event, voi
         break;
     case DISPLAY_SERVICE_STATE_EVENT_EXCLUSIVE_LVGL_EXITED:
     case DISPLAY_SERVICE_STATE_EVENT_EXCLUSIVE_RAW_EXITED:
+        /* A Lua app that used the same board keys unregisters them on the way
+         * out, and iot_button_unregister_cb() clears every callback for the
+         * event - ours included. Re-subscribe now that the app is gone. */
+        system_ui_home_key_rearm();
         break;
     default:
         break;
@@ -380,6 +402,11 @@ static void system_ui_delete_ui_locked(void)
     system_ui_delete_jobs_locked();
     system_ui_delete_overlay_locked();
     system_ui_delete_home_locked();
+    system_ui_delete_workbuddy_locked();
+    system_ui_delete_businesscard_locked();
+    system_ui_delete_meeting_minutes_locked();
+    system_ui_delete_infrared_remote_locked();
+    system_ui_delete_boot_locked();
     system_ui_destroy_font_locked();
     system_ui_clear_callbacks_locked();
 }
@@ -421,9 +448,37 @@ esp_err_t system_ui_start(const system_ui_config_t *config)
     ESP_GOTO_ON_ERROR(system_ui_lock(), fail, SYSTEM_UI_TAG, "lock failed");
     system_ui_create_font_locked(config && config->font_path ? config->font_path : SYSTEM_UI_DEFAULT_FONT_PATH,
                                   config ? config->font_size : SYSTEM_UI_DEFAULT_FONT_SIZE);
+#ifdef SYSTEM_UI_BOOT_SPLASH_ENABLED
+    ret = system_ui_create_boot_locked();
+    if (ret == ESP_OK) {
+        display_service_set_default_screen_locked(s_ui.boot_screen);
+        system_ui_load_screen_locked(s_ui.boot_screen);
+    }
+    system_ui_unlock();
+    ESP_GOTO_ON_ERROR(ret, fail, SYSTEM_UI_TAG, "create boot UI failed");
+
+    system_ui_run_boot_animation();
+
+    ESP_GOTO_ON_ERROR(system_ui_lock(), fail, SYSTEM_UI_TAG, "lock failed");
+#endif
     ret = system_ui_create_home_locked();
     if (ret == ESP_OK) {
         display_service_set_default_screen_locked(s_ui.home_screen);
+    }
+    if (ret == ESP_OK) {
+        /* Built alongside the carousel but not shown; the home screen stays the
+         * default until the workbuddy page asks for it. */
+        ret = system_ui_create_workbuddy_locked();
+    }
+    if (ret == ESP_OK) {
+        /* Business card screen, built alongside the carousel. */
+        ret = system_ui_create_businesscard_locked();
+    }
+    if (ret == ESP_OK) {
+        ret = system_ui_create_meeting_minutes_locked();
+    }
+    if (ret == ESP_OK) {
+        ret = system_ui_create_infrared_remote_locked();
     }
     if (ret == ESP_OK) {
         ret = system_ui_create_overlay_locked();
@@ -432,8 +487,21 @@ esp_err_t system_ui_start(const system_ui_config_t *config)
         ret = system_ui_create_jobs_locked();
     }
     s_ui.started = ret == ESP_OK;
+    if (ret == ESP_OK) {
+        system_ui_load_screen_locked(s_ui.home_screen);
+#ifdef SYSTEM_UI_BOOT_SPLASH_ENABLED
+        system_ui_delete_boot_locked();
+#endif
+    }
     system_ui_unlock();
     ESP_GOTO_ON_ERROR(ret, fail, SYSTEM_UI_TAG, "create UI failed");
+
+    /* Subscribe the board keys last: the callback checks s_ui.started, and the
+     * home screen it drives now exists. A board without keys reports ESP_OK and
+     * simply stays touch-only. */
+    if (system_ui_home_key_init() != ESP_OK) {
+        ESP_LOGW(SYSTEM_UI_TAG, "home key subscription incomplete, keys may not work");
+    }
 
     return ESP_OK;
 
@@ -445,6 +513,9 @@ fail:
 void system_ui_stop(void)
 {
     s_ui.generation++;
+    /* Drop the key subscription before the event queue goes away, so a press
+     * cannot post into a queue that is being deleted. */
+    system_ui_home_key_deinit();
     system_ui_stop_event_task();
 
     if (display_service_is_started() && system_ui_lock() == ESP_OK) {

@@ -6,6 +6,7 @@
 #include "ble_host_bridge.h"
 
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -14,10 +15,12 @@
 #include "cJSON.h"
 #include "claw_cap.h"
 #include "cap_lua.h"
+#include "system_ui.h"
 #include "esp_bt.h"
 #include "esp_check.h"
 #include "esp_err.h"
 #include "esp_log.h"
+#include "esp_mac.h"
 #include "esp_nimble_hci.h"
 #include "host/ble_att.h"
 #include "host/ble_gap.h"
@@ -28,12 +31,17 @@
 #include "host/ble_hs_mbuf.h"
 #include "host/ble_uuid.h"
 #include "host/util/util.h"
+#include "mbedtls/base64.h"
 #include "nvs_flash.h"
 #include "nimble/nimble_port.h"
 #include "nimble/nimble_port_freertos.h"
 #include "os/os_mbuf.h"
 #include "services/gap/ble_svc_gap.h"
 #include "services/gatt/ble_svc_gatt.h"
+#include "sdkconfig.h"
+#if CONFIG_APP_CLAW_LUA_MODULE_BLE_HID
+#include "lua_module_ble_hid.h"
+#endif
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 #include "freertos/semphr.h"
@@ -50,8 +58,20 @@ static const char *TAG = "ble_host_bridge";
 #define BLE_HOST_BRIDGE_CHUNK_DATA_MAX    96
 #define BLE_HOST_BRIDGE_NOTIFY_RETRY_COUNT 5
 #define BLE_HOST_BRIDGE_PREFERRED_MTU     247
-#define BLE_HOST_BRIDGE_REQUEST_QUEUE_LEN 4
+/* Job event pushes share the request queue, so leave room for them alongside
+ * host requests. */
+#define BLE_HOST_BRIDGE_REQUEST_QUEUE_LEN 6
 #define BLE_HOST_BRIDGE_REQUEST_TASK_STACK 8192
+#define BLE_HOST_BRIDGE_AUDIO_SAMPLE_RATE  16000
+#define BLE_HOST_BRIDGE_AUDIO_CHANNELS     1
+#define BLE_HOST_BRIDGE_AUDIO_BITS         16
+#define BLE_HOST_BRIDGE_AUDIO_FRAME_MS     60
+#define BLE_HOST_BRIDGE_SHORT_NAME_PREFIX  "esp-claw"
+#define BLE_HOST_BRIDGE_MAC_SUFFIX_LEN     4
+/* Internal op used to hand a cap_lua job event to the request task. Not part of
+ * the host-facing protocol; the "__" prefix keeps it out of the advertised ops. */
+#define BLE_HOST_BRIDGE_EVENT_OP         "__job_event"
+#define BLE_HOST_BRIDGE_EVENT_REQUEST_ID "job-event"
 
 static const ble_uuid128_t s_service_uuid = BLE_UUID128_INIT(
     0x45, 0x53, 0x50, 0x43, 0x4c, 0x41, 0x57, 0x00,
@@ -80,6 +100,8 @@ typedef struct {
     bool controller_enabled;
     bool subscribed;
     uint8_t own_addr_type;
+    /* Live links across all tenants of this host, not just ours. */
+    uint8_t conn_count;
     uint16_t conn_handle;
     uint16_t tx_val_handle;
     uint16_t negotiated_mtu;
@@ -113,8 +135,41 @@ static void handle_device_info(const char *id, const char *payload_json);
 static void handle_put_lua(const char *id, const char *source);
 static void handle_run_lua(const char *id, const char *path, const char *args_json, uint32_t timeout_ms);
 static void handle_job_status(const char *id, const char *job_id);
+static void handle_job_tail(const char *id, const char *job_id, uint64_t since_seq, uint32_t max_bytes);
 static void handle_job_stop(const char *id, const char *job_id);
+static void handle_workbuddy_ui(const char *id, const cJSON *root);
+static void handle_workbuddy_audio_control(const char *id, const cJSON *root);
+static void handle_workbuddy_audio_opus(const char *id, const cJSON *root);
+static esp_err_t ble_host_bridge_send_workbuddy_audio(const uint8_t *opus,
+                                                      size_t opus_size,
+                                                      uint32_t seq,
+                                                      void *user_ctx);
+static void handle_job_event(const char *job_id, const char *status);
+static void bridge_job_event_cb(const cap_lua_job_event_t *event, void *user_ctx);
 static void ble_host_bridge_request_task(void *arg);
+
+static esp_err_t make_device_name_with_mac_suffix(const char *base_name, char *out, size_t out_size)
+{
+    uint8_t mac[6] = {0};
+    char suffix[BLE_HOST_BRIDGE_MAC_SUFFIX_LEN + 1];
+    size_t max_base_len;
+    esp_err_t err;
+    int written;
+
+    ESP_RETURN_ON_FALSE(base_name && base_name[0] && out && out_size > 0,
+                        ESP_ERR_INVALID_ARG, TAG, "device name args invalid");
+    err = esp_read_mac(mac, ESP_MAC_BT);
+    ESP_RETURN_ON_ERROR(err, TAG, "read BT MAC failed");
+    ESP_RETURN_ON_FALSE(out_size > BLE_HOST_BRIDGE_MAC_SUFFIX_LEN + 2,
+                        ESP_ERR_INVALID_SIZE, TAG, "device name buffer too small");
+
+    snprintf(suffix, sizeof(suffix), "%02X%02X", mac[4], mac[5]);
+    max_base_len = out_size - BLE_HOST_BRIDGE_MAC_SUFFIX_LEN - 2;
+    written = snprintf(out, out_size, "%.*s-%s", (int)max_base_len, base_name, suffix);
+    ESP_RETURN_ON_FALSE(written > 0 && (size_t)written < out_size,
+                        ESP_ERR_INVALID_SIZE, TAG, "device name with MAC suffix too long");
+    return ESP_OK;
+}
 
 static const struct ble_gatt_chr_def s_bridge_chrs[] = {
     {
@@ -376,9 +431,12 @@ static void handle_put_lua(const char *id, const char *source)
 
 static void handle_hello(const char *id)
 {
-    char data[256];
+    char data[320];
     snprintf(data, sizeof(data),
-             "{\"protocol\":%d,\"device_name\":\"%s\",\"ops\":[\"hello\",\"device_info\",\"put_lua\",\"run_lua\",\"job_status\",\"job_stop\"]}",
+             "{\"protocol\":%d,\"device_name\":\"%s\",\"ops\":[\"hello\",\"device_info\",\"put_lua\","
+             "\"run_lua\",\"job_status\",\"job_tail\",\"job_stop\",\"workbuddy_ui\","
+             "\"workbuddy_audio_control\",\"workbuddy_audio_opus\"],"
+             "\"pushes\":[\"job_event\",\"workbuddy_audio_opus\"]}",
              BLE_HOST_BRIDGE_PROTOCOL_VERSION, s_bridge.device_name);
     send_response(id, true, "hello", data);
 }
@@ -420,6 +478,40 @@ static char *bridge_allocate_output_buffer(void)
     return calloc(1, BLE_HOST_BRIDGE_OUTPUT_MAX);
 }
 
+/* cap_lua reports progress as human-readable text, not JSON, so the job id has
+ * to be scraped out of it. Handles both "Started Lua job <id> (...)" and the
+ * "Lua job <id> (...) ended early ..." early-failure form. */
+static bool bridge_extract_job_id(const char *text, char *out_id, size_t out_size)
+{
+    static const char *const markers[] = {"Started Lua job ", "Lua job ", "job_id="};
+
+    if (!text || !out_id || out_size == 0) {
+        return false;
+    }
+    out_id[0] = '\0';
+
+    for (size_t i = 0; i < sizeof(markers) / sizeof(markers[0]); i++) {
+        const char *hit = strstr(text, markers[i]);
+        if (!hit) {
+            continue;
+        }
+        hit += strlen(markers[i]);
+        size_t len = 0;
+        while (hit[len] && len < out_size - 1 &&
+                ((hit[len] >= '0' && hit[len] <= '9') ||
+                 (hit[len] >= 'a' && hit[len] <= 'z') ||
+                 (hit[len] >= 'A' && hit[len] <= 'Z'))) {
+            len++;
+        }
+        if (len > 0) {
+            memcpy(out_id, hit, len);
+            out_id[len] = '\0';
+            return true;
+        }
+    }
+    return false;
+}
+
 static void handle_run_lua(const char *id, const char *path, const char *args_json, uint32_t timeout_ms)
 {
     char *output = bridge_allocate_output_buffer();
@@ -439,25 +531,33 @@ static void handle_run_lua(const char *id, const char *path, const char *args_js
     s_bridge.state = BLE_HOST_BRIDGE_EXECUTING;
     bridge_unlock();
 
+    /* timeout_ms 直接透传：0 在 cap_lua 异步路径里表示"跑到被取消为止"，
+     * 游戏/常驻界面就靠这个值撑住。缺字段时的 60s 默认在调用处补，
+     * 这里再补一次会把显式的 0 吃掉，让长跑脚本 60s 就被杀。 */
     err = cap_lua_run_script_async(path,
                                    args_json && args_json[0] ? args_json : "{}",
-                                   timeout_ms ? timeout_ms : 60000,
+                                   timeout_ms,
                                    id && id[0] ? id : "ble-host",
                                    "ble_host",
                                    true,
                                    output,
                                    BLE_HOST_BRIDGE_OUTPUT_MAX);
-    if (err == ESP_OK) {
-        cJSON *root = cJSON_Parse(output);
-        cJSON *job_id = root ? cJSON_GetObjectItemCaseSensitive(root, "id") : NULL;
-        bridge_lock();
-        if (cJSON_IsString(job_id) && job_id->valuestring) {
-            strlcpy(s_bridge.last_job_id, job_id->valuestring, sizeof(s_bridge.last_job_id));
-        }
-        s_bridge.state = s_bridge.conn_handle != BLE_HS_CONN_HANDLE_NONE ?
-                         BLE_HOST_BRIDGE_CONNECTED : BLE_HOST_BRIDGE_IDLE;
-        bridge_unlock();
-        cJSON_Delete(root);
+
+    char job_id[CAP_LUA_JOB_ID_LEN] = {0};
+    bool have_job_id = err == ESP_OK && bridge_extract_job_id(output, job_id, sizeof(job_id));
+
+    /* Always leave EXECUTING, including on the error path, or the bridge state
+     * stays stuck at "executing" for every later status read. */
+    bridge_lock();
+    if (have_job_id) {
+        strlcpy(s_bridge.last_job_id, job_id, sizeof(s_bridge.last_job_id));
+    }
+    s_bridge.state = s_bridge.conn_handle != BLE_HS_CONN_HANDLE_NONE ?
+                     BLE_HOST_BRIDGE_CONNECTED : BLE_HOST_BRIDGE_IDLE;
+    bridge_unlock();
+
+    if (err == ESP_OK && !have_job_id) {
+        ESP_LOGW(TAG, "run_lua: could not parse job id from cap_lua output");
     }
     send_response(id, err == ESP_OK, "run_lua", err == ESP_OK ? output : esp_err_to_name(err));
     free(output);
@@ -490,6 +590,45 @@ static void handle_job_status(const char *id, const char *job_id)
     free(output);
 }
 
+/* job_status only carries a bounded log tail. For long scripts the host needs to
+ * pull the log incrementally, so expose cap_lua's tail capability as its own op. */
+static void handle_job_tail(const char *id, const char *job_id, uint64_t since_seq, uint32_t max_bytes)
+{
+    char *output = bridge_allocate_output_buffer();
+    char fallback_id[CAP_LUA_JOB_ID_LEN] = {0};
+    char input[128];
+    claw_cap_call_context_t ctx = {
+        .caller = CLAW_CAP_CALLER_SYSTEM,
+        .channel = "ble_host",
+        .source_cap = "ble_host_bridge",
+    };
+
+    if (!output) {
+        send_response(id, false, "error", "out_of_memory");
+        return;
+    }
+    if (!job_id || !job_id[0]) {
+        bridge_lock();
+        strlcpy(fallback_id, s_bridge.last_job_id, sizeof(fallback_id));
+        bridge_unlock();
+        job_id = fallback_id;
+    }
+    if (!job_id[0]) {
+        free(output);
+        send_response(id, false, "error", "job_id_required");
+        return;
+    }
+
+    snprintf(input, sizeof(input),
+             "{\"job_id\":\"%.16s\",\"since_seq\":%llu,\"max_bytes\":%u}",
+             job_id,
+             (unsigned long long)since_seq,
+             (unsigned)(max_bytes ? max_bytes : 1024));
+    esp_err_t err = claw_cap_call("lua_tail_async_job", input, &ctx, output, BLE_HOST_BRIDGE_OUTPUT_MAX);
+    send_response(id, err == ESP_OK, "job_tail", err == ESP_OK ? output : esp_err_to_name(err));
+    free(output);
+}
+
 static void handle_job_stop(const char *id, const char *job_id)
 {
     char *output = bridge_allocate_output_buffer();
@@ -512,9 +651,350 @@ static void handle_job_stop(const char *id, const char *job_id)
         send_response(id, false, "error", "job_id_required");
         return;
     }
-    err = cap_lua_stop_job(job_id, 3000, output, BLE_HOST_BRIDGE_OUTPUT_MAX);
-    send_response(id, err == ESP_OK, "job_stop", err == ESP_OK ? output : esp_err_to_name(err));
+    err = cap_lua_stop_job(job_id, 1500, output, BLE_HOST_BRIDGE_OUTPUT_MAX);
+    send_response(id, err == ESP_OK, "job_stop", output[0] ? output : esp_err_to_name(err));
     free(output);
+}
+
+static const cJSON *workbuddy_payload_field(const cJSON *root, const char *name)
+{
+    const cJSON *payload = cJSON_GetObjectItemCaseSensitive(root, "payload");
+    const cJSON *fields = payload ? cJSON_GetObjectItemCaseSensitive(payload, "fields") : NULL;
+    const cJSON *item = NULL;
+
+    if (fields && cJSON_IsObject(fields)) {
+        item = cJSON_GetObjectItemCaseSensitive(fields, name);
+    }
+    if (!item && payload && cJSON_IsObject(payload)) {
+        item = cJSON_GetObjectItemCaseSensitive(payload, name);
+    }
+    if (!item) {
+        item = cJSON_GetObjectItemCaseSensitive(root, name);
+    }
+    return item;
+}
+
+static const char *workbuddy_json_value(const cJSON *item, char *buf, size_t buf_size)
+{
+    if (cJSON_IsString(item)) {
+        return item->valuestring;
+    }
+    if (cJSON_IsNumber(item) && buf && buf_size > 0) {
+        snprintf(buf, buf_size, "%d", item->valueint);
+        return buf;
+    }
+    if (cJSON_IsBool(item)) {
+        return cJSON_IsTrue(item) ? "1" : "0";
+    }
+    return NULL;
+}
+
+static void workbuddy_apply_frame(system_ui_workbuddy_update_t *update,
+                                  const char *frame,
+                                  char *reply_status,
+                                  size_t reply_status_size,
+                                  char *reply_text,
+                                  size_t reply_text_size,
+                                  char *workbuddy_status,
+                                  size_t workbuddy_status_size)
+{
+    const char *sep = frame ? strchr(frame, '=') : NULL;
+    size_t key_len;
+    const char *value;
+
+    if (!sep || sep == frame) {
+        return;
+    }
+    key_len = (size_t)(sep - frame);
+    value = sep + 1;
+    if (key_len == strlen("online") && strncmp(frame, "online", key_len) == 0) {
+        update->online = value;
+    } else if (key_len == strlen("tasks") && strncmp(frame, "tasks", key_len) == 0) {
+        update->tasks = value;
+    } else if (key_len == strlen("credits") && strncmp(frame, "credits", key_len) == 0) {
+        update->credits = value;
+    } else if (key_len == strlen("battery") && strncmp(frame, "battery", key_len) == 0) {
+        update->battery = value;
+    } else if (key_len == strlen("record") && strncmp(frame, "record", key_len) == 0) {
+        update->record = value;
+    } else if (key_len == strlen("reply_status") && strncmp(frame, "reply_status", key_len) == 0) {
+        strlcpy(reply_status, value, reply_status_size);
+        update->reply_status = reply_status;
+    } else if (key_len == strlen("reply_text") && strncmp(frame, "reply_text", key_len) == 0) {
+        strlcpy(reply_text, value, reply_text_size);
+        update->reply_text = reply_text;
+    } else if (key_len == strlen("reply") && strncmp(frame, "reply", key_len) == 0) {
+        strlcpy(reply_text, value, reply_text_size);
+        update->reply_text = reply_text;
+    } else if (key_len == strlen("workbuddy_status") && strncmp(frame, "workbuddy_status", key_len) == 0) {
+        strlcpy(workbuddy_status, value, workbuddy_status_size);
+        update->workbuddy_status = workbuddy_status;
+    }
+}
+
+static void handle_workbuddy_ui(const char *id, const cJSON *root)
+{
+    char online[16];
+    char tasks[16];
+    char credits[16];
+    char battery[16];
+    char record[16];
+    char reply_status[48];
+    char reply_text[256];
+    char workbuddy_status[64];
+    system_ui_workbuddy_update_t update = {0};
+    const char *names[] = {"online", "tasks", "credits", "battery", "record",
+                           "reply_status", "reply_text", "workbuddy_status"};
+    char *buffers[] = {online, tasks, credits, battery, record, reply_status, reply_text, workbuddy_status};
+    const size_t sizes[] = {sizeof(online), sizeof(tasks), sizeof(credits), sizeof(battery), sizeof(record),
+                            sizeof(reply_status), sizeof(reply_text), sizeof(workbuddy_status)};
+    const char **targets[] = {&update.online, &update.tasks, &update.credits, &update.battery, &update.record,
+                              &update.reply_status, &update.reply_text, &update.workbuddy_status};
+    const cJSON *payload = cJSON_GetObjectItemCaseSensitive(root, "payload");
+    const cJSON *frames = payload ? cJSON_GetObjectItemCaseSensitive(payload, "frames") : NULL;
+
+    for (size_t i = 0; i < sizeof(names) / sizeof(names[0]); i++) {
+        const cJSON *item = workbuddy_payload_field(root, names[i]);
+        const char *value = workbuddy_json_value(item, buffers[i], sizes[i]);
+        if (value) {
+            *targets[i] = value;
+        }
+    }
+
+    if (cJSON_IsArray(frames)) {
+        const cJSON *frame = NULL;
+        cJSON_ArrayForEach(frame, frames) {
+            if (cJSON_IsString(frame)) {
+                workbuddy_apply_frame(&update,
+                                      frame->valuestring,
+                                      reply_status,
+                                      sizeof(reply_status),
+                                      reply_text,
+                                      sizeof(reply_text),
+                                      workbuddy_status,
+                                      sizeof(workbuddy_status));
+            }
+        }
+    }
+
+    esp_err_t err = system_ui_update_workbuddy(&update);
+    send_response(id, err == ESP_OK, "workbuddy_ui", err == ESP_OK ? "ok" : esp_err_to_name(err));
+}
+
+static const char *workbuddy_audio_payload_string(const cJSON *root, const char *name)
+{
+    const cJSON *payload = cJSON_GetObjectItemCaseSensitive(root, "payload");
+    const cJSON *item = payload && cJSON_IsObject(payload) ?
+                        cJSON_GetObjectItemCaseSensitive(payload, name) : NULL;
+
+    if (!item) {
+        item = cJSON_GetObjectItemCaseSensitive(root, name);
+    }
+    return cJSON_IsString(item) ? item->valuestring : NULL;
+}
+
+static void handle_workbuddy_audio_control(const char *id, const cJSON *root)
+{
+    const char *action = workbuddy_audio_payload_string(root, "action");
+    esp_err_t err = ESP_ERR_INVALID_ARG;
+
+    if (action && strcmp(action, "start_capture") == 0) {
+        err = system_ui_workbuddy_start_audio_session(true);
+    } else if (action && strcmp(action, "start_playback") == 0) {
+        err = system_ui_workbuddy_start_audio_session(false);
+    } else if (action && strcmp(action, "stop") == 0) {
+        err = system_ui_workbuddy_stop_audio_session();
+    }
+    send_response(id, err == ESP_OK, "workbuddy_audio_control",
+                  err == ESP_OK ? "ok" : esp_err_to_name(err));
+}
+
+static void handle_workbuddy_audio_opus(const char *id, const cJSON *root)
+{
+    const char *b64 = workbuddy_audio_payload_string(root, "data");
+    size_t b64_len = b64 ? strlen(b64) : 0;
+    uint8_t *decoded = NULL;
+    size_t decoded_len = 0;
+    esp_err_t err = ESP_OK;
+
+    if (!b64 || b64_len == 0) {
+        send_response(id, false, "workbuddy_audio_opus", "missing_data");
+        return;
+    }
+
+    decoded = malloc(b64_len);
+    if (!decoded) {
+        send_response(id, false, "workbuddy_audio_opus", "out_of_memory");
+        return;
+    }
+    if (mbedtls_base64_decode(decoded, b64_len, &decoded_len,
+                              (const unsigned char *)b64, b64_len) != 0 ||
+            decoded_len == 0) {
+        free(decoded);
+        send_response(id, false, "workbuddy_audio_opus", "base64_decode_failed");
+        return;
+    }
+
+    err = system_ui_workbuddy_play_opus(decoded, decoded_len);
+    free(decoded);
+    if (err != ESP_OK) {
+        send_response(id, false, "workbuddy_audio_opus", esp_err_to_name(err));
+    }
+}
+
+static esp_err_t ble_host_bridge_send_workbuddy_audio(const uint8_t *opus,
+                                                      size_t opus_size,
+                                                      uint32_t seq,
+                                                      void *user_ctx)
+{
+    (void)user_ctx;
+
+    if (!opus || opus_size == 0) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    bridge_lock();
+    bool deliverable = s_bridge.subscribed && s_bridge.conn_handle != BLE_HS_CONN_HANDLE_NONE;
+    bridge_unlock();
+    if (!deliverable) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    size_t b64_capacity = ((opus_size + 2) / 3) * 4 + 1;
+    char *b64 = calloc(1, b64_capacity);
+    cJSON *root = cJSON_CreateObject();
+    char *text = NULL;
+    size_t b64_len = 0;
+    esp_err_t err = ESP_OK;
+
+    if (!b64 || !root) {
+        free(b64);
+        cJSON_Delete(root);
+        return ESP_ERR_NO_MEM;
+    }
+    if (mbedtls_base64_encode((unsigned char *)b64, b64_capacity, &b64_len, opus, opus_size) != 0) {
+        free(b64);
+        cJSON_Delete(root);
+        return ESP_FAIL;
+    }
+
+    cJSON_AddStringToObject(root, "id", BLE_HOST_BRIDGE_EVENT_REQUEST_ID);
+    cJSON_AddBoolToObject(root, "ok", true);
+    cJSON_AddStringToObject(root, "type", "workbuddy_audio_opus");
+    cJSON_AddNumberToObject(root, "seq", (double)seq);
+    cJSON_AddNumberToObject(root, "sample_rate", BLE_HOST_BRIDGE_AUDIO_SAMPLE_RATE);
+    cJSON_AddNumberToObject(root, "channels", BLE_HOST_BRIDGE_AUDIO_CHANNELS);
+    cJSON_AddNumberToObject(root, "bits", BLE_HOST_BRIDGE_AUDIO_BITS);
+    cJSON_AddNumberToObject(root, "frame_ms", BLE_HOST_BRIDGE_AUDIO_FRAME_MS);
+    cJSON_AddStringToObject(root, "data", b64);
+    text = cJSON_PrintUnformatted(root);
+    if (!text) {
+        err = ESP_ERR_NO_MEM;
+    } else {
+        err = notify_response_text(BLE_HOST_BRIDGE_EVENT_REQUEST_ID, text);
+    }
+    free(text);
+    cJSON_Delete(root);
+    free(b64);
+    return err;
+}
+
+/* cap_lua_job_status_name() lives in cap_lua's private header, so keep a local
+ * mapping. This is only a hint in the pushed frame; the authoritative status
+ * comes from the cap_lua_get_job() payload. */
+static const char *job_status_label(cap_lua_job_status_t status)
+{
+    switch (status) {
+    case CAP_LUA_JOB_QUEUED:
+        return "queued";
+    case CAP_LUA_JOB_RUNNING:
+        return "running";
+    case CAP_LUA_JOB_DONE:
+        return "done";
+    case CAP_LUA_JOB_FAILED:
+        return "failed";
+    case CAP_LUA_JOB_TIMEOUT:
+        return "timeout";
+    case CAP_LUA_JOB_STOPPED:
+        return "stopped";
+    default:
+        return "unknown";
+    }
+}
+
+/* Pushed to the host when a job reaches a terminal state, so the host learns the
+ * result without having to keep polling. Sent with a synthetic request id: the
+ * host treats frames whose id has no pending request as unsolicited events. */
+static void handle_job_event(const char *job_id, const char *status)
+{
+    char *output = bridge_allocate_output_buffer();
+
+    if (!job_id || !job_id[0]) {
+        free(output);
+        return;
+    }
+    bridge_lock();
+    bool deliverable = s_bridge.subscribed && s_bridge.conn_handle != BLE_HS_CONN_HANDLE_NONE;
+    bridge_unlock();
+    if (!deliverable || !output) {
+        free(output);
+        return;
+    }
+
+    esp_err_t err = cap_lua_get_job(job_id, output, BLE_HOST_BRIDGE_OUTPUT_MAX);
+    if (err != ESP_OK) {
+        snprintf(output, BLE_HOST_BRIDGE_OUTPUT_MAX,
+                 "job_id=%s\nstatus=%s\nsummary=(job record unavailable)\nrecent_log=(empty)",
+                 job_id, status ? status : "unknown");
+    }
+    send_response(BLE_HOST_BRIDGE_EVENT_REQUEST_ID, true, "job_event", output);
+    free(output);
+}
+
+/* Runs on the cap_lua runner task. Only allocate and enqueue here: the BLE
+ * notify path can block for hundreds of ms and must not stall the runner. */
+static void bridge_job_event_cb(const cap_lua_job_event_t *event, void *user_ctx)
+{
+    (void)user_ctx;
+
+    if (!event || event->type != CAP_LUA_JOB_EVENT_TERMINAL) {
+        return;
+    }
+    /* Only report jobs this bridge submitted. */
+    if (strcmp(event->exclusive, "ble_host") != 0) {
+        return;
+    }
+
+    cJSON *root = cJSON_CreateObject();
+    if (!root) {
+        return;
+    }
+    cJSON_AddStringToObject(root, "id", BLE_HOST_BRIDGE_EVENT_REQUEST_ID);
+    cJSON_AddStringToObject(root, "op", BLE_HOST_BRIDGE_EVENT_OP);
+    cJSON_AddStringToObject(root, "job_id", event->job_id);
+    cJSON_AddStringToObject(root, "status", job_status_label(event->status));
+    char *text = cJSON_PrintUnformatted(root);
+    cJSON_Delete(root);
+    if (!text) {
+        return;
+    }
+
+    /* Enqueue while holding the lock so a concurrent stop() cannot delete the
+     * queue between the check and the send. xQueueSend does not block here. */
+    bridge_lock();
+    bool queued = false;
+    if (s_bridge.subscribed && s_bridge.conn_handle != BLE_HS_CONN_HANDLE_NONE &&
+            s_bridge.request_queue) {
+        /* Dropping the push is acceptable: the host also polls job_status. */
+        queued = xQueueSend(s_bridge.request_queue, &text, 0) == pdTRUE;
+        if (!queued) {
+            ESP_LOGW(TAG, "job event dropped, request queue full (job=%s)", event->job_id);
+        }
+    }
+    bridge_unlock();
+
+    if (!queued) {
+        free(text);
+    }
 }
 
 static void dispatch_request(const char *json_text)
@@ -562,6 +1042,19 @@ static void dispatch_request(const char *json_text)
             job_id = cJSON_GetObjectItemCaseSensitive(payload, "job_id");
         }
         handle_job_status(id, cJSON_IsString(job_id) ? job_id->valuestring : NULL);
+    } else if (strcmp(op, "job_tail") == 0) {
+        cJSON *payload = cJSON_GetObjectItemCaseSensitive(root, "payload");
+        cJSON *job_id = cJSON_GetObjectItemCaseSensitive(root, "job_id");
+        cJSON *since = cJSON_GetObjectItemCaseSensitive(root, "since_seq");
+        cJSON *max_bytes = cJSON_GetObjectItemCaseSensitive(root, "max_bytes");
+        if (!cJSON_IsString(job_id) && payload && cJSON_IsObject(payload)) {
+            job_id = cJSON_GetObjectItemCaseSensitive(payload, "job_id");
+        }
+        handle_job_tail(id,
+                        cJSON_IsString(job_id) ? job_id->valuestring : NULL,
+                        cJSON_IsNumber(since) && since->valuedouble > 0 ?
+                        (uint64_t)since->valuedouble : 0,
+                        cJSON_IsNumber(max_bytes) ? (uint32_t)max_bytes->valuedouble : 0);
     } else if (strcmp(op, "job_stop") == 0) {
         cJSON *payload = cJSON_GetObjectItemCaseSensitive(root, "payload");
         cJSON *job_id = cJSON_GetObjectItemCaseSensitive(root, "job_id");
@@ -569,6 +1062,17 @@ static void dispatch_request(const char *json_text)
             job_id = cJSON_GetObjectItemCaseSensitive(payload, "job_id");
         }
         handle_job_stop(id, cJSON_IsString(job_id) ? job_id->valuestring : NULL);
+    } else if (strcmp(op, "workbuddy_ui") == 0) {
+        handle_workbuddy_ui(id, root);
+    } else if (strcmp(op, "workbuddy_audio_control") == 0) {
+        handle_workbuddy_audio_control(id, root);
+    } else if (strcmp(op, "workbuddy_audio_opus") == 0) {
+        handle_workbuddy_audio_opus(id, root);
+    } else if (strcmp(op, BLE_HOST_BRIDGE_EVENT_OP) == 0) {
+        cJSON *job_id = cJSON_GetObjectItemCaseSensitive(root, "job_id");
+        cJSON *status = cJSON_GetObjectItemCaseSensitive(root, "status");
+        handle_job_event(cJSON_IsString(job_id) ? job_id->valuestring : NULL,
+                         cJSON_IsString(status) ? status->valuestring : NULL);
     } else {
         send_response(id, false, "error", "unknown_op");
     }
@@ -683,13 +1187,23 @@ static void ble_host_bridge_request_task(void *arg)
 static int ble_host_bridge_rx_access(uint16_t conn_handle, uint16_t attr_handle,
                                      struct ble_gatt_access_ctxt *ctxt, void *arg)
 {
-    (void)conn_handle;
     (void)attr_handle;
     (void)arg;
 
     if (ctxt->op != BLE_GATT_ACCESS_OP_WRITE_CHR) {
         return BLE_ATT_ERR_UNLIKELY;
     }
+
+    /* Writing RX identifies this peer as the host tool, same as subscribing to
+     * TX. A HID peer never touches this characteristic. */
+    bridge_lock();
+    if (s_bridge.conn_handle != conn_handle) {
+        s_bridge.conn_handle = conn_handle;
+        if (s_bridge.state == BLE_HOST_BRIDGE_IDLE) {
+            s_bridge.state = BLE_HOST_BRIDGE_CONNECTED;
+        }
+    }
+    bridge_unlock();
 
     uint16_t len = OS_MBUF_PKTLEN(ctxt->om);
     if (len == 0 || len > BLE_HOST_BRIDGE_REQUEST_MAX) {
@@ -741,37 +1255,90 @@ static int ble_host_bridge_gap_event(struct ble_gap_event *event, void *arg)
     case BLE_GAP_EVENT_CONNECT:
         bridge_lock();
         if (event->connect.status == 0) {
-            s_bridge.conn_handle = event->connect.conn_handle;
-            s_bridge.state = BLE_HOST_BRIDGE_CONNECTED;
-            ESP_LOGI(TAG, "host connected conn_handle=%u", s_bridge.conn_handle);
-        } else {
-            s_bridge.conn_handle = BLE_HS_CONN_HANDLE_NONE;
-            s_bridge.state = BLE_HOST_BRIDGE_IDLE;
-            (void)ble_host_bridge_start_advertising();
+            if (s_bridge.conn_count < UINT8_MAX) {
+                s_bridge.conn_count++;
+            }
+            /* All connections arrive through our single advertising set, HID
+             * peers included, so only adopt one if we have no peer yet. A peer
+             * that subscribes to TX or writes RX identifies itself as the real
+             * host tool and takes over from there. */
+            if (s_bridge.conn_handle == BLE_HS_CONN_HANDLE_NONE) {
+                s_bridge.conn_handle = event->connect.conn_handle;
+                s_bridge.state = BLE_HOST_BRIDGE_CONNECTED;
+            }
+            ESP_LOGI(TAG, "peer connected conn_handle=%u conns=%u",
+                     event->connect.conn_handle, s_bridge.conn_count);
         }
         bridge_unlock();
+        /* Keep advertising while a slot is free; HID and the host tool each
+         * need their own link. */
+        (void)ble_host_bridge_start_advertising();
         return 0;
     case BLE_GAP_EVENT_DISCONNECT:
-        ESP_LOGI(TAG, "host disconnected reason=%d", event->disconnect.reason);
         bridge_lock();
-        s_bridge.conn_handle = BLE_HS_CONN_HANDLE_NONE;
-        s_bridge.subscribed = false;
-        reset_request_locked();
-        s_bridge.state = BLE_HOST_BRIDGE_IDLE;
+        if (s_bridge.conn_count > 0) {
+            s_bridge.conn_count--;
+        }
+        /* Only tear down bridge state when the peer that left was ours. */
+        if (event->disconnect.conn.conn_handle == s_bridge.conn_handle) {
+            ESP_LOGI(TAG, "host disconnected reason=%d", event->disconnect.reason);
+            s_bridge.conn_handle = BLE_HS_CONN_HANDLE_NONE;
+            s_bridge.subscribed = false;
+            s_bridge.negotiated_mtu = BLE_HOST_BRIDGE_PREFERRED_MTU;
+            reset_request_locked();
+            s_bridge.state = BLE_HOST_BRIDGE_IDLE;
+        } else {
+            ESP_LOGI(TAG, "peer disconnected conn_handle=%u reason=%d conns=%u",
+                     event->disconnect.conn.conn_handle, event->disconnect.reason,
+                     s_bridge.conn_count);
+        }
         bridge_unlock();
         (void)ble_host_bridge_start_advertising();
         return 0;
+    case BLE_GAP_EVENT_ENC_CHANGE:
+        /* Let the HID listener handle its own peer; we only need to track
+         * whether our host-tool peer's link is encrypted so we can gate
+         * notifications.  For any other peer this is a no-op. */
+        ESP_LOGI(TAG, "enc_change conn_handle=%u status=%d",
+                 event->enc_change.conn_handle, event->enc_change.status);
+        return 0;
+
+    case BLE_GAP_EVENT_REPEAT_PAIRING:
+        /* Both the HID peer and the host-tool peer may trigger this when
+         * their stored keys don't match ours.  Delete the stale bond and
+         * allow NimBLE to retry; without this Windows silently fails. */
+        ESP_LOGW(TAG, "repeat_pairing conn_handle=%u — deleting stale bond",
+                 event->repeat_pairing.conn_handle);
+        {
+            struct ble_gap_conn_desc desc;
+            if (ble_gap_conn_find(event->repeat_pairing.conn_handle, &desc) == 0) {
+                ble_store_util_delete_peer(&desc.peer_id_addr);
+            }
+        }
+        return BLE_GAP_REPEAT_PAIRING_RETRY;
+
     case BLE_GAP_EVENT_SUBSCRIBE:
         if (event->subscribe.attr_handle == s_bridge.tx_val_handle) {
             bridge_lock();
+            /* Subscribing to TX proves this is the host tool, not a HID peer. */
+            s_bridge.conn_handle = event->subscribe.conn_handle;
             s_bridge.subscribed = event->subscribe.cur_notify || event->subscribe.cur_indicate;
+            if (s_bridge.state == BLE_HOST_BRIDGE_IDLE) {
+                s_bridge.state = BLE_HOST_BRIDGE_CONNECTED;
+            }
             bridge_unlock();
-            ESP_LOGI(TAG, "host notify subscription=%d", s_bridge.subscribed);
+            ESP_LOGI(TAG, "host notify subscription=%d conn_handle=%u",
+                     s_bridge.subscribed, event->subscribe.conn_handle);
         }
         return 0;
     case BLE_GAP_EVENT_MTU:
-        s_bridge.negotiated_mtu = event->mtu.value;
-        ESP_LOGI(TAG, "host mtu=%u", event->mtu.value);
+        /* Response chunking is sized from this, so only track our own peer. */
+        bridge_lock();
+        if (event->mtu.conn_handle == s_bridge.conn_handle) {
+            s_bridge.negotiated_mtu = event->mtu.value;
+        }
+        bridge_unlock();
+        ESP_LOGI(TAG, "mtu conn_handle=%u value=%u", event->mtu.conn_handle, event->mtu.value);
         return 0;
     case BLE_GAP_EVENT_ADV_COMPLETE:
         (void)ble_host_bridge_start_advertising();
@@ -811,12 +1378,16 @@ static void ble_host_bridge_host_task(void *param)
     nimble_port_freertos_deinit();
 }
 
+// #include "esp_mac.h"
+
 static esp_err_t start_controller(void)
 {
     esp_bt_controller_status_t status = esp_bt_controller_get_status();
     esp_err_t err;
 
     if (status == ESP_BT_CONTROLLER_STATUS_IDLE) {
+        // uint8_t base_mac[6] = {0x02,0x22,0x33,0x44,0x55,0x68};
+        // esp_base_mac_addr_set(base_mac);
         esp_bt_controller_config_t bt_cfg = BT_CONTROLLER_INIT_CONFIG_DEFAULT();
         err = esp_bt_controller_init(&bt_cfg);
         ESP_RETURN_ON_ERROR(err, TAG, "controller init failed");
@@ -836,12 +1407,53 @@ static esp_err_t ble_host_bridge_start_advertising(void)
     struct ble_gap_adv_params adv_params = {0};
     struct ble_hs_adv_fields fields = {0};
     struct ble_hs_adv_fields rsp_fields = {0};
+    char short_name[sizeof(BLE_HOST_BRIDGE_SHORT_NAME_PREFIX) + BLE_HOST_BRIDGE_MAC_SUFFIX_LEN + 1] = {0};
     int rc;
 
+    if (ble_gap_adv_active()) {
+        return ESP_OK;
+    }
+    /* The controller rejects advertising once every connection slot is taken;
+     * a disconnect event will bring us back here. */
+    if (s_bridge.conn_count >= CONFIG_BT_NIMBLE_MAX_CONNECTIONS) {
+        ESP_LOGI(TAG, "all %d connection slots in use, advertising paused",
+                 CONFIG_BT_NIMBLE_MAX_CONNECTIONS);
+        return ESP_OK;
+    }
+
     fields.flags = BLE_HS_ADV_F_DISC_GEN | BLE_HS_ADV_F_BREDR_UNSUP;
+#if CONFIG_APP_CLAW_LUA_MODULE_BLE_HID
+    static const ble_uuid16_t s_hid_uuid16 = BLE_UUID16_INIT(LUA_MODULE_BLE_HID_UUID16);
+
+    if (lua_module_ble_hid_is_attached()) {
+        /* HID mode: primary ADV carries flags + appearance + 0x1812 + shortened name.
+         * Windows HID pairing needs the device name visible in the primary ADV packet
+         * (not just scan response) to trigger the HID pairing UI.
+         * Budget: flags 3 + appearance 4 + uuid16 4 + name "esp-claw-XXXX" 14 = 25 bytes. */
+        if (make_device_name_with_mac_suffix(BLE_HOST_BRIDGE_SHORT_NAME_PREFIX,
+                                             short_name,
+                                             sizeof(short_name)) != ESP_OK) {
+            strlcpy(short_name, BLE_HOST_BRIDGE_SHORT_NAME_PREFIX, sizeof(short_name));
+        }
+        fields.appearance = lua_module_ble_hid_appearance();
+        fields.appearance_is_present = 1;
+        fields.uuids16 = &s_hid_uuid16;
+        fields.num_uuids16 = 1;
+        fields.uuids16_is_complete = 1;
+        /* Shortened local name in primary ADV — full name in scan response below. */
+        fields.name = (const uint8_t *)short_name;
+        fields.name_len = strlen(short_name);
+        fields.name_is_complete = 0;
+    } else {
+        fields.uuids128 = &s_service_uuid;
+        fields.num_uuids128 = 1;
+        fields.uuids128_is_complete = 1;
+    }
+#else
     fields.uuids128 = &s_service_uuid;
     fields.num_uuids128 = 1;
     fields.uuids128_is_complete = 1;
+#endif
     rc = ble_gap_adv_set_fields(&fields);
     if (rc != 0) {
         ESP_LOGW(TAG, "adv fields failed rc=%d", rc);
@@ -874,6 +1486,7 @@ esp_err_t ble_host_bridge_start(const ble_host_bridge_config_t *config)
 {
     esp_err_t err;
     esp_err_t ret = ESP_OK;
+    const char *base_device_name;
     int rc;
 
     if (s_bridge.started) {
@@ -882,10 +1495,12 @@ esp_err_t ble_host_bridge_start(const ble_host_bridge_config_t *config)
 
     memset(&s_bridge, 0, sizeof(s_bridge));
     s_bridge.conn_handle = BLE_HS_CONN_HANDLE_NONE;
-    strlcpy(s_bridge.device_name,
-            config && config->device_name && config->device_name[0] ?
-            config->device_name : BLE_HOST_BRIDGE_DEFAULT_NAME,
-            sizeof(s_bridge.device_name));
+    base_device_name = config && config->device_name && config->device_name[0] ?
+                       config->device_name : BLE_HOST_BRIDGE_DEFAULT_NAME;
+    err = make_device_name_with_mac_suffix(base_device_name,
+                                           s_bridge.device_name,
+                                           sizeof(s_bridge.device_name));
+    ESP_RETURN_ON_ERROR(err, TAG, "build device name failed");
     strlcpy(s_bridge.storage_base_path,
             config && config->storage_base_path && config->storage_base_path[0] ?
             config->storage_base_path : "/fatfs",
@@ -917,10 +1532,39 @@ esp_err_t ble_host_bridge_start(const ble_host_bridge_config_t *config)
     rc = ble_att_set_preferred_mtu(BLE_HOST_BRIDGE_PREFERRED_MTU);
     ESP_GOTO_ON_FALSE(rc == 0, ESP_FAIL, fail, TAG, "set preferred mtu failed rc=%d", rc);
 
+    /* Install our callbacks before attaching HID: esp_hidd_dev_init() chains
+     * whatever sync_cb/reset_cb it finds, so ours have to already be in place. */
     ble_hs_cfg.reset_cb = ble_host_bridge_on_reset;
     ble_hs_cfg.sync_cb = ble_host_bridge_on_sync;
-    ble_svc_gap_init();
-    ble_svc_gatt_init();
+    /* Evict the oldest bond when the store is full instead of failing with
+     * BLE_HS_ESTORE_CAP, which would leave the local IRK un-persisted and
+     * cause the device identity to change on every reboot. */
+    ble_hs_cfg.store_status_cb = ble_store_util_status_rr;
+
+    bool hid_owns_base_svcs = false;
+#if CONFIG_APP_CLAW_LUA_MODULE_BLE_HID
+    /* Register the HID services into this same GATT server. NimBLE only accepts
+     * services while the database is still mutable, i.e. before the host task
+     * starts and advertising begins, so this cannot be deferred to Lua. */
+    err = lua_module_ble_hid_attach(&(lua_module_ble_hid_attach_config_t) {
+        .device_name = s_bridge.device_name,
+    });
+    if (err == ESP_OK) {
+        /* esp_hidd_dev_init() already ran ble_svc_gap_init()/ble_svc_gatt_init();
+         * ble_svc_gap_init() adds unconditionally, so calling it again would
+         * register the GAP service twice. */
+        hid_owns_base_svcs = true;
+    } else {
+        /* Losing HID must not take the host bridge down with it. */
+        ESP_LOGW(TAG, "BLE HID attach failed, continuing without HID: %s",
+                 esp_err_to_name(err));
+        err = ESP_OK;
+    }
+#endif
+    if (!hid_owns_base_svcs) {
+        ble_svc_gap_init();
+        ble_svc_gatt_init();
+    }
     rc = ble_svc_gap_device_name_set(s_bridge.device_name);
     ESP_GOTO_ON_FALSE(rc == 0, ESP_FAIL, fail, TAG, "set device name failed rc=%d", rc);
     rc = ble_gatts_count_cfg(s_bridge_svcs);
@@ -934,6 +1578,13 @@ esp_err_t ble_host_bridge_start(const ble_host_bridge_config_t *config)
     }
     ESP_GOTO_ON_ERROR(s_bridge.startup_err, fail, TAG, "advertising start failed");
 
+    /* Non-fatal: without it the host falls back to polling job_status. */
+    err = cap_lua_register_job_event_cb(bridge_job_event_cb, NULL);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "job event subscribe failed: %s", esp_err_to_name(err));
+    }
+    (void)system_ui_workbuddy_set_audio_tx_callback(ble_host_bridge_send_workbuddy_audio, NULL);
+
     s_bridge.started = true;
     ESP_LOGI(TAG, "started name=%s storage=%s", s_bridge.device_name, s_bridge.storage_base_path);
     return ESP_OK;
@@ -945,17 +1596,27 @@ fail:
 
 esp_err_t ble_host_bridge_stop(void)
 {
+    /* Unsubscribe first: a job event arriving later must not enqueue into a
+     * queue that is about to be deleted. */
+    (void)cap_lua_unregister_job_event_cb(bridge_job_event_cb, NULL);
+    (void)system_ui_workbuddy_set_audio_tx_callback(NULL, NULL);
+
     if (s_bridge.request_task) {
         vTaskDelete(s_bridge.request_task);
         s_bridge.request_task = NULL;
     }
-    if (s_bridge.request_queue) {
+    /* Detach the queue under the lock so no producer can still see it, then
+     * drain and delete it. */
+    bridge_lock();
+    QueueHandle_t request_queue = s_bridge.request_queue;
+    s_bridge.request_queue = NULL;
+    bridge_unlock();
+    if (request_queue) {
         char *request = NULL;
-        while (xQueueReceive(s_bridge.request_queue, &request, 0) == pdTRUE) {
+        while (xQueueReceive(request_queue, &request, 0) == pdTRUE) {
             free(request);
         }
-        vQueueDelete(s_bridge.request_queue);
-        s_bridge.request_queue = NULL;
+        vQueueDelete(request_queue);
     }
     if (s_bridge.started) {
         (void)ble_gap_adv_stop();

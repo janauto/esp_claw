@@ -1,0 +1,13 @@
+idf_component_register(
+    SRC_DIRS
+        "src"
+        "src/fonts"
+        "src/components"
+        "src/images"
+    INCLUDE_DIRS
+        "include"
+    PRIV_INCLUDE_DIRS
+        "src"
+    REQUIRES
+        lvgl
+)

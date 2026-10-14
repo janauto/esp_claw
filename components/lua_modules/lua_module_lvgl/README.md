@@ -246,16 +246,23 @@ lvgl.init({
 })
 ```
 
+For generated apps, prefer the default font configured by `lvgl.init()`. Do not manually call
+`lvgl.font_load(storage.join_path(storage.get_root_dir(), "fonts/NotoSansSC-Regular-sub.ttf"), ...)`
+for ordinary labels: `storage.get_root_dir()` points at the writable DATA root, and that `fonts/`
+directory may not exist on the device. A missing font file makes the script fail before the UI can run.
+
 When LVGL `tiny_ttf` is enabled, fonts can be loaded from the DATA root at
-runtime for per-object overrides:
+runtime for per-object overrides, but only if the app has already created or installed that font file:
 
 ```lua
 local storage = require("storage")
 local lvgl = require("lvgl")
 
 local font_path = storage.join_path(storage.get_root_dir(), "fonts/NotoSansSC-Regular.ttf")
-local font = lvgl.font_load(font_path, { size = 24, cache_size = 128 })
-label:set_style({ font = font })
+local ok, font = pcall(lvgl.font_load, font_path, { size = 24, cache_size = 128 })
+if ok and font then
+    label:set_style({ font = font })
+end
 ```
 
 - `lvgl.font_load(path[, { size = 16, cache_size = LV_TINY_TTF_CACHE_GLYPH_CNT }])` -> font handle

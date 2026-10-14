@@ -294,6 +294,14 @@ static int lua_lvgl_init(lua_State *L)
         return luaL_error(L, "lvgl root screen create failed");
     }
     lua_lvgl_apply_default_font_locked(root_screen);
+    /* This placeholder owns the display from here until the script loads its own
+     * screen, so it is what the user sees during that gap. The default theme is
+     * the light one (LIGHT_COLOR_SCR is a near-white grey), which reads as a
+     * white flash when an app starts on top of the dark launcher. No script can
+     * restyle this screen - it never gets a handle to it - so paint it black
+     * here to match the rest of the UI. */
+    lv_obj_set_style_bg_color(root_screen, lv_color_black(), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_opa(root_screen, LV_OPA_COVER, LV_PART_MAIN | LV_STATE_DEFAULT);
     err = display_service_session_load_screen_locked(session, root_screen);
     if (err != ESP_OK) {
         lv_obj_delete(root_screen);
@@ -341,12 +349,23 @@ void lua_lvgl_exit_cleanup(lua_State *L)
      * exit. Non-owner Lua states are expected to never create LVGL objects
      * per the single-script rule (see RFC-single-script-ui.md), so no
      * per-state object cleanup is performed here. */
+    esp_err_t err = ESP_OK;
+    TickType_t deadline;
+
     if (!L) {
         return;
     }
     if (s_lvgl.runtime_initialized && s_lvgl.runtime_owner == L) {
         ESP_LOGI(TAG, "Lua exit cleanup: deinitializing lvgl owned by exiting state");
-        (void)lua_lvgl_deinit_runtime();
+        deadline = xTaskGetTickCount() + pdMS_TO_TICKS(LUA_MODULE_LVGL_TASK_STOP_TIMEOUT_MS);
+        do {
+            err = lua_lvgl_deinit_runtime();
+            if (err == ESP_OK) {
+                return;
+            }
+            vTaskDelay(pdMS_TO_TICKS(50));
+        } while (xTaskGetTickCount() < deadline);
+        ESP_LOGE(TAG, "Lua exit cleanup: lvgl deinit failed after retry: %s", esp_err_to_name(err));
     }
 }
 

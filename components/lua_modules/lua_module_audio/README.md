@@ -61,6 +61,46 @@ devices such as UAC.
 - `input:read(bytes)` or `input:read({ bytes = n })` returns raw PCM from the input device
 - `input:close()` closes the codec device
 
+## Shared PCM areas
+
+Named shared areas let Lua scripts and C tasks exchange PCM without sharing Lua
+state. Lua writes or reads by name:
+
+```lua
+audio.shared_write("workbuddy_mic", pcm, {
+    sample_rate = 48000,
+    channels = 1,
+    bits = 16,
+})
+
+local pcm, info = audio.shared_read("workbuddy_spk", {
+    after_seq = last_seq,
+    clear = true,
+})
+```
+
+C code can use `lua_audio_shared_area_write()`,
+`lua_audio_shared_area_read()`, and `lua_audio_shared_area_info()` from
+`lua_module_audio.h`. WorkBuddy uses:
+
+- `workbuddy_mic`: latest microphone PCM chunk published by Lua for C-side BLE,
+  Wi-Fi, recording, or analysis tasks.
+- `workbuddy_spk`: optional speaker PCM chunk written by C. The WorkBuddy Lua
+  loop plays this area; if no new chunk is available it waits without playing.
+
+The WorkBuddy headless script has macro-style `WORKBUDDY_INPUT_PROFILE` and
+`WORKBUDDY_OUTPUT_PROFILE` constants. Input `current` keeps the current capture
+format; `speech_16k_mono_16` opens the mic as 16 kHz, mono, 16-bit PCM. Output
+`current` keeps the board default speaker format; `speech_16k_mono_16` and
+`48k_stereo_16` request fixed speaker formats. Playback converts C-written
+`workbuddy_spk` chunks to the actual speaker format reported by `output:info()`
+before writing them.
+
+The native WorkBuddy C bridge currently validates `workbuddy_mic` as
+16 kHz/mono/16-bit PCM, accumulates 60 ms frames, encodes them with Opus,
+decodes them immediately, then writes decoded PCM into `workbuddy_spk` for
+playback.
+
 ## Player
 
 Create a player from an output object:

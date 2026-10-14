@@ -571,7 +571,59 @@ static int lua_board_get_display_lcd_params(lua_State *L)
     lua_pushinteger(L, sim_canvas_width());
     lua_pushinteger(L, sim_canvas_height());
     lua_pushinteger(L, 1);
-    return 5;
+    lua_pushinteger(L, 0);
+    return 6;
+}
+
+static int lua_board_init_device(lua_State *L)
+{
+    (void)luaL_checkstring(L, 1);
+    lua_pushboolean(L, 1);
+    return 1;
+}
+
+static int lua_board_deinit_device(lua_State *L)
+{
+    (void)luaL_checkstring(L, 1);
+    lua_pushboolean(L, 1);
+    return 1;
+}
+
+static int lua_board_get_board_info(lua_State *L)
+{
+    lua_newtable(L);
+    lua_pushstring(L, "web_sim");
+    lua_setfield(L, -2, "name");
+    lua_pushstring(L, "emscripten");
+    lua_setfield(L, -2, "chip");
+    lua_pushstring(L, "sim");
+    lua_setfield(L, -2, "version");
+    return 1;
+}
+
+static int lua_board_get_device_handle(lua_State *L)
+{
+    const char *name = luaL_checkstring(L, 1);
+    uintptr_t handle = 0;
+    if (strcmp(name, "display_lcd") == 0) {
+        handle = SIM_PANEL_HANDLE;
+    } else if (strcmp(name, "lcd_touch") == 0) {
+        handle = SIM_TOUCH_HANDLE;
+    } else if (strcmp(name, "audio_dac") == 0 || strcmp(name, "audio_codec") == 0) {
+        handle = SIM_AUDIO_CODEC_HANDLE;
+    }
+    if (handle == 0) {
+        lua_pushnil(L);
+        lua_pushfstring(L, "sim device not found: %s", name);
+        return 2;
+    }
+    lua_pushlightuserdata(L, (void *)handle);
+    return 1;
+}
+
+static int lua_board_get_device_config_handle(lua_State *L)
+{
+    return lua_board_get_device_handle(L);
 }
 
 static int lua_board_get_lcd_touch_handle(lua_State *L)
@@ -604,6 +656,16 @@ static int lua_board_get_camera_paths(lua_State *L)
 static int luaopen_board_manager(lua_State *L)
 {
     lua_newtable(L);
+    lua_pushcfunction(L, lua_board_init_device);
+    lua_setfield(L, -2, "init_device");
+    lua_pushcfunction(L, lua_board_deinit_device);
+    lua_setfield(L, -2, "deinit_device");
+    lua_pushcfunction(L, lua_board_get_board_info);
+    lua_setfield(L, -2, "get_board_info");
+    lua_pushcfunction(L, lua_board_get_device_handle);
+    lua_setfield(L, -2, "get_device_handle");
+    lua_pushcfunction(L, lua_board_get_device_config_handle);
+    lua_setfield(L, -2, "get_device_config_handle");
     lua_pushcfunction(L, lua_board_get_display_lcd_params);
     lua_setfield(L, -2, "get_display_lcd_params");
     lua_pushcfunction(L, lua_board_get_lcd_touch_handle);
@@ -618,6 +680,10 @@ static int luaopen_board_manager(lua_State *L)
     lua_setfield(L, -2, "PANEL_IF_RGB");
     lua_pushinteger(L, 2);
     lua_setfield(L, -2, "PANEL_IF_MIPI_DSI");
+    lua_pushinteger(L, 0);
+    lua_setfield(L, -2, "PIXEL_FORMAT_RGB565");
+    lua_pushinteger(L, 1);
+    lua_setfield(L, -2, "PIXEL_FORMAT_RGB888");
     return 1;
 }
 
@@ -2832,10 +2898,18 @@ static int luaopen_display(lua_State *L)
 static int sim_lvgl_init(lua_State *L)
 {
     int nargs = lua_gettop(L);
-    int height = (int)luaL_checkinteger(L, 4);
-    int min_buffer_lines = height;
+    int min_buffer_lines = sim_canvas_height();
 
-    if (nargs < 6 || lua_isnil(L, 6)) {
+    if (lua_istable(L, 1)) {
+        int buffer_lines;
+        lua_getfield(L, 1, "buffer_lines");
+        buffer_lines = lua_isnil(L, -1) ? 0 : (int)luaL_checkinteger(L, -1);
+        lua_pop(L, 1);
+        if (buffer_lines < min_buffer_lines) {
+            lua_pushinteger(L, min_buffer_lines);
+            lua_setfield(L, 1, "buffer_lines");
+        }
+    } else if (nargs < 6 || lua_isnil(L, 6)) {
         lua_settop(L, 5);
         lua_newtable(L);
         lua_pushinteger(L, min_buffer_lines);
