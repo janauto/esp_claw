@@ -98,6 +98,15 @@ void display_service_unlock(void);
 
 esp_err_t display_service_set_touch_observer(display_service_touch_observer_cb_t cb,
                                              void *user_ctx);
+
+/* Touch points come out of esp_lcd_touch in LVGL's coordinate space (the board's
+ * touch flags are set to match the display rotation). An EXCLUSIVE_RAW session
+ * draws in panel coordinates instead, which differ from LVGL's whenever the
+ * adapter rotates in software. Maps a touch point into the space of whoever
+ * owns the screen: the panel point under the same pixel while a raw session is
+ * open, unchanged otherwise. */
+void display_service_map_touch_point(int32_t *x, int32_t *y);
+
 esp_err_t display_service_set_state_observer(display_service_state_observer_cb_t cb,
                                              void *user_ctx);
 esp_err_t display_service_set_default_screen(lv_obj_t *screen);

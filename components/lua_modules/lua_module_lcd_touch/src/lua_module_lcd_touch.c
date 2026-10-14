@@ -9,6 +9,7 @@
 #include <stdint.h>
 
 #include "cap_lua.h"
+#include "display_service.h"
 #include "esp_err.h"
 #include "esp_lcd_touch.h"
 #include "esp_log.h"
@@ -111,8 +112,14 @@ static esp_err_t lua_lcd_touch_read_raw(esp_lcd_touch_handle_t touch_handle,
 
     *pressed = point_count > 0;
     if (*pressed) {
-        *x = points[0].x;
-        *y = points[0].y;
+        /* A script drawing through the display module blits in panel
+         * coordinates, which the LVGL rotation does not reach; hand it the
+         * touch in that same space so its hit tests line up. */
+        int32_t px = points[0].x;
+        int32_t py = points[0].y;
+        display_service_map_touch_point(&px, &py);
+        *x = (uint16_t)px;
+        *y = (uint16_t)py;
     } else {
         *x = 0;
         *y = 0;

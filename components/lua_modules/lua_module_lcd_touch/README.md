@@ -14,6 +14,10 @@ This module describes how to correctly use lcd_touch when writing Lua scripts.
 - `lcd_touch.sync(touch_handle)` returns the cached-state table with `pressed`, `just_pressed = false`, `just_released = false`, `x`, `y`, `dx = 0`, `dy = 0`, `moved = false`, and `held_ms = 0`.
 - `lcd_touch.poll(touch_handle)` returns `pressed`, edge flags, coordinates, delta fields, `moved`, and `held_ms`.
 
+## Coordinates
+- `x` and `y` are in the coordinate space of whatever the script draws with. While the script owns the screen through `display.init(...)`, they match `display.width` and `display.height`; with `lvgl`, they match the LVGL screen size.
+- The two can differ: on a board that rotates the LVGL UI (for example a 800x480 panel shown as 480x800 portrait), `display` still draws on the unrotated panel. Do not rotate touch coordinates yourself.
+
 ## Example
 ```lua
 local board_manager = require("board_manager")

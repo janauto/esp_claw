@@ -70,6 +70,11 @@ typedef struct {
     esp_lcd_panel_io_handle_t io;
     esp_lcd_touch_handle_t touch;
     lv_display_t *display;
+    /* Software rotation the adapter applies to LVGL output (raw blits bypass
+     * it) and the panel size it rotates into. */
+    esp_lv_adapter_rotation_t rotation;
+    uint16_t panel_width;
+    uint16_t panel_height;
     lv_indev_t *touch_indev;
     lv_obj_t *default_screen;
     lv_obj_t *dummy_input_blocker;
@@ -401,7 +406,13 @@ static lv_display_t *display_service_register_adapter_display(const dev_display_
     ESP_LOGI(TAG, "register LVGL adapter display: sub_type=%s size=%ux%u rotation=%d tear=%d",
              lcd_cfg->sub_type, lcd_cfg->lcd_width, lcd_cfg->lcd_height,
              (int)rotation, (int)disp_cfg.tear_avoid_mode);
-    return esp_lv_adapter_register_display(&disp_cfg);
+    lv_display_t *display = esp_lv_adapter_register_display(&disp_cfg);
+    if (display) {
+        s_display.rotation = rotation;
+        s_display.panel_width = lcd_cfg->lcd_width;
+        s_display.panel_height = lcd_cfg->lcd_height;
+    }
+    return display;
 }
 
 static void display_service_touch_read_cb(lv_indev_t *indev, lv_indev_data_t *data)
@@ -576,6 +587,9 @@ void display_service_stop(void)
         esp_lv_adapter_unregister_display(s_display.display);
         s_display.display = NULL;
     }
+    s_display.rotation = ESP_LV_ADAPTER_ROTATE_0;
+    s_display.panel_width = 0;
+    s_display.panel_height = 0;
     if (s_display.adapter_initialized) {
         (void)esp_lv_adapter_deinit();
         s_display.adapter_initialized = false;
@@ -815,6 +829,49 @@ esp_err_t display_service_set_touch_observer(display_service_touch_observer_cb_t
     s_display.touch_observer_user_ctx = user_ctx;
     display_service_unlock();
     return ESP_OK;
+}
+
+static int32_t display_service_clamp_i32(int32_t v, int32_t max_exclusive)
+{
+    if (v < 0) {
+        return 0;
+    }
+    return v >= max_exclusive ? max_exclusive - 1 : v;
+}
+
+void display_service_map_touch_point(int32_t *x, int32_t *y)
+{
+    if (x == NULL || y == NULL || !s_display.started || !s_display.dummy_draw_enabled ||
+            s_display.panel_width == 0 || s_display.panel_height == 0) {
+        return;
+    }
+
+    /* Same mapping the adapter uses to put a rotated LVGL pixel on the panel
+     * (display_coord_to_phy in esp_lvgl_adapter). */
+    const int32_t w = s_display.panel_width;
+    const int32_t h = s_display.panel_height;
+    const int32_t lx = *x;
+    const int32_t ly = *y;
+    switch (s_display.rotation) {
+    case ESP_LV_ADAPTER_ROTATE_90:
+        *x = w - 1 - ly;
+        *y = lx;
+        break;
+    case ESP_LV_ADAPTER_ROTATE_180:
+        *x = w - 1 - lx;
+        *y = h - 1 - ly;
+        break;
+    case ESP_LV_ADAPTER_ROTATE_270:
+        *x = ly;
+        *y = h - 1 - lx;
+        break;
+    default:
+        return;
+    }
+    /* esp_lcd_touch mirrors with max - v, so an edge touch can land one past
+     * the last pixel; keep the result on the panel. */
+    *x = display_service_clamp_i32(*x, w);
+    *y = display_service_clamp_i32(*y, h);
 }
 
 esp_err_t display_service_set_state_observer(display_service_state_observer_cb_t cb,
