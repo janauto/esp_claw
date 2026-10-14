@@ -40,13 +40,13 @@ esp_err_t system_ui_create_boot_locked(void)
     ESP_RETURN_ON_FALSE(ui_Container59 != NULL, ESP_ERR_NO_MEM,
                         SYSTEM_UI_TAG, "create boot container failed");
     lv_obj_remove_style_all(ui_Container59);
-    lv_obj_set_width(ui_Container59, 804);
-    lv_obj_set_height(ui_Container59, 490);
-    lv_obj_set_x(ui_Container59, -1);
-    lv_obj_set_y(ui_Container59, -5);
+    lv_obj_set_width(ui_Container59, 480);
+    lv_obj_set_height(ui_Container59, 800);
+    lv_obj_set_x(ui_Container59, 0);
+    lv_obj_set_y(ui_Container59, 0);
     lv_obj_set_align(ui_Container59, LV_ALIGN_CENTER);
     lv_obj_clear_flag(ui_Container59, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_style_radius(ui_Container59, 10, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_radius(ui_Container59, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_bg_color(ui_Container59, lv_color_hex(0x000000), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_bg_opa(ui_Container59, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
 
@@ -77,7 +77,7 @@ esp_err_t system_ui_create_boot_locked(void)
                         SYSTEM_UI_TAG, "create boot progress failed");
     lv_bar_set_value(ui_Bar2, 0, LV_ANIM_OFF);
     lv_bar_set_start_value(ui_Bar2, 0, LV_ANIM_OFF);
-    lv_obj_set_width(ui_Bar2, 360);
+    lv_obj_set_width(ui_Bar2, 320);
     lv_obj_set_height(ui_Bar2, 30);
     lv_obj_set_x(ui_Bar2, 0);
     lv_obj_set_y(ui_Bar2, 84);
@@ -93,7 +93,7 @@ esp_err_t system_ui_create_boot_locked(void)
                         SYSTEM_UI_TAG, "create boot status failed");
     lv_obj_set_width(ui_Label19, LV_SIZE_CONTENT);
     lv_obj_set_height(ui_Label19, LV_SIZE_CONTENT);
-    lv_obj_set_x(ui_Label19, -6);
+    lv_obj_set_x(ui_Label19, 0);
     lv_obj_set_y(ui_Label19, 31);
     lv_obj_set_align(ui_Label19, LV_ALIGN_CENTER);
     lv_label_set_text(ui_Label19, "SYSTEM CHECK");
