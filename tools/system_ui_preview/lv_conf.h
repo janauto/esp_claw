@@ -8,6 +8,8 @@
 #define LV_USE_STDLIB_SPRINTF LV_STDLIB_CLIB
 #define LV_USE_OS LV_OS_NONE
 #define LV_DEF_REFR_PERIOD 16
+#define LV_CACHE_DEF_SIZE (8 * 1024 * 1024)
+#define LV_BIN_DECODER_RAM_LOAD 1
 
 #define LV_FONT_MONTSERRAT_14 1
 #define LV_FONT_DEFAULT &lv_font_montserrat_14
