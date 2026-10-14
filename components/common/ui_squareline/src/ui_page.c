@@ -33,7 +33,7 @@
  * passing the same value as _ui_screen_change()'s delay. */
 #define UI_PAGE_ANIM_MS 1000
 
-/* Indicator dots: one per page at y=185, 22 px apart, centred on the screen. The
+/* Indicator dots: one per page below the selected icon, 22 px apart, centred on the screen. The
  * selected one is drawn larger and in the accent colour.
  *
  * The dot index *is* the page index, so the highlight always walks the row in
@@ -43,7 +43,7 @@
  * the highlight jump: it claimed the eighth dot while the seven older pages
  * still covered dots 0..6. */
 #define UI_PAGE_DOT_SPACING     22
-#define UI_PAGE_DOT_Y           185
+#define UI_PAGE_DOT_Y           (UI_CAROUSEL_MID_Y + 128)
 #define UI_PAGE_DOT_SIZE        15
 #define UI_PAGE_DOT_SIZE_SEL    18
 #define UI_PAGE_DOT_COLOR       0x384038
@@ -539,7 +539,7 @@ void ui_page_screen_init(void)
     lv_obj_set_style_outline_opa(s_ui.screen, 255, LV_PART_SCROLLBAR | LV_STATE_DEFAULT);
 
     /* Black backdrop that owns every other widget. */
-    root = ui_page_block(s_ui.screen, 804, 490, 0, 4, 0);
+    root = ui_page_block(s_ui.screen, 480, 800, 0, 0, 0);
     ui_page_block_fill(root, 0x000000);
     lv_obj_set_style_bg_img_recolor(root, lv_color_hex(0xF0DC18), LV_PART_SCROLLBAR | LV_STATE_DEFAULT);
     lv_obj_set_style_bg_img_recolor_opa(root, 255, LV_PART_SCROLLBAR | LV_STATE_DEFAULT);
@@ -551,11 +551,11 @@ void ui_page_screen_init(void)
     lv_obj_set_style_shadow_opa(root, 255, LV_PART_SCROLLBAR | LV_STATE_DEFAULT);
 
     /* Status bar with its yellow marker. */
-    bar = ui_page_block(root, 791, 30, -1, -222, 0);
+    bar = ui_page_block(root, 480, 48, 0, -376, 0);
     ui_page_block_fill(bar, 0x080C08);
-    ui_page_block_fill(ui_page_block(bar, 9, 39, -388, -1, 0), 0xF8E458);
+    ui_page_block_fill(ui_page_block(bar, 12, 48, -234, 0, 0), 0xF8E458);
 
-    ui_page_label(root, 88, 54, 313, -221, "9:51", 0xFAFBF5, false);
+    ui_page_label(root, 88, 54, 140, -366, "9:51", 0xFAFBF5, false);
 
     /* Battery gauge. */
     obj = lv_bar_create(root);
@@ -563,8 +563,8 @@ void ui_page_screen_init(void)
     lv_bar_set_start_value(obj, 0, LV_ANIM_OFF);
     lv_obj_set_width(obj, 32);
     lv_obj_set_height(obj, 9);
-    lv_obj_set_x(obj, 367);
-    lv_obj_set_y(obj, -225);
+    lv_obj_set_x(obj, 208);
+    lv_obj_set_y(obj, -376);
     lv_obj_set_align(obj, LV_ALIGN_CENTER);
     lv_obj_set_style_radius(obj, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_bg_color(obj, lv_color_hex(0x384038), LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -578,15 +578,15 @@ void ui_page_screen_init(void)
     lv_obj_set_style_bg_grad_color(obj, lv_color_hex(0xF0DC18), LV_PART_INDICATOR | LV_STATE_DEFAULT);
 
     /* Header strip with the orange status dot. */
-    bar = ui_page_block(root, 240, 41, 0, -176, 0);
+    bar = ui_page_block(root, 240, 41, 0, -296, 0);
     ui_page_block_fill(bar, 0x080C08);
     obj = ui_page_block(bar, 17, 16, -88, 2, 75);
     ui_page_block_fill(obj, 0xF8AC10);
 
-    ui_page_label(root, 93, 54, 1, -169, "会议纪要", 0xFAFBF5, true);
+    ui_page_label(root, 93, 54, 1, -289, "会议纪要", 0xFAFBF5, true);
 
     /* Footer strip: top border only. */
-    bar = ui_page_block(root, 801, 43, 2, 216, 0);
+    bar = ui_page_block(root, 480, 56, 0, 372, 0);
     ui_page_block_fill(bar, 0x080C08);
     lv_obj_set_style_border_color(bar, lv_color_hex(0x384038), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_border_opa(bar, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -595,32 +595,35 @@ void ui_page_screen_init(void)
     lv_obj_set_style_outline_width(bar, 6, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_outline_pad(bar, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
 
-    footer_prev = ui_page_label(root, 93, 45, -321, 221, "PREV", 0xF0C428, true);
-    footer_open = ui_page_label(root, 93, 49, -1, 221, "M OPEN", 0xF0C428, true);
+    footer_prev = ui_page_label(root, 93, 45, -150, 378, "PREV", 0xF0C428, true);
+    footer_open = ui_page_label(root, 93, 49, -1, 378, "M OPEN", 0xF0C428, true);
 
     /* Page caption — rebound on every page change; empty string until ui_page_bind(0) below. */
-    s_ui.title = ui_page_label(root, 360, 45, 4, -18, "", 0x788078, true);
+    s_ui.title = ui_page_label(root, 360, 45, 4, UI_CAROUSEL_MID_Y - 145, "", 0x788078, true);
     lv_textarea_set_one_line(s_ui.title, true);
     lv_obj_set_style_text_align(s_ui.title, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_bg_color(s_ui.title, lv_color_hex(0x786028), LV_PART_MAIN | LV_STATE_DEFAULT);
 
-    ui_page_label(root, 135, 58, -316, -213, "LANGUAGE", 0xFAFBF5, false);
+    ui_page_label(root, 135, 58, -153, -367, "LANGUAGE", 0xFAFBF5, false);
 
     /* Frame + pill highlighting the selected icon. Colours rebound by ui_page_bind(0). */
-    s_ui.frame = ui_page_block(root, 191, 174, 0, 83, 20);
+    s_ui.frame = ui_page_block(root, 220, 204, 0, UI_CAROUSEL_MID_Y - 6, 20);
     lv_obj_set_style_border_color(s_ui.frame, lv_color_hex(0x000000),
                                   LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_border_opa(s_ui.frame, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_border_width(s_ui.frame, 6, LV_PART_MAIN | LV_STATE_DEFAULT);
 
-    s_ui.pill = ui_page_block(s_ui.frame, 152, 13, 0, -66, 10);
+    s_ui.pill = ui_page_block(s_ui.frame, 176, 13, 0, -80, 10);
     ui_page_block_fill(s_ui.pill, 0x000000);
 
     /* Visible carousel slots — sources will be overwritten by ui_page_bind(0)
      * below; passing NULL here is safe because set_src accepts NULL. */
-    s_ui.icon_mid   = ui_page_icon(root, NULL,  0,    89, 128, false, true);
-    s_ui.icon_right = ui_page_icon(root, NULL,  217,  40,  98, false, false);
-    s_ui.icon_left  = ui_page_icon(root, NULL, -217,  40,  98, false, false);
+    s_ui.icon_mid   = ui_page_icon(root, NULL, 0, UI_CAROUSEL_MID_Y,
+                                   UI_CAROUSEL_MID_ZOOM, false, true);
+    s_ui.icon_right = ui_page_icon(root, NULL, UI_CAROUSEL_SIDE_X, UI_CAROUSEL_SIDE_Y,
+                                   UI_CAROUSEL_SIDE_ZOOM, false, false);
+    s_ui.icon_left  = ui_page_icon(root, NULL, -UI_CAROUSEL_SIDE_X, UI_CAROUSEL_SIDE_Y,
+                                   UI_CAROUSEL_SIDE_ZOOM, false, false);
 
     /* Indicator dots, left to right. */
     for (uint8_t i = 0; i < s_page_count; i++) {
@@ -631,26 +634,28 @@ void ui_page_screen_init(void)
     }
 
     /* Static arrow glyphs beside the footer buttons. */
-    ui_page_icon(root, "ui_img_1793379158",  367, 217, 64, false, false);
-    ui_page_icon(root, "ui_img_1111249434", -380, 218, 64, false, false);
+    ui_page_icon(root, "ui_img_1793379158",  212, 373, 64, false, false);
+    ui_page_icon(root, "ui_img_1111249434", -212, 374, 64, false, false);
 
     /* Hidden slots the incoming neighbour flies in from.
      * Sources are overwritten by ui_page_bind(0) below. */
-    s_ui.icon_right_in = ui_page_icon(root, NULL, -3, 92, 98, true, false);
+    s_ui.icon_right_in = ui_page_icon(root, NULL, 0, UI_CAROUSEL_MID_Y,
+                                      UI_CAROUSEL_SIDE_ZOOM, true, false);
     lv_obj_add_state(s_ui.icon_right_in, LV_STATE_USER_1);
-    s_ui.icon_left_in  = ui_page_icon(root, NULL,  0, 89, 98, true, false);
+    s_ui.icon_left_in  = ui_page_icon(root, NULL, 0, UI_CAROUSEL_MID_Y,
+                                      UI_CAROUSEL_SIDE_ZOOM, true, false);
 
-    footer_next = ui_page_label(root, 93, 66, 325, 230, "NEXT", 0xF0C428, true);
+    footer_next = ui_page_label(root, 93, 66, 154, 387, "NEXT", 0xF0C428, true);
     lv_obj_set_flex_flow(footer_next, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(footer_next, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
 
-    btn = ui_page_button(root, 101, 30, 338, 220, true);
+    btn = ui_page_button(root, 120, 56, 170, 372, true);
     lv_obj_add_event_cb(btn, ui_page_right_cb, LV_EVENT_ALL, NULL);
 
-    btn = ui_page_button(root, 97, 22, -344, 219, false);
+    btn = ui_page_button(root, 120, 56, -170, 372, false);
     lv_obj_add_event_cb(btn, ui_page_left_cb, LV_EVENT_ALL, NULL);
 
-    btn = ui_page_button(root, 80, 22, -4, 220, true);
+    btn = ui_page_button(root, 120, 56, 0, 372, true);
     lv_obj_add_event_cb(btn, ui_page_open_cb, LV_EVENT_ALL, NULL);
 
     lv_obj_clear_flag(footer_prev, LV_OBJ_FLAG_CLICKABLE);

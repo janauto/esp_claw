@@ -36,7 +36,7 @@ lv_anim_t * switchtoP1rightpre_Animation(lv_obj_t * TargetObject, int delay)
     lv_anim_set_time(&PropertyAnimation_0, 1000);
     lv_anim_set_user_data(&PropertyAnimation_0, PropertyAnimation_0_user_data);
     lv_anim_set_custom_exec_cb(&PropertyAnimation_0, _ui_anim_callback_set_x);
-    lv_anim_set_values(&PropertyAnimation_0, 217, 0);
+    lv_anim_set_values(&PropertyAnimation_0, UI_CAROUSEL_SIDE_X, 0);
     lv_anim_set_path_cb(&PropertyAnimation_0, lv_anim_path_ease_out);
     lv_anim_set_delay(&PropertyAnimation_0, delay + 0);
     lv_anim_set_deleted_cb(&PropertyAnimation_0, _ui_anim_callback_free_user_data);
@@ -55,7 +55,7 @@ lv_anim_t * switchtoP1rightpre_Animation(lv_obj_t * TargetObject, int delay)
     lv_anim_set_time(&PropertyAnimation_1, 1000);
     lv_anim_set_user_data(&PropertyAnimation_1, PropertyAnimation_1_user_data);
     lv_anim_set_custom_exec_cb(&PropertyAnimation_1, _ui_anim_callback_set_y);
-    lv_anim_set_values(&PropertyAnimation_1, 40, 89);
+    lv_anim_set_values(&PropertyAnimation_1, UI_CAROUSEL_SIDE_Y, UI_CAROUSEL_MID_Y);
     lv_anim_set_path_cb(&PropertyAnimation_1, lv_anim_path_ease_out);
     lv_anim_set_delay(&PropertyAnimation_1, delay + 0);
     lv_anim_set_deleted_cb(&PropertyAnimation_1, _ui_anim_callback_free_user_data);
@@ -75,7 +75,7 @@ lv_anim_t * switchtoP1rightpre_Animation(lv_obj_t * TargetObject, int delay)
     lv_anim_set_user_data(&PropertyAnimation_2, PropertyAnimation_2_user_data);
     lv_anim_set_custom_exec_cb(&PropertyAnimation_2, _ui_anim_callback_set_image_zoom);
     /* Match the static side slot at the first frame, then grow to the centre size. */
-    lv_anim_set_values(&PropertyAnimation_2, 98, 128);
+    lv_anim_set_values(&PropertyAnimation_2, UI_CAROUSEL_SIDE_ZOOM, UI_CAROUSEL_MID_ZOOM);
     lv_anim_set_path_cb(&PropertyAnimation_2, lv_anim_path_ease_out);
     lv_anim_set_delay(&PropertyAnimation_2, delay + 0);
     lv_anim_set_deleted_cb(&PropertyAnimation_2, _ui_anim_callback_free_user_data);
@@ -102,7 +102,7 @@ lv_anim_t * switchtoP1midpre_Animation(lv_obj_t * TargetObject, int delay)
     lv_anim_set_time(&PropertyAnimation_0, 1000);
     lv_anim_set_user_data(&PropertyAnimation_0, PropertyAnimation_0_user_data);
     lv_anim_set_custom_exec_cb(&PropertyAnimation_0, _ui_anim_callback_set_x);
-    lv_anim_set_values(&PropertyAnimation_0, 0, -217);
+    lv_anim_set_values(&PropertyAnimation_0, 0, -UI_CAROUSEL_SIDE_X);
     lv_anim_set_path_cb(&PropertyAnimation_0, lv_anim_path_ease_out);
     lv_anim_set_delay(&PropertyAnimation_0, delay + 0);
     lv_anim_set_deleted_cb(&PropertyAnimation_0, _ui_anim_callback_free_user_data);
@@ -121,7 +121,7 @@ lv_anim_t * switchtoP1midpre_Animation(lv_obj_t * TargetObject, int delay)
     lv_anim_set_time(&PropertyAnimation_1, 1000);
     lv_anim_set_user_data(&PropertyAnimation_1, PropertyAnimation_1_user_data);
     lv_anim_set_custom_exec_cb(&PropertyAnimation_1, _ui_anim_callback_set_y);
-    lv_anim_set_values(&PropertyAnimation_1, 89, 40);
+    lv_anim_set_values(&PropertyAnimation_1, UI_CAROUSEL_MID_Y, UI_CAROUSEL_SIDE_Y);
     lv_anim_set_path_cb(&PropertyAnimation_1, lv_anim_path_ease_out);
     lv_anim_set_delay(&PropertyAnimation_1, delay + 0);
     lv_anim_set_deleted_cb(&PropertyAnimation_1, _ui_anim_callback_free_user_data);
@@ -140,7 +140,7 @@ lv_anim_t * switchtoP1midpre_Animation(lv_obj_t * TargetObject, int delay)
     lv_anim_set_time(&PropertyAnimation_2, 1000);
     lv_anim_set_user_data(&PropertyAnimation_2, PropertyAnimation_2_user_data);
     lv_anim_set_custom_exec_cb(&PropertyAnimation_2, _ui_anim_callback_set_image_zoom);
-    lv_anim_set_values(&PropertyAnimation_2, 128, 98);
+    lv_anim_set_values(&PropertyAnimation_2, UI_CAROUSEL_MID_ZOOM, UI_CAROUSEL_SIDE_ZOOM);
     //  lv_anim_set_values(&PropertyAnimation_2, 32, 16);
     lv_anim_set_path_cb(&PropertyAnimation_2, lv_anim_path_ease_out);
     lv_anim_set_delay(&PropertyAnimation_2, delay + 0);
@@ -169,7 +169,7 @@ lv_anim_t * switchtoP1leftpre_Animation(lv_obj_t * TargetObject, int delay)
     lv_anim_set_time(&PropertyAnimation_0, 1000);
     lv_anim_set_user_data(&PropertyAnimation_0, PropertyAnimation_0_user_data);
     lv_anim_set_custom_exec_cb(&PropertyAnimation_0, _ui_anim_callback_set_x);
-    lv_anim_set_values(&PropertyAnimation_0, -217, 0);
+    lv_anim_set_values(&PropertyAnimation_0, -UI_CAROUSEL_SIDE_X, 0);
     lv_anim_set_path_cb(&PropertyAnimation_0, lv_anim_path_ease_out);
     lv_anim_set_delay(&PropertyAnimation_0, delay + 0);
     lv_anim_set_deleted_cb(&PropertyAnimation_0, _ui_anim_callback_free_user_data);
@@ -188,7 +188,7 @@ lv_anim_t * switchtoP1leftpre_Animation(lv_obj_t * TargetObject, int delay)
     lv_anim_set_time(&PropertyAnimation_1, 1000);
     lv_anim_set_user_data(&PropertyAnimation_1, PropertyAnimation_1_user_data);
     lv_anim_set_custom_exec_cb(&PropertyAnimation_1, _ui_anim_callback_set_y);
-    lv_anim_set_values(&PropertyAnimation_1, 40, 89);
+    lv_anim_set_values(&PropertyAnimation_1, UI_CAROUSEL_SIDE_Y, UI_CAROUSEL_MID_Y);
     lv_anim_set_path_cb(&PropertyAnimation_1, lv_anim_path_ease_out);
     lv_anim_set_delay(&PropertyAnimation_1, delay + 0);
     lv_anim_set_deleted_cb(&PropertyAnimation_1, _ui_anim_callback_free_user_data);
@@ -235,7 +235,7 @@ lv_anim_t * switchtoP1rightinpre_Animation(lv_obj_t * TargetObject, int delay)
     lv_anim_set_time(&PropertyAnimation_0, 1000);
     lv_anim_set_user_data(&PropertyAnimation_0, PropertyAnimation_0_user_data);
     lv_anim_set_custom_exec_cb(&PropertyAnimation_0, _ui_anim_callback_set_x);
-    lv_anim_set_values(&PropertyAnimation_0, 0, 217);
+    lv_anim_set_values(&PropertyAnimation_0, 0, UI_CAROUSEL_SIDE_X);
     lv_anim_set_path_cb(&PropertyAnimation_0, lv_anim_path_ease_out);
     lv_anim_set_delay(&PropertyAnimation_0, delay + 0);
     lv_anim_set_deleted_cb(&PropertyAnimation_0, _ui_anim_callback_free_user_data);
@@ -254,7 +254,7 @@ lv_anim_t * switchtoP1rightinpre_Animation(lv_obj_t * TargetObject, int delay)
     lv_anim_set_time(&PropertyAnimation_1, 1000);
     lv_anim_set_user_data(&PropertyAnimation_1, PropertyAnimation_1_user_data);
     lv_anim_set_custom_exec_cb(&PropertyAnimation_1, _ui_anim_callback_set_y);
-    lv_anim_set_values(&PropertyAnimation_1, 89, 40);
+    lv_anim_set_values(&PropertyAnimation_1, UI_CAROUSEL_MID_Y, UI_CAROUSEL_SIDE_Y);
     lv_anim_set_path_cb(&PropertyAnimation_1, lv_anim_path_ease_out);
     lv_anim_set_delay(&PropertyAnimation_1, delay + 0);
     lv_anim_set_deleted_cb(&PropertyAnimation_1, _ui_anim_callback_free_user_data);
@@ -303,7 +303,7 @@ lv_anim_t * switchtoP6mid_Animation(lv_obj_t * TargetObject, int delay)
     lv_anim_set_time(&PropertyAnimation_0, 1000);
     lv_anim_set_user_data(&PropertyAnimation_0, PropertyAnimation_0_user_data);
     lv_anim_set_custom_exec_cb(&PropertyAnimation_0, _ui_anim_callback_set_x);
-    lv_anim_set_values(&PropertyAnimation_0, 0, 217);
+    lv_anim_set_values(&PropertyAnimation_0, 0, UI_CAROUSEL_SIDE_X);
     lv_anim_set_path_cb(&PropertyAnimation_0, lv_anim_path_ease_out);
     lv_anim_set_delay(&PropertyAnimation_0, delay + 0);
     lv_anim_set_deleted_cb(&PropertyAnimation_0, _ui_anim_callback_free_user_data);
@@ -322,7 +322,7 @@ lv_anim_t * switchtoP6mid_Animation(lv_obj_t * TargetObject, int delay)
     lv_anim_set_time(&PropertyAnimation_1, 1000);
     lv_anim_set_user_data(&PropertyAnimation_1, PropertyAnimation_1_user_data);
     lv_anim_set_custom_exec_cb(&PropertyAnimation_1, _ui_anim_callback_set_y);
-    lv_anim_set_values(&PropertyAnimation_1, 89, 40);
+    lv_anim_set_values(&PropertyAnimation_1, UI_CAROUSEL_MID_Y, UI_CAROUSEL_SIDE_Y);
     lv_anim_set_path_cb(&PropertyAnimation_1, lv_anim_path_ease_out);
     lv_anim_set_delay(&PropertyAnimation_1, delay + 0);
     lv_anim_set_deleted_cb(&PropertyAnimation_1, _ui_anim_callback_free_user_data);
@@ -343,7 +343,7 @@ lv_anim_t * switchtoP6mid_Animation(lv_obj_t * TargetObject, int delay)
     lv_anim_set_custom_exec_cb(&PropertyAnimation_2, _ui_anim_callback_set_image_zoom);
     /* 绝对缩放值（LV_SCALE_NONE = 256 为 100%）：128 = 50% -> 98 ≈ 38%。
      * 不要设置 get_value_cb，否则 LVGL 会把这里的值当成相对当前 scale 的偏移量。 */
-    lv_anim_set_values(&PropertyAnimation_2, 128, 98);
+    lv_anim_set_values(&PropertyAnimation_2, UI_CAROUSEL_MID_ZOOM, UI_CAROUSEL_SIDE_ZOOM);
     lv_anim_set_path_cb(&PropertyAnimation_2, lv_anim_path_ease_out);
     lv_anim_set_delay(&PropertyAnimation_2, delay + 0);
     lv_anim_set_deleted_cb(&PropertyAnimation_2, _ui_anim_callback_free_user_data);
@@ -368,7 +368,7 @@ lv_anim_t * P0switchtoP6left_Animation(lv_obj_t * TargetObject, int delay)
     lv_anim_set_time(&PropertyAnimation_0, 1000);
     lv_anim_set_user_data(&PropertyAnimation_0, PropertyAnimation_0_user_data);
     lv_anim_set_custom_exec_cb(&PropertyAnimation_0, _ui_anim_callback_set_x);
-    lv_anim_set_values(&PropertyAnimation_0, -217, 0);
+    lv_anim_set_values(&PropertyAnimation_0, -UI_CAROUSEL_SIDE_X, 0);
     lv_anim_set_path_cb(&PropertyAnimation_0, lv_anim_path_ease_out);
     lv_anim_set_delay(&PropertyAnimation_0, delay + 0);
     lv_anim_set_deleted_cb(&PropertyAnimation_0, _ui_anim_callback_free_user_data);
@@ -387,7 +387,7 @@ lv_anim_t * P0switchtoP6left_Animation(lv_obj_t * TargetObject, int delay)
     lv_anim_set_time(&PropertyAnimation_1, 1000);
     lv_anim_set_user_data(&PropertyAnimation_1, PropertyAnimation_1_user_data);
     lv_anim_set_custom_exec_cb(&PropertyAnimation_1, _ui_anim_callback_set_y);
-    lv_anim_set_values(&PropertyAnimation_1, 40, 89);
+    lv_anim_set_values(&PropertyAnimation_1, UI_CAROUSEL_SIDE_Y, UI_CAROUSEL_MID_Y);
     lv_anim_set_path_cb(&PropertyAnimation_1, lv_anim_path_ease_out);
     lv_anim_set_delay(&PropertyAnimation_1, delay + 0);
     lv_anim_set_deleted_cb(&PropertyAnimation_1, _ui_anim_callback_free_user_data);
@@ -407,7 +407,7 @@ lv_anim_t * P0switchtoP6left_Animation(lv_obj_t * TargetObject, int delay)
     lv_anim_set_user_data(&PropertyAnimation_2, PropertyAnimation_2_user_data);
     lv_anim_set_custom_exec_cb(&PropertyAnimation_2, _ui_anim_callback_set_image_zoom);
     /* Match the static side slot at the first frame, then grow to the centre size. */
-    lv_anim_set_values(&PropertyAnimation_2, 98, 128);
+    lv_anim_set_values(&PropertyAnimation_2, UI_CAROUSEL_SIDE_ZOOM, UI_CAROUSEL_MID_ZOOM);
     lv_anim_set_path_cb(&PropertyAnimation_2, lv_anim_path_ease_out);
     lv_anim_set_delay(&PropertyAnimation_2, delay + 0);
     lv_anim_set_deleted_cb(&PropertyAnimation_2, _ui_anim_callback_free_user_data);
@@ -432,7 +432,7 @@ lv_anim_t * P0switchtoP6right_Animation(lv_obj_t * TargetObject, int delay)
     lv_anim_set_time(&PropertyAnimation_0, 1000);
     lv_anim_set_user_data(&PropertyAnimation_0, PropertyAnimation_0_user_data);
     lv_anim_set_custom_exec_cb(&PropertyAnimation_0, _ui_anim_callback_set_x);
-    lv_anim_set_values(&PropertyAnimation_0, 217, 0);
+    lv_anim_set_values(&PropertyAnimation_0, UI_CAROUSEL_SIDE_X, 0);
     lv_anim_set_path_cb(&PropertyAnimation_0, lv_anim_path_ease_out);
     lv_anim_set_delay(&PropertyAnimation_0, delay + 0);
     lv_anim_set_deleted_cb(&PropertyAnimation_0, _ui_anim_callback_free_user_data);
@@ -451,7 +451,7 @@ lv_anim_t * P0switchtoP6right_Animation(lv_obj_t * TargetObject, int delay)
     lv_anim_set_time(&PropertyAnimation_1, 1000);
     lv_anim_set_user_data(&PropertyAnimation_1, PropertyAnimation_1_user_data);
     lv_anim_set_custom_exec_cb(&PropertyAnimation_1, _ui_anim_callback_set_y);
-    lv_anim_set_values(&PropertyAnimation_1, 40, 89);
+    lv_anim_set_values(&PropertyAnimation_1, UI_CAROUSEL_SIDE_Y, UI_CAROUSEL_MID_Y);
     lv_anim_set_path_cb(&PropertyAnimation_1, lv_anim_path_ease_in);
     lv_anim_set_delay(&PropertyAnimation_1, delay + 0);
     lv_anim_set_deleted_cb(&PropertyAnimation_1, _ui_anim_callback_free_user_data);
@@ -516,7 +516,7 @@ lv_anim_t * P0switchtoP6leftin_Animation(lv_obj_t * TargetObject, int delay)
     lv_anim_set_time(&PropertyAnimation_1, 1000);
     lv_anim_set_user_data(&PropertyAnimation_1, PropertyAnimation_1_user_data);
     lv_anim_set_custom_exec_cb(&PropertyAnimation_1, _ui_anim_callback_set_x);
-    lv_anim_set_values(&PropertyAnimation_1, 0, -217);
+    lv_anim_set_values(&PropertyAnimation_1, 0, -UI_CAROUSEL_SIDE_X);
     lv_anim_set_path_cb(&PropertyAnimation_1, lv_anim_path_ease_out);
     lv_anim_set_delay(&PropertyAnimation_1, delay + 0);
     lv_anim_set_deleted_cb(&PropertyAnimation_1, _ui_anim_callback_free_user_data);
@@ -535,7 +535,7 @@ lv_anim_t * P0switchtoP6leftin_Animation(lv_obj_t * TargetObject, int delay)
     lv_anim_set_time(&PropertyAnimation_2, 1000);
     lv_anim_set_user_data(&PropertyAnimation_2, PropertyAnimation_2_user_data);
     lv_anim_set_custom_exec_cb(&PropertyAnimation_2, _ui_anim_callback_set_y);
-    lv_anim_set_values(&PropertyAnimation_2, 89, 40);
+    lv_anim_set_values(&PropertyAnimation_2, UI_CAROUSEL_MID_Y, UI_CAROUSEL_SIDE_Y);
     lv_anim_set_path_cb(&PropertyAnimation_2, lv_anim_path_ease_out);
     lv_anim_set_delay(&PropertyAnimation_2, delay + 0);
     lv_anim_set_deleted_cb(&PropertyAnimation_2, _ui_anim_callback_free_user_data);

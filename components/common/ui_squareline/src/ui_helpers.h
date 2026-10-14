@@ -139,6 +139,16 @@ void _ui_spinbox_step(lv_obj_t * target, int val)
 void _ui_switch_theme(int val)
 ;
 
+/* Home carousel geometry (480x800 portrait), shared by the slide animations
+ * in ui.c, _ui_carousel_reset() and the frame/dots laid out in ui_page.c.
+ * Coordinates are offsets from the screen centre; zoom 256 is 1:1 for the
+ * 256 px icons. */
+#define UI_CAROUSEL_MID_Y       6
+#define UI_CAROUSEL_MID_ZOOM    150
+#define UI_CAROUSEL_SIDE_X      178
+#define UI_CAROUSEL_SIDE_Y      6
+#define UI_CAROUSEL_SIDE_ZOOM   80
+
 /* Re-apply the designed layout to a screen's five animated carousel slots.
  * Call on LV_EVENT_SCREEN_LOAD_START: the switch animations write real object
  * properties, so their end state persists on screens that are never rebuilt. */

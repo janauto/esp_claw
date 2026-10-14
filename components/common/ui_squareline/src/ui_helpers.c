@@ -371,11 +371,11 @@ void _ui_carousel_reset(lv_obj_t * mid, lv_obj_t * next, lv_obj_t * prev,
         int32_t zoom;
         int32_t opa;
     } slots[] = {
-        { mid,        0, 89, 128, 255 },   /* current app, centred and enlarged */
-        { next,     217, 40,  98, 255 },   /* next app, right of centre        */
-        { prev,    -217, 40,  98, 255 },   /* previous app, left of centre     */
-        { next_in,   -3, 92,  98,   0 },   /* hidden slot the next app flies in from     */
-        { prev_in,    0, 89,  98,   0 },   /* hidden slot the previous app flies in from */
+        { mid,                         0, UI_CAROUSEL_MID_Y,  UI_CAROUSEL_MID_ZOOM,  255 },   /* current app, centred and enlarged */
+        { next,       UI_CAROUSEL_SIDE_X, UI_CAROUSEL_SIDE_Y, UI_CAROUSEL_SIDE_ZOOM, 255 },   /* next app, right of centre        */
+        { prev,      -UI_CAROUSEL_SIDE_X, UI_CAROUSEL_SIDE_Y, UI_CAROUSEL_SIDE_ZOOM, 255 },   /* previous app, left of centre     */
+        { next_in,                     0, UI_CAROUSEL_MID_Y,  UI_CAROUSEL_SIDE_ZOOM,   0 },   /* hidden slot the next app flies in from     */
+        { prev_in,                     0, UI_CAROUSEL_MID_Y,  UI_CAROUSEL_SIDE_ZOOM,   0 },   /* hidden slot the previous app flies in from */
     };
 
     for(unsigned i = 0; i < sizeof(slots) / sizeof(slots[0]); i++) {
