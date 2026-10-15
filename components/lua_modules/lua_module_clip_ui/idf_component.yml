@@ -1,0 +1,5 @@
+dependencies:
+  cap_lua:
+    path: ../../claw_capabilities/cap_lua
+  display_service:
+    path: ../../common/display_service

@@ -30,6 +30,7 @@
 #include "cap_im_wechat.h"
 #endif
 #include "app_config.h"
+#include "live_apps.h"
 
 #define APP_ENABLE_MEM_LOG        (0)
 
@@ -327,6 +328,7 @@ void app_main(void)
     ESP_ERROR_CHECK(init_nvs());
     ESP_ERROR_CHECK(app_config_init());
     ESP_ERROR_CHECK(app_config_load(s_config));
+    ESP_ERROR_CHECK(live_apps_import_wifi(s_config));
     app_config_to_claw(s_config, s_claw_config);
     init_timezone(app_config_get_timezone(s_config)); // no need to check error
     ESP_ERROR_CHECK(esp_board_manager_init());
@@ -411,6 +413,7 @@ void app_main(void)
     }
 
     ESP_ERROR_CHECK(app_claw_set_save_config_callback(main_save_claw_config, NULL));
+    ESP_ERROR_CHECK(live_apps_prepare());
     ESP_ERROR_CHECK(app_claw_start(s_claw_config));
     esp_err_t ble_bridge_err = ble_host_bridge_start(&(ble_host_bridge_config_t) {
         .device_name = BLE_HOST_BRIDGE_DEFAULT_NAME,
@@ -419,6 +422,7 @@ void app_main(void)
     if (ble_bridge_err != ESP_OK) {
         ESP_LOGW(TAG, "BLE host bridge start failed: %s", esp_err_to_name(ble_bridge_err));
     }
+    ESP_ERROR_CHECK(live_apps_start());
 #if CONFIG_APP_CLAW_CAP_IM_LOCAL
     ESP_ERROR_CHECK(http_server_webim_bind_im());
 #endif

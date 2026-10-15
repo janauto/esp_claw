@@ -24,6 +24,7 @@
 #include <unistd.h>
 
 #include "cap_lua.h"
+#include "cJSON.h"
 #include "claw_paths.h"
 #include "claw_skill.h"
 #include "esp_check.h"
@@ -92,7 +93,7 @@ static void home_apps_job_name(const char *app_id, char *out, size_t out_size)
 static esp_err_t home_apps_add_entry(const claw_skill_catalog_entry_t *entry, void *user_ctx)
 {
     size_t *count = (size_t *)user_ctx;
-    const ui_squareline_app_t app = {
+    ui_squareline_app_t app = {
         .title = entry ? entry->id : NULL,
         .app_id = entry ? entry->id : NULL,
         .location = entry ? entry->skill_dir : NULL,
@@ -101,11 +102,34 @@ static esp_err_t home_apps_add_entry(const claw_skill_catalog_entry_t *entry, vo
     if (!home_apps_entry_is_installed_app(entry)) {
         return ESP_OK;
     }
+    /* Companion-installed apps already carry a user-facing title. Reading it
+     * leaves the package intact; ui_squareline_add_app copies the string. */
+    char *path = malloc(SYSTEM_UI_PATH_MAX);
+    cJSON *manifest = NULL;
+    if (path) {
+        int n = snprintf(path, SYSTEM_UI_PATH_MAX, "%s/manifest.json", entry->skill_dir);
+        FILE *file = n > 0 && n < SYSTEM_UI_PATH_MAX ? fopen(path, "rb") : NULL;
+        if (file) {
+            char *text = calloc(4097, 1);
+            if (text) {
+                size_t count = fread(text, 1, 4096, file);
+                if (count < 4096 && !ferror(file)) manifest = cJSON_Parse(text);
+                free(text);
+            }
+            fclose(file);
+        }
+        free(path);
+    }
+    const cJSON *title = cJSON_GetObjectItemCaseSensitive(manifest, "title");
+    if (cJSON_IsString(title) && title->valuestring[0] &&
+        strlen(title->valuestring) < SYSTEM_UI_LAUNCHER_TITLE_LEN) app.title = title->valuestring;
     if (!ui_squareline_add_app(&app)) {
         ESP_LOGW(SYSTEM_UI_TAG, "home: cannot add installed app %s (carousel full or name too long)",
                  entry->id);
+        cJSON_Delete(manifest);
         return ESP_OK;
     }
+    cJSON_Delete(manifest);
     (*count)++;
     return ESP_OK;
 }

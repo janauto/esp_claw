@@ -1,0 +1,3 @@
+dependencies:
+  lua_module_clip_ui:
+    path: ../../../../components/lua_modules/lua_module_clip_ui

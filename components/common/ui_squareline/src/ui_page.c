@@ -95,7 +95,7 @@ typedef struct {
 
 /* Maximum number of pages that can be registered at runtime.  The static table
  * below counts as the first batch; ui_page_register() fills the rest. */
-#define UI_PAGE_MAX 16
+#define UI_PAGE_MAX 48
 
 /* Pages registered so far.  s_page_count is the live count; it grows as
  * ui_page_register() is called.  The first s_static_page_count entries are the

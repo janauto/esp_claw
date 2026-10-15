@@ -1,4 +1,5 @@
 set(main_requires
+    live_apps
     ble_host_bridge
     cap_im_platform
     captive_dns
