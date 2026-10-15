@@ -1,0 +1,214 @@
+{
+ "name": "r3_02_phone_mode_sync",
+ "steps": [
+  {
+   "note": "核对N02。先刷新手机基线，再从背夹控制中心切换；先拍手机未刷新状态，再拍刷新后。若刷新状态控件未露出，主会话正常滚动并记录适配，不能盲点。"
+  },
+  {
+   "shell": "python3 phone_ui.py tab 设备",
+   "gate": true
+  },
+  {
+   "shell": "python3 phone_ui.py connect",
+   "timeout_ms": 90000,
+   "gate": true
+  },
+  {
+   "op": "mode_set",
+   "mode": "dock"
+  },
+  {
+   "shell": "python3 phone_ui.py tapexact 刷新状态",
+   "gate": true
+  },
+  {
+   "phone_shot": "dock_baseline"
+  },
+  {
+   "op": "ui_key",
+   "key": "SET",
+   "action": "long",
+   "ms": 900
+  },
+  {
+   "op": "home_state",
+   "expect": {
+    "view": "control"
+   },
+   "gate": true
+  },
+  {
+   "op": "ui_touch",
+   "type": "tap",
+   "x": 128,
+   "y": 240,
+   "ms": 90
+  },
+  {
+   "op": "mode_get",
+   "expect": {
+    "mode": "clip",
+    "voice_route": "ble",
+    "phone_linked": true
+   },
+   "gate": true
+  },
+  {
+   "shot": "clip_on_device"
+  },
+  {
+   "phone_shot": "clip_without_manual_refresh"
+  },
+  {
+   "shell": "python3 phone_ui.py tapexact 刷新状态",
+   "gate": true
+  },
+  {
+   "phone_shot": "clip_after_refresh"
+  },
+  {
+   "op": "ui_key",
+   "key": "SET",
+   "action": "click"
+  },
+  {
+   "op": "ui_key",
+   "key": "MODE",
+   "action": "press"
+  },
+  {
+   "wait": 900
+  },
+  {
+   "play": "背夹，把音量调到百分之二十。",
+   "voice": "Tingting",
+   "delay_ms": 1100
+  },
+  {
+   "wait": 9000
+  },
+  {
+   "op": "ui_key",
+   "key": "MODE",
+   "action": "release"
+  },
+  {
+   "wait_state": {
+    "voice": "reply"
+   },
+   "timeout_ms": 45000,
+   "gate": true
+  },
+  {
+   "shot": "clip_volume_reply"
+  },
+  {
+   "op": "home_state",
+   "expect": {
+    "volume": 20,
+    "home_foreground": true
+   },
+   "gate": true
+  },
+  {
+   "wait": 27000
+  },
+  {
+   "op": "ui_key",
+   "key": "SET",
+   "action": "long",
+   "ms": 900
+  },
+  {
+   "shot": "clip_volume_readback"
+  },
+  {
+   "op": "ui_touch",
+   "type": "tap",
+   "x": 352,
+   "y": 240,
+   "ms": 90
+  },
+  {
+   "op": "mode_get",
+   "expect": {
+    "mode": "dock",
+    "voice_route": "wifi",
+    "ai_ready": true
+   },
+   "gate": true
+  },
+  {
+   "shot": "dock_on_device"
+  },
+  {
+   "phone_shot": "dock_without_manual_refresh"
+  },
+  {
+   "shell": "python3 phone_ui.py tapexact 刷新状态",
+   "gate": true
+  },
+  {
+   "phone_shot": "dock_after_refresh"
+  },
+  {
+   "op": "ui_key",
+   "key": "SET",
+   "action": "click"
+  },
+  {
+   "op": "ui_key",
+   "key": "MODE",
+   "action": "press"
+  },
+  {
+   "wait": 900
+  },
+  {
+   "play": "背夹，把音量调到百分之四十。",
+   "voice": "Tingting",
+   "delay_ms": 1100
+  },
+  {
+   "wait": 9000
+  },
+  {
+   "op": "ui_key",
+   "key": "MODE",
+   "action": "release"
+  },
+  {
+   "wait_state": {
+    "voice": "reply"
+   },
+   "timeout_ms": 45000,
+   "gate": true
+  },
+  {
+   "shot": "dock_volume_reply"
+  },
+  {
+   "op": "home_state",
+   "expect": {
+    "volume": 40,
+    "home_foreground": true
+   },
+   "gate": true
+  },
+  {
+   "wait": 27000
+  },
+  {
+   "op": "ui_key",
+   "key": "SET",
+   "action": "long",
+   "ms": 900
+  },
+  {
+   "shot": "dock_volume_readback"
+  },
+  {
+   "note": "主会话人工补充普通问答及手机断开后的回落说明截图，分别关闭最终候选问答回归和D04。不能把本地指令成功当作模型问答复测。"
+  }
+ ]
+}

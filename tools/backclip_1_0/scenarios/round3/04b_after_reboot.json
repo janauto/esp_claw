@@ -1,0 +1,55 @@
+{
+ "name": "r3s_04b_after_reboot",
+ "reset": false,
+ "steps": [
+  {
+   "note": "重启后只读读回（执行器用 reset=false 打开串口，不复位）。"
+  },
+  {
+   "op": "device_info"
+  },
+  {
+   "op": "home_get"
+  },
+  {
+   "op": "mode_get"
+  },
+  {
+   "op": "fs_list",
+   "path": "garden"
+  },
+  {
+   "op": "fs_list",
+   "path": "garden/plants"
+  },
+  {
+   "shot": "after_reboot_home"
+  },
+  {
+   "op": "app_launch",
+   "id": "garden"
+  },
+  {
+   "wait": 6000
+  },
+  {
+   "shot": "after_reboot_mine"
+  },
+  {
+   "op": "ui_touch",
+   "type": "tap",
+   "x": 353,
+   "y": 508,
+   "ms": 90
+  },
+  {
+   "wait": 2500
+  },
+  {
+   "shot": "after_reboot_garden"
+  },
+  {
+   "op": "app_stop"
+  }
+ ]
+}

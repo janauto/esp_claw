@@ -1,0 +1,29 @@
+{
+ "name": "r3s_04_reboot_persistence",
+ "reset": false,
+ "steps": [
+  {
+   "note": "【主会话补充】Codex 04 的“正常重启持久化”部分：只读记录基线 → 经串口控制台 restart_device 正常重启 → 只读读回，不调用 home_reset/home_set/mode_set。拔电不插 USB 的真人使用需要人在现场，主会话无法执行，结论保留为未验证。"
+  },
+  {
+   "op": "device_info"
+  },
+  {
+   "op": "home_get"
+  },
+  {
+   "op": "mode_get"
+  },
+  {
+   "op": "fs_list",
+   "path": "garden"
+  },
+  {
+   "op": "fs_list",
+   "path": "garden/plants"
+  },
+  {
+   "shot": "before_reboot"
+  }
+ ]
+}

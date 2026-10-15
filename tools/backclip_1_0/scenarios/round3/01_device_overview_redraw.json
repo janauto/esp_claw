@@ -1,0 +1,249 @@
+{
+ "name": "r3_01_device_overview_redraw",
+ "steps": [
+  {
+   "note": "只在最终候选执行。普通安装专用包、设备改名后核对总览叠画。任何前置或target不符立即停止；截图人工判定优先。原布局先由主会话记录，不能清空已有应用。"
+  },
+  {
+   "shell": "python3 phone_ui.py tab 设备",
+   "gate": true
+  },
+  {
+   "shell": "python3 phone_ui.py connect",
+   "timeout_ms": 90000,
+   "gate": true
+  },
+  {
+   "op": "apps_all",
+   "expect_not_contains": {
+    "apps": "r3_device_demo"
+   },
+   "gate": true
+  },
+  {
+   "shell": "python3 phone_ui.py install r3_device_demo R3Device",
+   "timeout_ms": 120000,
+   "gate": true
+  },
+  {
+   "wait_app": "r3_device_demo",
+   "timeout_ms": 90000,
+   "gate": true
+  },
+  {
+   "phone_shot": "installed"
+  },
+  {
+   "op": "ui_key",
+   "key": "SET",
+   "action": "click"
+  },
+  {
+   "op": "home_state",
+   "expect": {
+    "view": "overview"
+   },
+   "gate": true
+  },
+  {
+   "overview_focus": "r3_device_demo",
+   "gate": true
+  },
+  {
+   "op": "home_state",
+   "expect_contains": {
+    "ov_focus": "r3_device_demo"
+   },
+   "gate": true
+  },
+  {
+   "shot": "overview_before_rename"
+  },
+  {
+   "op": "ui_key",
+   "key": "MODE",
+   "action": "long",
+   "ms": 900
+  },
+  {
+   "op": "home_state",
+   "expect": {
+    "view": "sheet"
+   },
+   "expect_contains": {
+    "target": "r3_device_demo"
+   },
+   "gate": true
+  },
+  {
+   "op": "ui_key",
+   "key": "VOLUME_UP",
+   "action": "click"
+  },
+  {
+   "op": "ui_key",
+   "key": "VOLUME_UP",
+   "action": "click"
+  },
+  {
+   "op": "ui_key",
+   "key": "MODE",
+   "action": "click"
+  },
+  {
+   "op": "home_state",
+   "expect": {
+    "view": "rename"
+   },
+   "expect_contains": {
+    "target": "r3_device_demo"
+   },
+   "gate": true
+  },
+  {
+   "shot": "keyboard"
+  },
+  {
+   "note": "主会话核对键盘仍与第2轮布局一致；下步点q。若不一致，停止并记录正常键盘输入适配，不能用app_rename替代UI。"
+  },
+  {
+   "op": "ui_touch",
+   "type": "tap",
+   "x": 62,
+   "y": 481,
+   "ms": 90
+  },
+  {
+   "op": "ui_key",
+   "key": "MODE",
+   "action": "click"
+  },
+  {
+   "wait": 2500
+  },
+  {
+   "op": "apps_all",
+   "expect_contains": {
+    "apps": "R3Deviceq"
+   },
+   "gate": true
+  },
+  {
+   "op": "home_state",
+   "expect": {
+    "view": "overview"
+   },
+   "gate": true
+  },
+  {
+   "shot": "overview_after_rename"
+  },
+  {
+   "wait": 31000
+  },
+  {
+   "shot": "overview_after_refresh"
+  },
+  {
+   "op": "ui_key",
+   "key": "MODE",
+   "action": "long",
+   "ms": 900
+  },
+  {
+   "op": "home_state",
+   "expect": {
+    "view": "sheet"
+   },
+   "expect_contains": {
+    "target": "r3_device_demo"
+   },
+   "gate": true
+  },
+  {
+   "op": "ui_key",
+   "key": "VOLUME_UP",
+   "action": "click"
+  },
+  {
+   "op": "ui_key",
+   "key": "VOLUME_UP",
+   "action": "click"
+  },
+  {
+   "op": "ui_key",
+   "key": "VOLUME_UP",
+   "action": "click"
+  },
+  {
+   "op": "ui_key",
+   "key": "MODE",
+   "action": "click"
+  },
+  {
+   "op": "home_state",
+   "expect": {
+    "view": "confirm"
+   },
+   "expect_contains": {
+    "target": "r3_device_demo"
+   },
+   "gate": true
+  },
+  {
+   "shot": "uninstall_confirm"
+  },
+  {
+   "op": "ui_key",
+   "key": "SET",
+   "action": "click"
+  },
+  {
+   "shot": "after_cancel"
+  },
+  {
+   "op": "apps_all",
+   "expect_contains": {
+    "apps": "R3Deviceq"
+   },
+   "gate": true
+  },
+  {
+   "shell": "python3 phone_ui.py appact r3_device_demo 卸载",
+   "timeout_ms": 120000,
+   "gate": true
+  },
+  {
+   "phone_shot": "phone_uninstall_confirm"
+  },
+  {
+   "shell": "python3 phone_ui.py tapexact 卸载",
+   "gate": true
+  },
+  {
+   "wait_app": "r3_device_demo",
+   "absent": true,
+   "timeout_ms": 60000,
+   "gate": true
+  },
+  {
+   "shot": "overview_after_uninstall"
+  },
+  {
+   "shell": "python3 phone_ui.py install r3_device_demo R3Device",
+   "timeout_ms": 120000,
+   "gate": true
+  },
+  {
+   "wait_app": "r3_device_demo",
+   "timeout_ms": 90000,
+   "gate": true
+  },
+  {
+   "phone_shot": "second_install"
+  },
+  {
+   "note": "两次安装都成功才关闭M7安装分支。主会话继续按checklist完成人工底栏联动、运行中直接卸载，拍手机我的创作完整区域，并恢复原布局；本note不自动执行、不计通过。"
+  }
+ ]
+}

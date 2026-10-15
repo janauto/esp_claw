@@ -1,0 +1,194 @@
+{
+ "name": "r3s_05_misc_evidence",
+ "steps": [
+  {
+   "note": "【主会话补充】M4：手机应用页滚到「跳跃游戏」卡片拍图；D07：满页换尺寸后翻到第 3 页看 M 时钟实屏；D04：背夹·手机模式下断开手机，控制中心回落说明完整换行。"
+  },
+  {
+   "shell": "python3 phone_ui.py connect",
+   "gate": true,
+   "timeout_ms": 90000
+  },
+  {
+   "shell": "python3 phone_ui.py tab 应用 && python3 phone_ui.py top && python3 phone_ui.py tapexact 刷新列表 && python3 phone_ui.py appact skill:official_jump 详情",
+   "timeout_ms": 120000
+  },
+  {
+   "phone_shot": "jump_card_detail"
+  },
+  {
+   "shell": "adb shell input -d 0 keyevent 4"
+  },
+  {
+   "phone_shot": "jump_card_list"
+  },
+  {
+   "op": "home_set",
+   "layout": {
+    "v": 1,
+    "pages": [
+     [
+      {
+       "w": "mine",
+       "s": "S"
+      },
+      {
+       "w": "weather",
+       "s": "S"
+      },
+      {
+       "w": "voice",
+       "s": "S"
+      }
+     ],
+     [
+      {
+       "w": "stocks",
+       "s": "S"
+      },
+      {
+       "w": "system",
+       "s": "S"
+      },
+      {
+       "w": "aihot",
+       "s": "M"
+      }
+     ],
+     [
+      {
+       "w": "clock",
+       "s": "M"
+      }
+     ]
+    ],
+    "dock": [
+     "sys:meeting",
+     "sys:ir",
+     "sys:card",
+     "sys:workbuddy"
+    ]
+   }
+  },
+  {
+   "op": "ui_touch",
+   "type": "drag",
+   "x": 400,
+   "y": 300,
+   "x2": 60,
+   "y2": 300,
+   "ms": 350
+  },
+  {
+   "wait": 900
+  },
+  {
+   "op": "ui_touch",
+   "type": "drag",
+   "x": 400,
+   "y": 300,
+   "x2": 60,
+   "y2": 300,
+   "ms": 350
+  },
+  {
+   "wait": 1200
+  },
+  {
+   "op": "home_state",
+   "expect": {
+    "page": 2
+   }
+  },
+  {
+   "shot": "page3_clock_M"
+  },
+  {
+   "op": "home_set",
+   "layout": {
+    "v": 1,
+    "pages": [
+     [
+      {
+       "w": "mine",
+       "s": "S"
+      },
+      {
+       "w": "clock",
+       "s": "S"
+      },
+      {
+       "w": "weather",
+       "s": "S"
+      },
+      {
+       "w": "voice",
+       "s": "S"
+      }
+     ],
+     [
+      {
+       "w": "stocks",
+       "s": "S"
+      },
+      {
+       "w": "system",
+       "s": "S"
+      },
+      {
+       "w": "aihot",
+       "s": "M"
+      }
+     ]
+    ],
+    "dock": [
+     "sys:meeting",
+     "sys:ir",
+     "sys:card",
+     "sys:workbuddy"
+    ]
+   }
+  },
+  {
+   "op": "mode_set",
+   "mode": "clip"
+  },
+  {
+   "shell": "python3 phone_ui.py tab 设备 && python3 phone_ui.py tapexact 断开",
+   "gate": true
+  },
+  {
+   "wait": 4000
+  },
+  {
+   "op": "ui_key",
+   "key": "SET",
+   "action": "long",
+   "ms": 900
+  },
+  {
+   "wait": 1200
+  },
+  {
+   "shot": "control_clip_phone_disconnected"
+  },
+  {
+   "op": "ui_key",
+   "key": "SET",
+   "action": "click"
+  },
+  {
+   "wait": 800
+  },
+  {
+   "shell": "python3 phone_ui.py connect",
+   "timeout_ms": 90000
+  },
+  {
+   "wait": 3000
+  },
+  {
+   "op": "mode_get"
+  }
+ ]
+}

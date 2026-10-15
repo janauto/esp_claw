@@ -1,0 +1,218 @@
+{
+ "name": "r3s_03_custom_plant_user_flow",
+ "steps": [
+  {
+   "note": "【主会话补充，替代 Codex 03 人工清单】普通用户流程：手机「Lua」页 打开示例「起来走走（花园植物）」→「种到花园」（rc18/App r5 新增，写入 DATA/garden/plants/standup.lua）→ 背夹「我的 → 花园 → 种植物」种子库出现带 AI 标记的「起来走走」→ 种下 → 打开 → 按 M「站起来了」→ 退出再进仍在且计数保留。生成方式：示例；另有「生成花园植物」（AI 按 PLANT_API 写）见 03b。"
+  },
+  {
+   "op": "fs_list",
+   "path": "garden/plants"
+  },
+  {
+   "shell": "python3 phone_ui.py connect",
+   "gate": true,
+   "timeout_ms": 90000
+  },
+  {
+   "shell": "python3 phone_ui.py tab Lua && python3 phone_ui.py tapexact 打开示例 && python3 phone_ui.py tap '起来走走（花园植物）'",
+   "timeout_ms": 90000,
+   "gate": true
+  },
+  {
+   "wait": 1500
+  },
+  {
+   "shell": "python3 phone_ui.py tapexact 种到花园",
+   "gate": true
+  },
+  {
+   "phone_shot": "garden_dialog"
+  },
+  {
+   "shell": "python3 phone_ui.py tapexact 种下",
+   "gate": true
+  },
+  {
+   "wait": 3000
+  },
+  {
+   "phone_shot": "planted_message"
+  },
+  {
+   "op": "fs_list",
+   "path": "garden/plants",
+   "expect_contains": {
+    "items": "standup.lua"
+   },
+   "gate": true
+  },
+  {
+   "op": "app_launch",
+   "id": "garden"
+  },
+  {
+   "wait": 6000
+  },
+  {
+   "op": "ui_touch",
+   "type": "tap",
+   "x": 353,
+   "y": 508,
+   "ms": 90
+  },
+  {
+   "wait": 2500
+  },
+  {
+   "shot": "garden_before"
+  },
+  {
+   "note": "按当前 3 株布局，“种植物”在第 4 格 (352,389)：先点一次聚焦，再点打开种子库。"
+  },
+  {
+   "op": "ui_touch",
+   "type": "tap",
+   "x": 352,
+   "y": 389,
+   "ms": 90
+  },
+  {
+   "wait": 400
+  },
+  {
+   "op": "ui_touch",
+   "type": "tap",
+   "x": 352,
+   "y": 389,
+   "ms": 90
+  },
+  {
+   "wait": 2500
+  },
+  {
+   "op": "ui_key",
+   "key": "VOLUME_DOWN",
+   "action": "click"
+  },
+  {
+   "wait": 1200
+  },
+  {
+   "shot": "seed_library_ai_plant"
+  },
+  {
+   "note": "人工判定：种子库焦点是带 AI 标记的「起来走走」。"
+  },
+  {
+   "op": "ui_key",
+   "key": "MODE",
+   "action": "click"
+  },
+  {
+   "wait": 3000
+  },
+  {
+   "shot": "garden_with_standup"
+  },
+  {
+   "op": "ui_touch",
+   "type": "tap",
+   "x": 352,
+   "y": 389,
+   "ms": 90
+  },
+  {
+   "wait": 400
+  },
+  {
+   "op": "ui_touch",
+   "type": "tap",
+   "x": 352,
+   "y": 389,
+   "ms": 90
+  },
+  {
+   "wait": 2500
+  },
+  {
+   "shot": "standup_page"
+  },
+  {
+   "op": "ui_key",
+   "key": "MODE",
+   "action": "click"
+  },
+  {
+   "wait": 1500
+  },
+  {
+   "shot": "standup_after_ok"
+  },
+  {
+   "note": "人工判定：植物全屏页按 M（软键“站起来了”）后计数变成今天站起 1 次。"
+  },
+  {
+   "wait": 2000
+  },
+  {
+   "op": "ui_key",
+   "key": "SET",
+   "action": "click"
+  },
+  {
+   "wait": 1800
+  },
+  {
+   "op": "ui_key",
+   "key": "SET",
+   "action": "click"
+  },
+  {
+   "wait": 1800
+  },
+  {
+   "op": "ui_key",
+   "key": "SET",
+   "action": "click"
+  },
+  {
+   "wait": 2500
+  },
+  {
+   "op": "home_state",
+   "expect": {
+    "exclusive_app": false
+   }
+  },
+  {
+   "op": "app_launch",
+   "id": "garden"
+  },
+  {
+   "wait": 6000
+  },
+  {
+   "op": "ui_touch",
+   "type": "tap",
+   "x": 353,
+   "y": 508,
+   "ms": 90
+  },
+  {
+   "wait": 2500
+  },
+  {
+   "shot": "garden_reopened"
+  },
+  {
+   "note": "人工判定：重进后仍有「起来走走」，卡片上“今天站起 1 次”。"
+  },
+  {
+   "op": "fs_list",
+   "path": "garden"
+  },
+  {
+   "op": "app_stop"
+  }
+ ]
+}
