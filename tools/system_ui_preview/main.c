@@ -273,6 +273,7 @@ int main(int argc, char **argv)
 
     if (strcmp(screen, "hv") == 0) {
         s_ui.font_data = NULL;
+        hv_mem_init();
         scr = hv_create_screen();
         s_ui.home_screen = scr;
     } else if (strncmp(screen, "home", 4) == 0 && (screen[4] == '\0' || screen[4] == ':')) {

@@ -19,6 +19,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "esp_heap_caps.h"
 #include "esp_log.h"
 
 hv_fonts_t g_hvf;
@@ -63,7 +64,34 @@ typedef struct {
     lv_obj_t *focus_obj;
 } hv_state_t;
 
-static hv_state_t H;
+static hv_state_t *s_hv;
+#define H (*s_hv)
+
+void *hv_psram_calloc(size_t size)
+{
+    void *p = heap_caps_calloc(1, size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    return p ? p : calloc(1, size);
+}
+
+void hv_overview_mem_init(void);
+void hv_control_mem_init(void);
+void hv_voice_mem_init(void);
+void hv_edit_mem_init(void);
+void hv_widgets_mem_init(void);
+void hv_platform_mem_init(void);
+
+void hv_mem_init(void)
+{
+    if (!s_hv) {
+        s_hv = hv_psram_calloc(sizeof(*s_hv));
+    }
+    hv_overview_mem_init();
+    hv_control_mem_init();
+    hv_voice_mem_init();
+    hv_edit_mem_init();
+    hv_widgets_mem_init();
+    hv_platform_mem_init();
+}
 
 /* ------------------------------------------------------------ 小工具 */
 

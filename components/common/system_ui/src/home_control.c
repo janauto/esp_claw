@@ -33,7 +33,7 @@ enum {
     CC_COUNT,
 };
 
-static struct {
+typedef struct {
     lv_obj_t *panel;
     lv_obj_t *time_l, *date_l, *power_l, *phone_l;
     lv_obj_t *item[CC_COUNT];
@@ -46,7 +46,15 @@ static struct {
     int dim_level;          /* 0-60 */
     int focus;
     bool adjusting;
-} CC;
+} hv_cc_t;
+
+static hv_cc_t *s_cc;
+#define CC (*s_cc)
+
+void hv_control_mem_init(void)
+{
+    if (!s_cc) s_cc = hv_psram_calloc(sizeof(*s_cc));
+}
 
 void hv_control_forget(void)
 {

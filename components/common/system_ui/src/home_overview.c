@@ -24,7 +24,7 @@ lv_obj_t *hv_screen(void);
 
 #define HV_OV_COLS 4
 
-static struct {
+typedef struct {
     lv_obj_t *panel;
     lv_obj_t *list;
     lv_obj_t *subtitle;
@@ -36,9 +36,9 @@ static struct {
     int focus;
     bool focus_visible;
     bool suppress_click;
-} OV;
+} hv_ov_t;
 
-static struct {
+typedef struct {
     lv_obj_t *scrim;
     lv_obj_t *card;
     lv_obj_t *btn[7];
@@ -46,9 +46,9 @@ static struct {
     int count;
     int focus;
     char id[HV_APP_ID_LEN];
-} SH;
+} hv_sh_t;
 
-static struct {
+typedef struct {
     lv_obj_t *scrim;
     lv_obj_t *card;
     lv_obj_t *btn[2];
@@ -57,7 +57,21 @@ static struct {
     int focus;
     hv_view_t kind;
     char id[HV_APP_ID_LEN];
-} MD;
+} hv_md_t;
+
+static hv_ov_t *s_ov;
+static hv_sh_t *s_sh;
+static hv_md_t *s_md;
+#define OV (*s_ov)
+#define SH (*s_sh)
+#define MD (*s_md)
+
+void hv_overview_mem_init(void)
+{
+    if (!s_ov) s_ov = hv_psram_calloc(sizeof(*s_ov));
+    if (!s_sh) s_sh = hv_psram_calloc(sizeof(*s_sh));
+    if (!s_md) s_md = hv_psram_calloc(sizeof(*s_md));
+}
 
 enum { ACT_OPEN = 0, ACT_DOCK_ADD, ACT_DOCK_REMOVE, ACT_RENAME, ACT_UNINSTALL, ACT_INFO, ACT_CANCEL };
 

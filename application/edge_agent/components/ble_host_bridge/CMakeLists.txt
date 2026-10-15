@@ -7,6 +7,7 @@ set(ble_host_bridge_requires
     nvs_flash
     system_ui
     local_app_store
+    esp_timer
 )
 
 # The HID services are registered into this component's GATT server, so the

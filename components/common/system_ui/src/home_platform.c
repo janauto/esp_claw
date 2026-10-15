@@ -389,12 +389,18 @@ static esp_err_t hv_local_sink(const uint8_t *opus, size_t size)
 bool hv_weather_context(char *out, size_t size);
 
 /* 底座直连时把设备状态告诉对话模型：天气可以直接回答，不必每次都打开天气应用。 */
-static char s_voice_ctx[420];
+#define HV_VOICE_CTX_LEN 420
+static char *s_voice_ctx;
+
+void hv_platform_mem_init(void)
+{
+    if (!s_voice_ctx) s_voice_ctx = hv_psram_calloc(HV_VOICE_CTX_LEN);
+}
 
 /* BLE 推 voice_event(started) 时附带，手机侧拼进对话系统提示。 */
 const char *system_ui_home_voice_context(void)
 {
-    return s_voice_ctx;
+    return s_voice_ctx ? s_voice_ctx : "";
 }
 
 static void hv_update_voice_context(void)
@@ -418,7 +424,9 @@ static void hv_update_voice_context(void)
         }
         system_ui_unlock();
     }
-    strlcpy(s_voice_ctx, ctx, sizeof(s_voice_ctx));
+    if (s_voice_ctx) {
+        strlcpy(s_voice_ctx, ctx, HV_VOICE_CTX_LEN);
+    }
     (void)voice_cloud_set_context(ctx);
 }
 

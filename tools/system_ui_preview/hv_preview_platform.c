@@ -173,3 +173,7 @@ esp_err_t system_ui_post_work_event(const system_ui_work_event_t *event, TickTyp
 }
 
 bool system_ui_gesture_recent(uint32_t window_ms) { (void)window_ms; return false; }
+
+void hv_platform_mem_init(void)
+{
+}

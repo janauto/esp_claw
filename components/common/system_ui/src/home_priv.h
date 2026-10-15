@@ -307,6 +307,11 @@ const char *hv_voice_route_name(void);
 lv_obj_t *hv_pet_create(lv_obj_t *parent, int32_t size);
 void hv_pet_set_mood(lv_obj_t *pet, int mood);  /* 0 普通 1 开心 2 说话 */
 
+/* 内部 RAM 很紧（BLE 控制器、Wi-Fi 都要用）：首页的大块状态都放 PSRAM。
+ * hv_mem_init() 在 system_ui_start 一开始调用，之后才会用到这些状态。 */
+void *hv_psram_calloc(size_t size);
+void hv_mem_init(void);
+
 /* 小工具 */
 lv_obj_t *hv_box(lv_obj_t *parent, int32_t x, int32_t y, int32_t w, int32_t h, uint32_t color, int32_t radius);
 lv_obj_t *hv_text(lv_obj_t *parent, const lv_font_t *font, uint32_t color, const char *text);

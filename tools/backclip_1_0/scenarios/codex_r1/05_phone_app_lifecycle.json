@@ -1,0 +1,128 @@
+{
+  "name": "r2_05_phone_app_lifecycle",
+  "steps": [
+    {
+      "note": "目的：手机正常安装→打开→停止→重命名→取消卸载→确认卸载→刷新。全过程仅针对新 r2_phone_demo。主会话在安装、运行、改名、确认弹窗、卸载后各另存手机截图；每次UI前置失败须停止，不继续点击。"
+    },
+    {
+      "note": "前置：小米 M610BB 手机 App 在设备页、无弹窗；扫描按钮可见。仅重连测试背夹，保持现有正常 AI 配置。串口复位后必须在本场景内重连；失败立即停止本场景。"
+    },
+    {
+      "shell": "python3 phone_ui.py tap 扫描设备"
+    },
+    {
+      "wait": 13000
+    },
+    {
+      "shell": "python3 phone_ui.py tapxy 904 1244"
+    },
+    {
+      "wait": 9000
+    },
+    {
+      "op": "mode_set",
+      "mode": "clip"
+    },
+    {
+      "op": "mode_get",
+      "expect": {
+        "mode": "clip",
+        "phone_linked": true,
+        "voice_route": "ble"
+      }
+    },
+    {
+      "note": "仅安装新验收副本 r2_phone_demo，执行前只读确认 ID 不存在；不可替换已有包。Lua 使用手机内置贪吃蛇示例。手机处于连接成功的设备页。主会话保存安装完成的手机截图，目录字段必须 group=mine/removable=true。"
+    },
+    {
+      "shell": "python3 -c 'import phone_ui as p,time\n\ndef tap(label):\n    nodes=p.dump()\n    hits=[n for n in nodes if n[0]==label]\n    if not hits: raise RuntimeError('\"'\"'当前页找不到唯一文字: '\"'\"'+label)\n    if len(hits)!=1: raise RuntimeError('\"'\"'文字不唯一，停止避免错点: '\"'\"'+label)\n    n=hits[0];p.adb('\"'\"'shell'\"'\"','\"'\"'input'\"'\"','\"'\"'tap'\"'\"',str(n[1]),str(n[2]));time.sleep(1)\n\ndef field(label,value):\n    hits=[n for n in p.dump() if label in n[0]]\n    if len(hits)!=1: raise RuntimeError('\"'\"'字段不唯一: '\"'\"'+label)\n    n=hits[0];p.adb('\"'\"'shell'\"'\"','\"'\"'input'\"'\"','\"'\"'tap'\"'\"',str(n[1]),str(n[2]))\n    p.adb('\"'\"'shell'\"'\"','\"'\"'input'\"'\"','\"'\"'keycombination'\"'\"','\"'\"'113'\"'\"','\"'\"'29'\"'\"')\n    p.adb('\"'\"'shell'\"'\"','\"'\"'input'\"'\"','\"'\"'text'\"'\"',value)\n    p.adb('\"'\"'shell'\"'\"','\"'\"'input'\"'\"','\"'\"'keyevent'\"'\"','\"'\"'4'\"'\"');time.sleep(.5)\n\ndef action(appid,label):\n    for _ in range(9):\n        nodes=p.dump(); ids=[n for n in nodes if n[0]==appid]\n        if ids:\n            y=ids[0][2]\n            options=[n for n in nodes if n[0]==label and y<n[2]<y+650]\n            if options:\n                n=min(options,key=lambda n:n[2]);p.adb('\"'\"'shell'\"'\"','\"'\"'input'\"'\"','\"'\"'tap'\"'\"',str(n[1]),str(n[2]));time.sleep(1);return\n        p.adb('\"'\"'shell'\"'\"','\"'\"'input'\"'\"','\"'\"'swipe'\"'\"','\"'\"'540'\"'\"','\"'\"'1950'\"'\"','\"'\"'540'\"'\"','\"'\"'850'\"'\"','\"'\"'350'\"'\"');time.sleep(.7)\n    raise RuntimeError('\"'\"'目标应用操作未出现: '\"'\"'+appid+'\"'\"' / '\"'\"'+label)\ntap('\"'\"'Lua'\"'\"')\ntap('\"'\"'打开示例'\"'\"')\ntap('\"'\"'贪吃蛇'\"'\"')\ntap('\"'\"'应用'\"'\"')\ntap('\"'\"'安装当前 Lua'\"'\"')\nfield('\"'\"'应用 ID'\"'\"','\"'\"'r2_phone_demo'\"'\"')\nfield('\"'\"'显示名称'\"'\"','\"'\"'R2Phone'\"'\"')\ntap('\"'\"'安装'\"'\"')\n'"
+    },
+    {
+      "wait": 12000
+    },
+    {
+      "op": "apps_all",
+      "expect_contains": {
+        "apps": "app:r2_phone_demo"
+      }
+    },
+    {
+      "shell": "python3 phone_ui.py dump"
+    },
+    {
+      "shell": "python3 -c 'import phone_ui as p,time\n\ndef tap(label):\n    nodes=p.dump()\n    hits=[n for n in nodes if n[0]==label]\n    if not hits: raise RuntimeError('\"'\"'当前页找不到唯一文字: '\"'\"'+label)\n    if len(hits)!=1: raise RuntimeError('\"'\"'文字不唯一，停止避免错点: '\"'\"'+label)\n    n=hits[0];p.adb('\"'\"'shell'\"'\"','\"'\"'input'\"'\"','\"'\"'tap'\"'\"',str(n[1]),str(n[2]));time.sleep(1)\n\ndef field(label,value):\n    hits=[n for n in p.dump() if label in n[0]]\n    if len(hits)!=1: raise RuntimeError('\"'\"'字段不唯一: '\"'\"'+label)\n    n=hits[0];p.adb('\"'\"'shell'\"'\"','\"'\"'input'\"'\"','\"'\"'tap'\"'\"',str(n[1]),str(n[2]))\n    p.adb('\"'\"'shell'\"'\"','\"'\"'input'\"'\"','\"'\"'keycombination'\"'\"','\"'\"'113'\"'\"','\"'\"'29'\"'\"')\n    p.adb('\"'\"'shell'\"'\"','\"'\"'input'\"'\"','\"'\"'text'\"'\"',value)\n    p.adb('\"'\"'shell'\"'\"','\"'\"'input'\"'\"','\"'\"'keyevent'\"'\"','\"'\"'4'\"'\"');time.sleep(.5)\n\ndef action(appid,label):\n    for _ in range(9):\n        nodes=p.dump(); ids=[n for n in nodes if n[0]==appid]\n        if ids:\n            y=ids[0][2]\n            options=[n for n in nodes if n[0]==label and y<n[2]<y+650]\n            if options:\n                n=min(options,key=lambda n:n[2]);p.adb('\"'\"'shell'\"'\"','\"'\"'input'\"'\"','\"'\"'tap'\"'\"',str(n[1]),str(n[2]));time.sleep(1);return\n        p.adb('\"'\"'shell'\"'\"','\"'\"'input'\"'\"','\"'\"'swipe'\"'\"','\"'\"'540'\"'\"','\"'\"'1950'\"'\"','\"'\"'540'\"'\"','\"'\"'850'\"'\"','\"'\"'350'\"'\"');time.sleep(.7)\n    raise RuntimeError('\"'\"'目标应用操作未出现: '\"'\"'+appid+'\"'\"' / '\"'\"'+label)\naction('\"'\"'app:r2_phone_demo'\"'\"','\"'\"'打开'\"'\"')\n'"
+    },
+    {
+      "wait": 4000
+    },
+    {
+      "op": "home_state",
+      "expect": {
+        "exclusive_app": true
+      }
+    },
+    {
+      "shot": "phone_launched_demo"
+    },
+    {
+      "op": "apps_all"
+    },
+    {
+      "note": "按ID查 running，不能只看任意一项true。"
+    },
+    {
+      "shell": "python3 phone_ui.py tap 停止运行"
+    },
+    {
+      "wait": 2000
+    },
+    {
+      "op": "home_state",
+      "expect": {
+        "exclusive_app": false
+      }
+    },
+    {
+      "shell": "python3 -c 'import phone_ui as p,time\n\ndef tap(label):\n    nodes=p.dump()\n    hits=[n for n in nodes if n[0]==label]\n    if not hits: raise RuntimeError('\"'\"'当前页找不到唯一文字: '\"'\"'+label)\n    if len(hits)!=1: raise RuntimeError('\"'\"'文字不唯一，停止避免错点: '\"'\"'+label)\n    n=hits[0];p.adb('\"'\"'shell'\"'\"','\"'\"'input'\"'\"','\"'\"'tap'\"'\"',str(n[1]),str(n[2]));time.sleep(1)\n\ndef field(label,value):\n    hits=[n for n in p.dump() if label in n[0]]\n    if len(hits)!=1: raise RuntimeError('\"'\"'字段不唯一: '\"'\"'+label)\n    n=hits[0];p.adb('\"'\"'shell'\"'\"','\"'\"'input'\"'\"','\"'\"'tap'\"'\"',str(n[1]),str(n[2]))\n    p.adb('\"'\"'shell'\"'\"','\"'\"'input'\"'\"','\"'\"'keycombination'\"'\"','\"'\"'113'\"'\"','\"'\"'29'\"'\"')\n    p.adb('\"'\"'shell'\"'\"','\"'\"'input'\"'\"','\"'\"'text'\"'\"',value)\n    p.adb('\"'\"'shell'\"'\"','\"'\"'input'\"'\"','\"'\"'keyevent'\"'\"','\"'\"'4'\"'\"');time.sleep(.5)\n\ndef action(appid,label):\n    for _ in range(9):\n        nodes=p.dump(); ids=[n for n in nodes if n[0]==appid]\n        if ids:\n            y=ids[0][2]\n            options=[n for n in nodes if n[0]==label and y<n[2]<y+650]\n            if options:\n                n=min(options,key=lambda n:n[2]);p.adb('\"'\"'shell'\"'\"','\"'\"'input'\"'\"','\"'\"'tap'\"'\"',str(n[1]),str(n[2]));time.sleep(1);return\n        p.adb('\"'\"'shell'\"'\"','\"'\"'input'\"'\"','\"'\"'swipe'\"'\"','\"'\"'540'\"'\"','\"'\"'1950'\"'\"','\"'\"'540'\"'\"','\"'\"'850'\"'\"','\"'\"'350'\"'\"');time.sleep(.7)\n    raise RuntimeError('\"'\"'目标应用操作未出现: '\"'\"'+appid+'\"'\"' / '\"'\"'+label)\ntap('\"'\"'刷新列表'\"'\"')\naction('\"'\"'app:r2_phone_demo'\"'\"','\"'\"'重命名'\"'\"')\nfield('\"'\"'新名称'\"'\"','\"'\"'R2PhoneNew'\"'\"')\ntap('\"'\"'保存'\"'\"')\n'"
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "op": "apps_all",
+      "expect_contains": {
+        "apps": "R2PhoneNew"
+      }
+    },
+    {
+      "shell": "python3 -c 'import phone_ui as p,time\n\ndef tap(label):\n    nodes=p.dump()\n    hits=[n for n in nodes if n[0]==label]\n    if not hits: raise RuntimeError('\"'\"'当前页找不到唯一文字: '\"'\"'+label)\n    if len(hits)!=1: raise RuntimeError('\"'\"'文字不唯一，停止避免错点: '\"'\"'+label)\n    n=hits[0];p.adb('\"'\"'shell'\"'\"','\"'\"'input'\"'\"','\"'\"'tap'\"'\"',str(n[1]),str(n[2]));time.sleep(1)\n\ndef field(label,value):\n    hits=[n for n in p.dump() if label in n[0]]\n    if len(hits)!=1: raise RuntimeError('\"'\"'字段不唯一: '\"'\"'+label)\n    n=hits[0];p.adb('\"'\"'shell'\"'\"','\"'\"'input'\"'\"','\"'\"'tap'\"'\"',str(n[1]),str(n[2]))\n    p.adb('\"'\"'shell'\"'\"','\"'\"'input'\"'\"','\"'\"'keycombination'\"'\"','\"'\"'113'\"'\"','\"'\"'29'\"'\"')\n    p.adb('\"'\"'shell'\"'\"','\"'\"'input'\"'\"','\"'\"'text'\"'\"',value)\n    p.adb('\"'\"'shell'\"'\"','\"'\"'input'\"'\"','\"'\"'keyevent'\"'\"','\"'\"'4'\"'\"');time.sleep(.5)\n\ndef action(appid,label):\n    for _ in range(9):\n        nodes=p.dump(); ids=[n for n in nodes if n[0]==appid]\n        if ids:\n            y=ids[0][2]\n            options=[n for n in nodes if n[0]==label and y<n[2]<y+650]\n            if options:\n                n=min(options,key=lambda n:n[2]);p.adb('\"'\"'shell'\"'\"','\"'\"'input'\"'\"','\"'\"'tap'\"'\"',str(n[1]),str(n[2]));time.sleep(1);return\n        p.adb('\"'\"'shell'\"'\"','\"'\"'input'\"'\"','\"'\"'swipe'\"'\"','\"'\"'540'\"'\"','\"'\"'1950'\"'\"','\"'\"'540'\"'\"','\"'\"'850'\"'\"','\"'\"'350'\"'\"');time.sleep(.7)\n    raise RuntimeError('\"'\"'目标应用操作未出现: '\"'\"'+appid+'\"'\"' / '\"'\"'+label)\naction('\"'\"'app:r2_phone_demo'\"'\"','\"'\"'卸载'\"'\"')\ntap('\"'\"'取消'\"'\"')\n'"
+    },
+    {
+      "op": "apps_all",
+      "expect_contains": {
+        "apps": "app:r2_phone_demo"
+      }
+    },
+    {
+      "shell": "python3 -c 'import phone_ui as p,time\n\ndef tap(label):\n    nodes=p.dump()\n    hits=[n for n in nodes if n[0]==label]\n    if not hits: raise RuntimeError('\"'\"'当前页找不到唯一文字: '\"'\"'+label)\n    if len(hits)!=1: raise RuntimeError('\"'\"'文字不唯一，停止避免错点: '\"'\"'+label)\n    n=hits[0];p.adb('\"'\"'shell'\"'\"','\"'\"'input'\"'\"','\"'\"'tap'\"'\"',str(n[1]),str(n[2]));time.sleep(1)\n\ndef field(label,value):\n    hits=[n for n in p.dump() if label in n[0]]\n    if len(hits)!=1: raise RuntimeError('\"'\"'字段不唯一: '\"'\"'+label)\n    n=hits[0];p.adb('\"'\"'shell'\"'\"','\"'\"'input'\"'\"','\"'\"'tap'\"'\"',str(n[1]),str(n[2]))\n    p.adb('\"'\"'shell'\"'\"','\"'\"'input'\"'\"','\"'\"'keycombination'\"'\"','\"'\"'113'\"'\"','\"'\"'29'\"'\"')\n    p.adb('\"'\"'shell'\"'\"','\"'\"'input'\"'\"','\"'\"'text'\"'\"',value)\n    p.adb('\"'\"'shell'\"'\"','\"'\"'input'\"'\"','\"'\"'keyevent'\"'\"','\"'\"'4'\"'\"');time.sleep(.5)\n\ndef action(appid,label):\n    for _ in range(9):\n        nodes=p.dump(); ids=[n for n in nodes if n[0]==appid]\n        if ids:\n            y=ids[0][2]\n            options=[n for n in nodes if n[0]==label and y<n[2]<y+650]\n            if options:\n                n=min(options,key=lambda n:n[2]);p.adb('\"'\"'shell'\"'\"','\"'\"'input'\"'\"','\"'\"'tap'\"'\"',str(n[1]),str(n[2]));time.sleep(1);return\n        p.adb('\"'\"'shell'\"'\"','\"'\"'input'\"'\"','\"'\"'swipe'\"'\"','\"'\"'540'\"'\"','\"'\"'1950'\"'\"','\"'\"'540'\"'\"','\"'\"'850'\"'\"','\"'\"'350'\"'\"');time.sleep(.7)\n    raise RuntimeError('\"'\"'目标应用操作未出现: '\"'\"'+appid+'\"'\"' / '\"'\"'+label)\naction('\"'\"'app:r2_phone_demo'\"'\"','\"'\"'卸载'\"'\"')\ntap('\"'\"'卸载'\"'\"')\n'"
+    },
+    {
+      "wait": 2000
+    },
+    {
+      "shell": "python3 phone_ui.py tap 刷新列表"
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "op": "apps_all"
+    },
+    {
+      "shell": "python3 phone_ui.py dump"
+    },
+    {
+      "note": "最终按ID判定 r2_phone_demo 已不存在、手机刷新后无该卡片，取消卸载时曾保留；不能把列表中任意卸载按钮当目标。恢复手机到设备页供后续场景重连。"
+    }
+  ]
+}

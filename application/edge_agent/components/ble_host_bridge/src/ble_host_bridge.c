@@ -6,6 +6,7 @@
 #include "ble_host_bridge.h"
 #include "ble_host_apps.h"
 #include "voice_frame.h"
+#include "esp_timer.h"
 #include "system_ui_home.h"
 
 #include <inttypes.h>
@@ -196,6 +197,7 @@ static void bridge_voice_state_cb(bool capturing, const char *tag, void *user_ct
 static bool voice_enqueue_locked(voice_item_t *item);
 static void ble_host_bridge_voice_task(void *arg);
 static esp_err_t ble_host_bridge_start_advertising(void);
+static void ble_host_bridge_advertise_or_retry(void);
 static void handle_hello(const char *id);
 static void handle_device_info(const char *id, const char *payload_json);
 static void handle_put_lua(const char *id, const char *source);
@@ -1779,7 +1781,7 @@ static int ble_host_bridge_gap_event(struct ble_gap_event *event, void *arg)
         bridge_unlock();
         /* Keep advertising while a slot is free; HID and the host tool each
          * need their own link. */
-        (void)ble_host_bridge_start_advertising();
+        ble_host_bridge_advertise_or_retry();
         return 0;
     case BLE_GAP_EVENT_DISCONNECT:
         bridge_lock();
@@ -1808,7 +1810,7 @@ static int ble_host_bridge_gap_event(struct ble_gap_event *event, void *arg)
                      s_bridge.conn_count);
         }
         bridge_unlock();
-        (void)ble_host_bridge_start_advertising();
+        ble_host_bridge_advertise_or_retry();
         return 0;
     case BLE_GAP_EVENT_ENC_CHANGE:
         /* Let the HID listener handle its own peer; we only need to track
@@ -1872,7 +1874,7 @@ static int ble_host_bridge_gap_event(struct ble_gap_event *event, void *arg)
         ESP_LOGI(TAG, "mtu conn_handle=%u value=%u", event->mtu.conn_handle, event->mtu.value);
         return 0;
     case BLE_GAP_EVENT_ADV_COMPLETE:
-        (void)ble_host_bridge_start_advertising();
+        ble_host_bridge_advertise_or_retry();
         return 0;
     default:
         return 0;
@@ -1882,6 +1884,42 @@ static int ble_host_bridge_gap_event(struct ble_gap_event *event, void *arg)
 static void ble_host_bridge_on_reset(int reason)
 {
     ESP_LOGW(TAG, "NimBLE reset reason=%d", reason);
+}
+
+static esp_timer_handle_t s_adv_retry_timer;
+static int s_adv_retry_count;
+
+static void ble_host_bridge_adv_retry_cb(void *arg)
+{
+    (void)arg;
+    /* 已在广播或连接槽已满时 start_advertising 直接返回 OK */
+    if (ble_host_bridge_start_advertising() == ESP_OK) {
+        ESP_LOGI(TAG, "advertising started after %d retries", s_adv_retry_count);
+        s_adv_retry_count = 0;
+        return;
+    }
+    if (++s_adv_retry_count < 20 && s_adv_retry_timer) {
+        (void)esp_timer_start_once(s_adv_retry_timer, 3000 * 1000);
+    }
+}
+
+static void ble_host_bridge_schedule_adv_retry(void)
+{
+    if (!s_adv_retry_timer) {
+        const esp_timer_create_args_t args = {.callback = ble_host_bridge_adv_retry_cb, .name = "ble_adv_retry"};
+        if (esp_timer_create(&args, &s_adv_retry_timer) != ESP_OK) {
+            return;
+        }
+    }
+    (void)esp_timer_stop(s_adv_retry_timer);
+    (void)esp_timer_start_once(s_adv_retry_timer, 3000 * 1000);
+}
+
+static void ble_host_bridge_advertise_or_retry(void)
+{
+    if (ble_host_bridge_start_advertising() != ESP_OK) {
+        ble_host_bridge_schedule_adv_retry();
+    }
 }
 
 static void ble_host_bridge_on_sync(void)
@@ -2119,7 +2157,12 @@ esp_err_t ble_host_bridge_start(const ble_host_bridge_config_t *config)
     if (xSemaphoreTake(s_bridge.sync_sem, pdMS_TO_TICKS(5000)) != pdTRUE) {
         ESP_GOTO_ON_FALSE(false, ESP_ERR_TIMEOUT, fail, TAG, "host sync timeout");
     }
-    ESP_GOTO_ON_ERROR(s_bridge.startup_err, fail, TAG, "advertising start failed");
+    if (s_bridge.startup_err != ESP_OK) {
+        /* 1.0：首次广播失败（例如控制器一时内存不足）不再拆掉整个蓝牙栈——
+         * 拆栈时控制器事件池未清空会直接断言重启。改为定时重试广播。 */
+        ESP_LOGW(TAG, "advertising start failed at boot, retrying in background");
+        ble_host_bridge_schedule_adv_retry();
+    }
 
     /* Non-fatal: without it the host falls back to polling job_status. */
     err = cap_lua_register_job_event_cb(bridge_job_event_cb, NULL);

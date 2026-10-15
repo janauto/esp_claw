@@ -28,13 +28,15 @@ lv_obj_t *hv_slot_obj(int page, int index);
 lv_obj_t *hv_screen(void);
 void hv_rebuild(void);
 
-static struct {
+typedef struct {
     bool dragging;
     int page, index;
     lv_point_t start;
     int32_t ox, oy;
     bool moved;
-} DR;
+} hv_drag_t;
+static hv_drag_t *s_dr;
+#define DR (*s_dr)
 
 /* ------------------------------------------------------------ 布局操作 */
 
@@ -421,7 +423,7 @@ void hv_edit_decorate(void)
 
 /* --------------------------------------------------------- 添加面板 */
 
-static struct {
+typedef struct {
     lv_obj_t *scrim;
     lv_obj_t *sheet;
     lv_obj_t *rows[48];
@@ -429,7 +431,15 @@ static struct {
     int count;
     int focus;
     bool dock;
-} AD;
+} hv_add_t;
+static hv_add_t *s_ad;
+#define AD (*s_ad)
+
+void hv_edit_mem_init(void)
+{
+    if (!s_dr) s_dr = hv_psram_calloc(sizeof(*s_dr));
+    if (!s_ad) s_ad = hv_psram_calloc(sizeof(*s_ad));
+}
 
 static void hv_add_focus_apply(void)
 {

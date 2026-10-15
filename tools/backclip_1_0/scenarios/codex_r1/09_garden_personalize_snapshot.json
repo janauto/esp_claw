@@ -1,0 +1,282 @@
+{
+  "name": "r2_09_garden_personalize_snapshot",
+  "steps": [
+    {
+      "note": "目的：M尺寸我的小组件展示真机个性化后的新姓名和极简主题；不以S尺寸默认表情当快照成功。准备布局满足每页4格及最多3页。个性化只正常换一个预设名字与配色，不清空数据。"
+    },
+    {
+      "op": "home_set",
+      "layout": {
+        "v": 1,
+        "pages": [
+          [
+            {
+              "w": "mine",
+              "s": "M"
+            },
+            {
+              "w": "clock",
+              "s": "S"
+            },
+            {
+              "w": "voice",
+              "s": "S"
+            }
+          ],
+          [
+            {
+              "w": "weather",
+              "s": "S"
+            },
+            {
+              "w": "stocks",
+              "s": "S"
+            },
+            {
+              "w": "system",
+              "s": "S"
+            }
+          ],
+          [
+            {
+              "w": "aihot",
+              "s": "M"
+            }
+          ]
+        ],
+        "dock": [
+          "sys:meeting",
+          "sys:ir",
+          "sys:card",
+          "sys:workbuddy"
+        ]
+      },
+      "expect": {
+        "layout": {
+          "v": 1,
+          "pages": [
+            [
+              {
+                "w": "mine",
+                "s": "M"
+              },
+              {
+                "w": "clock",
+                "s": "S"
+              },
+              {
+                "w": "voice",
+                "s": "S"
+              }
+            ],
+            [
+              {
+                "w": "weather",
+                "s": "S"
+              },
+              {
+                "w": "stocks",
+                "s": "S"
+              },
+              {
+                "w": "system",
+                "s": "S"
+              }
+            ],
+            [
+              {
+                "w": "aihot",
+                "s": "M"
+              }
+            ]
+          ],
+          "dock": [
+            "sys:meeting",
+            "sys:ir",
+            "sys:card",
+            "sys:workbuddy"
+          ]
+        }
+      }
+    },
+    {
+      "op": "ui_touch",
+      "type": "tap",
+      "x": 128,
+      "y": 182,
+      "ms": 90
+    },
+    {
+      "wait": 6500
+    },
+    {
+      "op": "home_state",
+      "expect": {
+        "exclusive_app": true
+      }
+    },
+    {
+      "op": "ui_touch",
+      "type": "tap",
+      "x": 183,
+      "y": 670,
+      "ms": 90
+    },
+    {
+      "wait": 2500
+    },
+    {
+      "shot": "minimal_before_custom"
+    },
+    {
+      "op": "ui_touch",
+      "type": "tap",
+      "x": 410,
+      "y": 670,
+      "ms": 90
+    },
+    {
+      "wait": 2000
+    },
+    {
+      "shot": "custom_before"
+    },
+    {
+      "op": "ui_key",
+      "key": "MODE",
+      "action": "click"
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "shot": "custom_name_changed"
+    },
+    {
+      "op": "ui_key",
+      "key": "VOLUME_UP",
+      "action": "click"
+    },
+    {
+      "op": "ui_key",
+      "key": "MODE",
+      "action": "click"
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "shot": "custom_color_changed"
+    },
+    {
+      "op": "ui_key",
+      "key": "SET",
+      "action": "click"
+    },
+    {
+      "wait": 1800
+    },
+    {
+      "shot": "mine_customized"
+    },
+    {
+      "op": "ui_key",
+      "key": "SET",
+      "action": "click"
+    },
+    {
+      "wait": 2500
+    },
+    {
+      "op": "home_state",
+      "expect": {
+        "view": "home",
+        "exclusive_app": false
+      }
+    },
+    {
+      "shot": "mine_M_snapshot"
+    },
+    {
+      "op": "home_get",
+      "expect": {
+        "layout": {
+          "v": 1,
+          "pages": [
+            [
+              {
+                "w": "mine",
+                "s": "M"
+              },
+              {
+                "w": "clock",
+                "s": "S"
+              },
+              {
+                "w": "voice",
+                "s": "S"
+              }
+            ],
+            [
+              {
+                "w": "weather",
+                "s": "S"
+              },
+              {
+                "w": "stocks",
+                "s": "S"
+              },
+              {
+                "w": "system",
+                "s": "S"
+              }
+            ],
+            [
+              {
+                "w": "aihot",
+                "s": "M"
+              }
+            ]
+          ],
+          "dock": [
+            "sys:meeting",
+            "sys:ir",
+            "sys:card",
+            "sys:workbuddy"
+          ]
+        }
+      }
+    },
+    {
+      "note": "人工比对新姓名/主题在花园页与M首页一致；主会话只读采集对应snapshot.json与garden.json去敏副本，按字段核对而非凭文件名。再进入应保持新姓名与主题。"
+    },
+    {
+      "op": "ui_touch",
+      "type": "tap",
+      "x": 128,
+      "y": 182,
+      "ms": 90
+    },
+    {
+      "wait": 5000
+    },
+    {
+      "shot": "custom_persisted_reopen"
+    },
+    {
+      "op": "ui_key",
+      "key": "SET",
+      "action": "click"
+    },
+    {
+      "wait": 2000
+    },
+    {
+      "op": "home_state",
+      "expect": {
+        "view": "home",
+        "exclusive_app": false
+      }
+    }
+  ]
+}

@@ -1,0 +1,219 @@
+{
+  "name": "r2_01_touch_open_exit",
+  "steps": [
+    {
+      "note": "目的：回归 rc4 普通短点被拉成长按。判定：每个 view 与截图一致；最后必须为天气实屏而非编辑页。协议布局仅准备默认环境，不算用户编辑成功。"
+    },
+    {
+      "op": "home_set",
+      "layout": {
+        "v": 1,
+        "pages": [
+          [
+            {
+              "w": "mine",
+              "s": "S"
+            },
+            {
+              "w": "clock",
+              "s": "S"
+            },
+            {
+              "w": "weather",
+              "s": "S"
+            },
+            {
+              "w": "voice",
+              "s": "S"
+            }
+          ],
+          [
+            {
+              "w": "stocks",
+              "s": "S"
+            },
+            {
+              "w": "system",
+              "s": "S"
+            },
+            {
+              "w": "aihot",
+              "s": "M"
+            }
+          ]
+        ],
+        "dock": [
+          "sys:meeting",
+          "sys:ir",
+          "sys:card",
+          "sys:workbuddy"
+        ]
+      },
+      "expect": {
+        "layout": {
+          "v": 1,
+          "pages": [
+            [
+              {
+                "w": "mine",
+                "s": "S"
+              },
+              {
+                "w": "clock",
+                "s": "S"
+              },
+              {
+                "w": "weather",
+                "s": "S"
+              },
+              {
+                "w": "voice",
+                "s": "S"
+              }
+            ],
+            [
+              {
+                "w": "stocks",
+                "s": "S"
+              },
+              {
+                "w": "system",
+                "s": "S"
+              },
+              {
+                "w": "aihot",
+                "s": "M"
+              }
+            ]
+          ],
+          "dock": [
+            "sys:meeting",
+            "sys:ir",
+            "sys:card",
+            "sys:workbuddy"
+          ]
+        }
+      }
+    },
+    {
+      "op": "ui_touch",
+      "type": "drag",
+      "x": 240,
+      "y": 20,
+      "x2": 240,
+      "y2": 300,
+      "ms": 450
+    },
+    {
+      "wait": 1000
+    },
+    {
+      "op": "home_state",
+      "expect": {
+        "view": "control"
+      }
+    },
+    {
+      "shot": "control"
+    },
+    {
+      "op": "ui_touch",
+      "type": "drag",
+      "x": 240,
+      "y": 724,
+      "x2": 240,
+      "y2": 560,
+      "ms": 450
+    },
+    {
+      "wait": 1000
+    },
+    {
+      "op": "home_state",
+      "expect": {
+        "view": "home"
+      }
+    },
+    {
+      "op": "ui_touch",
+      "type": "drag",
+      "x": 240,
+      "y": 724,
+      "x2": 240,
+      "y2": 520,
+      "ms": 450
+    },
+    {
+      "wait": 1000
+    },
+    {
+      "op": "home_state",
+      "expect": {
+        "view": "overview"
+      }
+    },
+    {
+      "shot": "overview"
+    },
+    {
+      "op": "ui_key",
+      "key": "SET",
+      "action": "click"
+    },
+    {
+      "wait": 1000
+    },
+    {
+      "op": "home_state",
+      "expect": {
+        "view": "home"
+      }
+    },
+    {
+      "op": "ui_touch",
+      "type": "tap",
+      "x": 128,
+      "y": 386,
+      "ms": 90
+    },
+    {
+      "wait": 4500
+    },
+    {
+      "op": "home_state",
+      "expect": {
+        "exclusive_app": true,
+        "home_foreground": false
+      }
+    },
+    {
+      "shot": "weather_actual"
+    },
+    {
+      "note": "判图确认是天气应用，不能只看 exclusive_app；随后正常底部上滑退出。"
+    },
+    {
+      "op": "ui_touch",
+      "type": "drag",
+      "x": 240,
+      "y": 724,
+      "x2": 240,
+      "y2": 560,
+      "ms": 450
+    },
+    {
+      "wait": 2000
+    },
+    {
+      "op": "home_state",
+      "expect": {
+        "view": "home",
+        "exclusive_app": false,
+        "home_foreground": true
+      }
+    },
+    {
+      "shot": "home_after_exit"
+    }
+  ]
+}

@@ -1,0 +1,213 @@
+{
+  "name": "r2_07_phone_home_sync",
+  "steps": [
+    {
+      "note": "目的：手机调整底栏顺序后背夹立即同步，退出重读仍保留。home_set仅建立默认基线，不能计为手机保存成功。手机页面按钮从当前dump定位，非背夹坐标。"
+    },
+    {
+      "op": "home_set",
+      "layout": {
+        "v": 1,
+        "pages": [
+          [
+            {
+              "w": "mine",
+              "s": "S"
+            },
+            {
+              "w": "clock",
+              "s": "S"
+            },
+            {
+              "w": "weather",
+              "s": "S"
+            },
+            {
+              "w": "voice",
+              "s": "S"
+            }
+          ],
+          [
+            {
+              "w": "stocks",
+              "s": "S"
+            },
+            {
+              "w": "system",
+              "s": "S"
+            },
+            {
+              "w": "aihot",
+              "s": "M"
+            }
+          ]
+        ],
+        "dock": [
+          "sys:meeting",
+          "sys:ir",
+          "sys:card",
+          "sys:workbuddy"
+        ]
+      },
+      "expect": {
+        "layout": {
+          "v": 1,
+          "pages": [
+            [
+              {
+                "w": "mine",
+                "s": "S"
+              },
+              {
+                "w": "clock",
+                "s": "S"
+              },
+              {
+                "w": "weather",
+                "s": "S"
+              },
+              {
+                "w": "voice",
+                "s": "S"
+              }
+            ],
+            [
+              {
+                "w": "stocks",
+                "s": "S"
+              },
+              {
+                "w": "system",
+                "s": "S"
+              },
+              {
+                "w": "aihot",
+                "s": "M"
+              }
+            ]
+          ],
+          "dock": [
+            "sys:meeting",
+            "sys:ir",
+            "sys:card",
+            "sys:workbuddy"
+          ]
+        }
+      }
+    },
+    {
+      "note": "前置：小米 M610BB 手机 App 在设备页、无弹窗；扫描按钮可见。仅重连测试背夹，保持现有正常 AI 配置。串口复位后必须在本场景内重连；失败立即停止本场景。"
+    },
+    {
+      "shell": "python3 phone_ui.py tap 扫描设备"
+    },
+    {
+      "wait": 13000
+    },
+    {
+      "shell": "python3 phone_ui.py tapxy 904 1244"
+    },
+    {
+      "wait": 9000
+    },
+    {
+      "op": "mode_set",
+      "mode": "clip"
+    },
+    {
+      "op": "mode_get",
+      "expect": {
+        "mode": "clip",
+        "phone_linked": true,
+        "voice_route": "ble"
+      }
+    },
+    {
+      "shell": "python3 phone_ui.py tapxy 803 380"
+    },
+    {
+      "shell": "python3 phone_ui.py tap 背夹首页"
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "shell": "python3 phone_ui.py dump"
+    },
+    {
+      "shell": "python3 -c 'import phone_ui as p,time\nnodes=[n for n in p.dump() if n[0]=='\"'\"'右移'\"'\"']\nassert nodes,'\"'\"'找不到底栏右移按钮，停止'\"'\"'\nn=min(nodes,key=lambda n:n[2]);p.adb('\"'\"'shell'\"'\"','\"'\"'input'\"'\"','\"'\"'tap'\"'\"',str(n[1]),str(n[2]));time.sleep(1)\n'"
+    },
+    {
+      "shell": "python3 phone_ui.py tap 保存到背夹"
+    },
+    {
+      "wait": 2000
+    },
+    {
+      "op": "home_get",
+      "expect": {
+        "layout": {
+          "v": 1,
+          "pages": [
+            [
+              {
+                "w": "mine",
+                "s": "S"
+              },
+              {
+                "w": "clock",
+                "s": "S"
+              },
+              {
+                "w": "weather",
+                "s": "S"
+              },
+              {
+                "w": "voice",
+                "s": "S"
+              }
+            ],
+            [
+              {
+                "w": "stocks",
+                "s": "S"
+              },
+              {
+                "w": "system",
+                "s": "S"
+              },
+              {
+                "w": "aihot",
+                "s": "M"
+              }
+            ]
+          ],
+          "dock": [
+            "sys:ir",
+            "sys:meeting",
+            "sys:card",
+            "sys:workbuddy"
+          ]
+        }
+      }
+    },
+    {
+      "op": "home_state",
+      "expect": {
+        "view": "home"
+      }
+    },
+    {
+      "shot": "phone_saved_dock_order"
+    },
+    {
+      "shell": "python3 phone_ui.py tap 从背夹重新读取"
+    },
+    {
+      "shell": "python3 phone_ui.py dump"
+    },
+    {
+      "note": "人工核对手机与背夹前两个图标为遥控器/会议录音；记录保存提示、重读顺序，退出手机编辑页再重进核对，主会话另存手机截图。后续默认坐标场景会重新设布局。"
+    }
+  ]
+}

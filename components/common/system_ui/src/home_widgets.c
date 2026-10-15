@@ -26,7 +26,7 @@
 
 #define HV_APP_WIDGETS_MAX 12
 
-static hv_widget_desc_t s_builtin_widgets[] = {
+static const hv_widget_desc_t s_builtin_widgets[] = {
     {"mine",    "我的",     "小磁与你的花园，点开进入「我的」", HV_SZ_BIT(HV_SZ_S) | HV_SZ_BIT(HV_SZ_M), "garden", true, false},
     {"clock",   "时钟",     "表盘时钟；M 尺寸为数字时钟与日期", HV_SZ_BIT(HV_SZ_S) | HV_SZ_BIT(HV_SZ_M), "", false, false},
     {"weather", "天气",     "实时天气与今日温度范围",           HV_SZ_BIT(HV_SZ_S) | HV_SZ_BIT(HV_SZ_M), "skill:live_weather", false, true},
@@ -37,11 +37,21 @@ static hv_widget_desc_t s_builtin_widgets[] = {
 };
 #define HV_BUILTIN_WIDGETS (sizeof(s_builtin_widgets) / sizeof(s_builtin_widgets[0]))
 
-static hv_widget_desc_t s_app_widgets[HV_APP_WIDGETS_MAX];
+typedef struct {
+    hv_widget_desc_t app_widgets[HV_APP_WIDGETS_MAX];
+    char voice_heard[160];
+    char voice_reply[320];
+} hv_widgets_mem_t;
+static hv_widgets_mem_t *s_wm;
 static size_t s_app_widget_count;
+#define s_app_widgets (s_wm->app_widgets)
+#define s_voice_heard (s_wm->voice_heard)
+#define s_voice_reply (s_wm->voice_reply)
 
-static char s_voice_heard[160];
-static char s_voice_reply[320];
+void hv_widgets_mem_init(void)
+{
+    if (!s_wm) s_wm = hv_psram_calloc(sizeof(*s_wm));
+}
 
 size_t hv_widgets_count(void)
 {

@@ -1,0 +1,189 @@
+{
+  "name": "r2_10_voice_open_running_exit",
+  "steps": [
+    {
+      "note": "目的：普通语音明确打开唯一名字的天气应用，核对实际应用身份、运行状态、正常退出；补running固定false的静态风险。先备好Wi-Fi/底座AI配置。"
+    },
+    {
+      "op": "home_set",
+      "layout": {
+        "v": 1,
+        "pages": [
+          [
+            {
+              "w": "mine",
+              "s": "S"
+            },
+            {
+              "w": "clock",
+              "s": "S"
+            },
+            {
+              "w": "weather",
+              "s": "S"
+            },
+            {
+              "w": "voice",
+              "s": "S"
+            }
+          ],
+          [
+            {
+              "w": "stocks",
+              "s": "S"
+            },
+            {
+              "w": "system",
+              "s": "S"
+            },
+            {
+              "w": "aihot",
+              "s": "M"
+            }
+          ]
+        ],
+        "dock": [
+          "sys:meeting",
+          "sys:ir",
+          "sys:card",
+          "sys:workbuddy"
+        ]
+      },
+      "expect": {
+        "layout": {
+          "v": 1,
+          "pages": [
+            [
+              {
+                "w": "mine",
+                "s": "S"
+              },
+              {
+                "w": "clock",
+                "s": "S"
+              },
+              {
+                "w": "weather",
+                "s": "S"
+              },
+              {
+                "w": "voice",
+                "s": "S"
+              }
+            ],
+            [
+              {
+                "w": "stocks",
+                "s": "S"
+              },
+              {
+                "w": "system",
+                "s": "S"
+              },
+              {
+                "w": "aihot",
+                "s": "M"
+              }
+            ]
+          ],
+          "dock": [
+            "sys:meeting",
+            "sys:ir",
+            "sys:card",
+            "sys:workbuddy"
+          ]
+        }
+      }
+    },
+    {
+      "op": "mode_set",
+      "mode": "dock"
+    },
+    {
+      "op": "mode_get",
+      "expect": {
+        "mode": "dock",
+        "voice_route": "wifi",
+        "ai_ready": true
+      }
+    },
+    {
+      "op": "ui_key",
+      "key": "MODE",
+      "action": "press"
+    },
+    {
+      "wait": 900
+    },
+    {
+      "play": "背夹，请打开天气应用。",
+      "voice": "Tingting",
+      "delay_ms": 1100
+    },
+    {
+      "wait": 9000
+    },
+    {
+      "op": "ui_key",
+      "key": "MODE",
+      "action": "release"
+    },
+    {
+      "wait_state": {
+        "voice": "reply"
+      },
+      "timeout_ms": 45000
+    },
+    {
+      "wait_state": {
+        "exclusive_app": true
+      },
+      "timeout_ms": 20000
+    },
+    {
+      "op": "home_state",
+      "expect": {
+        "exclusive_app": true,
+        "home_foreground": false
+      }
+    },
+    {
+      "shot": "weather_opened_by_speech"
+    },
+    {
+      "op": "apps_all"
+    },
+    {
+      "note": "主会话检查实际画面为天气，日志open_app目标是天气；在apps_all中精确查skill:live_weather的running应为true。reply终态可能被跳转覆盖，不能以任意独占应用判成功。"
+    },
+    {
+      "op": "ui_touch",
+      "type": "drag",
+      "x": 240,
+      "y": 724,
+      "x2": 240,
+      "y2": 560,
+      "ms": 450
+    },
+    {
+      "wait": 2000
+    },
+    {
+      "op": "home_state",
+      "expect": {
+        "view": "home",
+        "home_foreground": true,
+        "exclusive_app": false
+      }
+    },
+    {
+      "op": "apps_all"
+    },
+    {
+      "shot": "home_after_voice_app_exit"
+    },
+    {
+      "note": "同一ID退出后running=false；系统正常可继续点按。若reply等待超时但应用已打开，记录工具成功与反馈缺失两个结果，不把超时忽略。"
+    }
+  ]
+}

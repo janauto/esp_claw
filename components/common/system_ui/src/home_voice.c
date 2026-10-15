@@ -31,7 +31,7 @@ lv_obj_t *hv_screen(void);
 
 typedef enum { ROUTE_NONE = 0, ROUTE_PHONE, ROUTE_WIFI } hv_route_t;
 
-static struct {
+typedef struct {
     lv_obj_t *card;
     lv_obj_t *pet;
     lv_obj_t *title;
@@ -47,7 +47,15 @@ static struct {
     hv_view_t prev_view;
     char heard[160];
     char text[320];
-} V;
+} hv_voice_ui_t;
+
+static hv_voice_ui_t *s_v;
+#define V (*s_v)
+
+void hv_voice_mem_init(void)
+{
+    if (!s_v) s_v = hv_psram_calloc(sizeof(*s_v));
+}
 
 static char s_deferred_launch[HV_APP_ID_LEN];
 static uint32_t s_deferred_since;

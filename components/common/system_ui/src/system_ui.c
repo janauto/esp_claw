@@ -544,6 +544,7 @@ esp_err_t system_ui_start(const system_ui_config_t *config)
         return ESP_OK;
     }
 
+    hv_mem_init();
     s_ui.generation++;
     ESP_RETURN_ON_ERROR(system_ui_callback_lock(), SYSTEM_UI_TAG, "init callback mutex failed");
     system_ui_callback_unlock();

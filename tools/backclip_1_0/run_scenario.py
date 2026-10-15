@@ -204,7 +204,16 @@ def main():
     dev = mod.Device(args.port)
     summary = []
     try:
-        info = dev.rpc({"op": "device_info"})
+        info = None
+        for attempt in range(6):
+            # 刚开机时日志刷屏、各服务还在起，首条命令可能收不到回复：等一等再试
+            try:
+                info = dev.rpc({"op": "device_info"})
+                break
+            except RuntimeError:
+                time.sleep(4)
+        if info is None:
+            raise RuntimeError("device_info 连续无响应")
         (args.out / "device_info.json").write_text(json.dumps(info, ensure_ascii=False, indent=2))
         print("DEVICE", info.get("version"), info.get("mode"), flush=True)
         for path in args.scenarios:

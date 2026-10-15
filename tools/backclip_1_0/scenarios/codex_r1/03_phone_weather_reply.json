@@ -1,0 +1,93 @@
+{
+  "name": "r2_03_phone_weather_reply",
+  "steps": [
+    {
+      "note": "目的：连手机时普通天气询问必须有可见答复，不能仅 reply 状态通过；询问天气未要求打开应用。"
+    },
+    {
+      "note": "前置：小米 M610BB 手机 App 在设备页、无弹窗；扫描按钮可见。仅重连测试背夹，保持现有正常 AI 配置。串口复位后必须在本场景内重连；失败立即停止本场景。"
+    },
+    {
+      "shell": "python3 phone_ui.py tap 扫描设备"
+    },
+    {
+      "wait": 13000
+    },
+    {
+      "shell": "python3 phone_ui.py tapxy 904 1244"
+    },
+    {
+      "wait": 9000
+    },
+    {
+      "op": "mode_set",
+      "mode": "clip"
+    },
+    {
+      "op": "mode_get",
+      "expect": {
+        "mode": "clip",
+        "phone_linked": true,
+        "voice_route": "ble"
+      }
+    },
+    {
+      "op": "ui_key",
+      "key": "MODE",
+      "action": "press"
+    },
+    {
+      "wait": 900
+    },
+    {
+      "play": "背夹，今天天气怎么样？",
+      "voice": "Tingting",
+      "delay_ms": 1100
+    },
+    {
+      "wait": 9000
+    },
+    {
+      "op": "ui_key",
+      "key": "MODE",
+      "action": "release"
+    },
+    {
+      "wait_state": {
+        "voice": "reply"
+      },
+      "timeout_ms": 45000
+    },
+    {
+      "op": "home_state",
+      "expect": {
+        "voice": "reply",
+        "voice_route": "经手机",
+        "home_foreground": true,
+        "exclusive_app": false
+      }
+    },
+    {
+      "shot": "phone_visible_reply"
+    },
+    {
+      "shell": "python3 phone_ui.py dump"
+    },
+    {
+      "note": "主会话另存手机语音日志/截图，确认同一次收音经手机ASR与对话回显。可以诚实说明不能查天气；无明确打开请求时不擅自切应用。25秒自动收起不算截图前隐藏的理由。"
+    },
+    {
+      "wait": 27000
+    },
+    {
+      "op": "home_state",
+      "expect": {
+        "view": "home",
+        "exclusive_app": false
+      }
+    },
+    {
+      "shot": "after_reply_timeout"
+    }
+  ]
+}
