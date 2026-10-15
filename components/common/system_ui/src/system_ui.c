@@ -314,6 +314,13 @@ typedef struct {
 
 static system_ui_gesture_state_t s_gesture_real;
 static system_ui_gesture_state_t s_gesture_inject;
+static volatile uint32_t s_gesture_fired_ms;
+
+bool system_ui_gesture_recent(uint32_t window_ms)
+{
+    uint32_t now = (uint32_t)(xTaskGetTickCount() * portTICK_PERIOD_MS);
+    return s_gesture_fired_ms != 0 && now - s_gesture_fired_ms < window_ms;
+}
 
 static void system_ui_gesture_feed(system_ui_gesture_state_t *st, const display_service_touch_sample_t *sample)
 {
@@ -347,6 +354,10 @@ static void system_ui_gesture_feed(system_ui_gesture_state_t *st, const display_
                                     SYSTEM_UI_HOME_GESTURE_PULL_DOWN_TOP : SYSTEM_UI_HOME_GESTURE_SWIPE_UP_BOTTOM,
                 };
                 (void)system_ui_post_work_event(&event, 0);
+                s_gesture_fired_ms = (uint32_t)(xTaskGetTickCount() * portTICK_PERIOD_MS);
+                if (s_gesture_fired_ms == 0) {
+                    s_gesture_fired_ms = 1;
+                }
             }
             st->gesture = SYSTEM_UI_TOUCH_GESTURE_BUSY;     /* 一次按压只触发一次 */
         } else if (st->gesture == SYSTEM_UI_TOUCH_GESTURE_EXIT_APP &&

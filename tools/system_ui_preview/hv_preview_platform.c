@@ -171,3 +171,5 @@ esp_err_t system_ui_post_work_event(const system_ui_work_event_t *event, TickTyp
     fprintf(stderr, "PREVIEW_EVENT %d\n", event->type);
     return ESP_OK;
 }
+
+bool system_ui_gesture_recent(uint32_t window_ms) { (void)window_ms; return false; }

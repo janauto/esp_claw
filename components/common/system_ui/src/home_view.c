@@ -306,6 +306,8 @@ static void hv_status_build(void)
     int32_t w = (int32_t)s_ui.width;
     lv_obj_t *bar = hv_box(H.scr, 0, 0, w, HV_STATUS_H, 0x000000, 0);
     lv_obj_set_style_bg_opa(bar, LV_OPA_TRANSP, 0);
+    /* 吸收按压：从状态栏下拉时，手指滑进页面也不会被当成长按页面 */
+    lv_obj_add_flag(bar, LV_OBJ_FLAG_CLICKABLE);
     H.status_bar = bar;
 
     /* 系统外框身份：左侧黄色标记条 */
@@ -429,9 +431,10 @@ static void hv_header_build(void)
 {
     int32_t w = (int32_t)s_ui.width;
 
-    H.header = hv_box(H.scr, 0, 50, w, 36, 0, 0);
+    H.header = hv_box(H.scr, 0, HV_STATUS_H, w, HV_PAGER_Y - HV_STATUS_H, 0, 0);
     lv_obj_set_style_bg_opa(H.header, LV_OPA_TRANSP, 0);
-    hv_box(H.header, HV_PAD, 14, 8, 8, HV_C_ACCENT, 2);
+    lv_obj_add_flag(H.header, LV_OBJ_FLAG_CLICKABLE);
+    hv_box(H.header, HV_PAD, 19, 8, 8, HV_C_ACCENT, 2);
     lv_obj_t *t = hv_text(H.header, g_hvf.f20, HV_C_TEXT, "系统首页");
     lv_obj_align(t, LV_ALIGN_LEFT_MID, HV_PAD + 16, 0);
     H.hdr_date = hv_text(H.header, g_hvf.f16, HV_C_MUTED, "");
@@ -838,6 +841,9 @@ static void hv_activate_focus(void)
 
 static bool s_suppress_click;
 
+/* 系统手势（顶部下拉 / 底部上滑）刚刚触发过：这次按压不再当作长按或点按。 */
+bool system_ui_gesture_recent(uint32_t window_ms);
+
 static void hv_widget_event_cb(lv_event_t *e)
 {
     lv_event_code_t code = lv_event_get_code(e);
@@ -860,6 +866,9 @@ static void hv_widget_event_cb(lv_event_t *e)
         break;
     case LV_EVENT_LONG_PRESSED:
         s_suppress_click = true;
+        if (system_ui_gesture_recent(1200)) {
+            break;
+        }
         if (strcmp(it->w, "mine") == 0 || strcmp(it->w, "voice") == 0) {
             hv_voice_press();
         } else {
@@ -929,7 +938,7 @@ static void hv_dock_event_cb(lv_event_t *e)
 static void hv_page_event_cb(lv_event_t *e)
 {
     lv_event_code_t code = lv_event_get_code(e);
-    if (code == LV_EVENT_LONG_PRESSED && !H.edit) {
+    if (code == LV_EVENT_LONG_PRESSED && !H.edit && !system_ui_gesture_recent(1200)) {
         hv_enter_edit();
     }
 }
@@ -1283,7 +1292,10 @@ lv_obj_t *hv_create_screen(void)
     hv_status_build();
     hv_header_build();
     hv_build_pages();
-    /* 底部上滑指示条 */
+    /* 底部上滑指示条；所在的一条区域吸收按压，上滑不会落到页面或底栏上 */
+    lv_obj_t *swipe_zone = hv_box(H.scr, 0, (int32_t)s_ui.height - HV_SOFTKEY_H - 40, w, 40, 0, 0);
+    lv_obj_set_style_bg_opa(swipe_zone, LV_OPA_TRANSP, 0);
+    lv_obj_add_flag(swipe_zone, LV_OBJ_FLAG_CLICKABLE);
     H.indicator = hv_box(H.scr, (w - 120) / 2, (int32_t)s_ui.height - HV_SOFTKEY_H - 14, 120, 5, 0xFFFFFF, 3);
     lv_obj_set_style_bg_opa(H.indicator, LV_OPA_40, 0);
     hv_softkeys_build();
