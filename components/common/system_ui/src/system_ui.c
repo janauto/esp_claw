@@ -142,7 +142,11 @@ static void system_ui_event_task(void *arg)
     (void)arg;
     system_ui_work_event_t event = {0};
 
-    while (xQueueReceive(s_ui.event_queue, &event, portMAX_DELAY) == pdTRUE) {
+    while (!s_ui.event_task_stop) {
+        if (xQueueReceive(s_ui.event_queue, &event, pdMS_TO_TICKS(250)) != pdTRUE) {
+            system_ui_home_apps_process_reload();
+            continue;
+        }
         if (event.type == SYSTEM_UI_WORK_EVENT_STOP || s_ui.event_task_stop) {
             break;
         }
@@ -208,6 +212,9 @@ static void system_ui_event_task(void *arg)
                 }
                 system_ui_unlock();
             }
+            break;
+        case SYSTEM_UI_WORK_EVENT_APP_RENAME:
+            if (event.generation == s_ui.generation) system_ui_home_apps_handle_rename(&event);
             break;
         case SYSTEM_UI_WORK_EVENT_APP_UNINSTALL:
             if (event.generation == s_ui.generation) {

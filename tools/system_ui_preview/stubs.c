@@ -97,3 +97,15 @@ void vTaskDelay(TickType_t t) { (void)t; }
 void vTaskDelete(TaskHandle_t t) { (void)t; }
 void vTaskDeleteWithCaps(TaskHandle_t t) { (void)t; }
 TickType_t xTaskGetTickCount(void) { return (TickType_t)lv_tick_get(); }
+
+#include "claw_paths.h"
+esp_err_t claw_paths_join(claw_path_root_t root, const char *rel, char *out, size_t size) {
+    (void)root; (void)rel; (void)out; (void)size; return ESP_FAIL;
+}
+/* The preview never starts Lua jobs. */
+esp_err_t cap_lua_run_script_async(const char *script, const char *args, const char *name,
+                                  const char *exclusive, unsigned timeout, unsigned log_bytes,
+                                  bool replace, char *out, size_t size) {
+    (void)script; (void)args; (void)name; (void)exclusive; (void)timeout; (void)log_bytes;
+    (void)replace; (void)out; (void)size; return ESP_FAIL;
+}

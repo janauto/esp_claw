@@ -62,7 +62,7 @@ static void system_ui_home_app_launch_cb(const char *script_rel_path, void *user
 #define SYSTEM_UI_HOME_APP_ID_MEETING_MINUTES "local_apps_6"
 #define SYSTEM_UI_HOME_APP_ID_INFRARED_REMOTE "local_apps_7"
 
-static void system_ui_home_page_select_cb(uint8_t page, const char *app_id,
+static void system_ui_home_page_select_cb(uint32_t page, const char *app_id,
                                           const char *script, void *user_ctx)
 {
     (void)page;
@@ -112,7 +112,7 @@ static void system_ui_home_page_select_cb(uint8_t page, const char *app_id,
 
 /* A confirmed uninstall from the long-press menu. Runs in the LVGL event
  * context, so the delete and the carousel rebuild go to the UI event task. */
-static void system_ui_home_page_action_cb(uint8_t page, const char *app_id,
+static void system_ui_home_page_action_cb(uint32_t page, const char *app_id,
                                           ui_squareline_page_action_t action, void *user_ctx)
 {
     (void)user_ctx;
@@ -120,6 +120,11 @@ static void system_ui_home_page_action_cb(uint8_t page, const char *app_id,
     if (action == UI_SQUARELINE_PAGE_ACTION_UNINSTALL) {
         system_ui_home_apps_request_uninstall(page, app_id);
     }
+}
+
+static void system_ui_home_apps_request_rename_cb(uint32_t page, const char *id, const char *title, void *ctx)
+{
+    (void)ctx; system_ui_home_apps_request_rename(page, id, title);
 }
 
 esp_err_t system_ui_create_home_locked(void)
@@ -131,6 +136,7 @@ esp_err_t system_ui_create_home_locked(void)
     /* Take over selection so pages with a native screen can be routed to it. */
     ui_squareline_set_page_select_cb(system_ui_home_page_select_cb, NULL);
     ui_squareline_set_page_action_cb(system_ui_home_page_action_cb, NULL);
+    ui_squareline_set_app_rename_cb(system_ui_home_apps_request_rename_cb, NULL);
     /* The long-press menu's 卸载 / 详细 are missing from the SquareLine fonts. */
     ui_squareline_set_menu_font(s_ui.font);
     /* Installed apps follow the built-in pages; the dots are sized at init. */
@@ -179,9 +185,11 @@ void system_ui_delete_home_locked(void)
     ui_squareline_set_app_launch_cb(NULL, NULL);
     ui_squareline_set_page_select_cb(NULL, NULL);
     ui_squareline_set_page_action_cb(NULL, NULL);
+    ui_squareline_set_app_rename_cb(NULL, NULL);
     if (s_ui.home_screen) {
         ui_squareline_destroy();
     }
+    system_ui_home_apps_close_locked();
     ui_squareline_set_menu_font(NULL);
     s_ui.home_screen = NULL;
     s_ui.home_tile = NULL;

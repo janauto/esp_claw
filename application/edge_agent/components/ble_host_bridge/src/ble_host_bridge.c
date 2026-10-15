@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 #include "ble_host_bridge.h"
+#include "ble_host_apps.h"
 #include "voice_frame.h"
 
 #include <inttypes.h>
@@ -503,9 +504,10 @@ static void handle_put_lua(const char *id, const char *source)
 
 static void handle_hello(const char *id)
 {
-    char data[640];
+    char data[1024];
     snprintf(data, sizeof(data),
              "{\"protocol\":%d,\"device_name\":\"%s\",\"ops\":[\"hello\",\"device_info\",\"put_lua\","
+             "\"app_list\",\"app_info\",\"app_read\",\"app_begin\",\"app_write\",\"app_commit\",\"app_abort\",\"app_remove\",\"app_reload\",\"app_rename\","
              "\"run_lua\",\"job_status\",\"job_tail\",\"job_stop\",\"workbuddy_ui\","
              "\"workbuddy_audio_control\",\"workbuddy_audio_opus\",\"voice_start\",\"voice_stop\","
              "\"voice_status\"],"
@@ -1485,6 +1487,11 @@ static void dispatch_request(const char *json_text)
 
     if (strcmp(op, "hello") == 0) {
         handle_hello(id);
+    } else if (strncmp(op, "app_", 4) == 0) {
+        char *output = NULL;
+        esp_err_t err = ble_host_apps_handle(op, root, &output);
+        send_response(id, err == ESP_OK, op, err == ESP_OK ? output : esp_err_to_name(err));
+        free(output);
     } else if (strcmp(op, "device_info") == 0) {
         cJSON *payload = cJSON_GetObjectItemCaseSensitive(root, "payload");
         char *payload_json = payload ? cJSON_PrintUnformatted(payload) : NULL;

@@ -1,5 +1,7 @@
 ## IDF Component Manager Manifest File
 dependencies:
+  local_app_store:
+    path: ../local_app_store
   claw_cap:
     path: ../../claw_modules/claw_cap
   claw_core:

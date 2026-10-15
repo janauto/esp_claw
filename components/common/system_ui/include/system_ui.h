@@ -79,3 +79,6 @@ esp_err_t system_ui_show_workbuddy(void);
 #ifdef __cplusplus
 }
 #endif
+
+/* Refresh is deferred until the home is foreground and display is not exclusive. */
+esp_err_t system_ui_schedule_home_reload(void);

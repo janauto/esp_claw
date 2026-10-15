@@ -73,7 +73,7 @@ const char *ui_squareline_resolve_img(const char *name);
  * @param script    The page's default Lua script, or NULL if it has none.
  * @param user_ctx  Context passed to ui_squareline_set_page_select_cb().
  */
-typedef void (*ui_squareline_page_select_cb_t)(uint8_t page, const char *app_id,
+typedef void (*ui_squareline_page_select_cb_t)(uint32_t page, const char *app_id,
                                               const char *script, void *user_ctx);
 
 /**
@@ -86,17 +86,17 @@ typedef void (*ui_squareline_page_select_cb_t)(uint8_t page, const char *app_id,
 void ui_squareline_set_page_select_cb(ui_squareline_page_select_cb_t cb, void *user_ctx);
 
 /** @brief Number of pages in the carousel. */
-uint8_t ui_squareline_page_count(void);
+uint32_t ui_squareline_page_count(void);
 
 /** @brief Index of the page currently displayed. */
-uint8_t ui_squareline_current_page(void);
+uint32_t ui_squareline_current_page(void);
 
 /**
  * @brief Jump straight to a page, without the slide animation.
  *
  * Out-of-range indices are ignored. Must be called with the LVGL mutex held.
  */
-void ui_squareline_show_page(uint8_t page);
+void ui_squareline_show_page(uint32_t page);
 
 /**
  * @brief The three actions the carousel screen offers.
@@ -124,6 +124,11 @@ typedef struct {
     const char *title;      /**< Caption, may be Chinese; copied, at most 39 bytes   */
     const char *app_id;     /**< Unique id; copied, at most 39 bytes                  */
     const char *location;   /**< Shown in 详细, e.g. the app's directory; may be NULL */
+    const char *icon_selected;   /**< Absolute LVGL file source (S:/...), or NULL. */
+    const char *icon_unselected;
+    uint32_t frame_color;
+    uint32_t pill_color;
+    bool renameable;
 } ui_squareline_app_t;
 
 /**
@@ -135,6 +140,15 @@ typedef struct {
  *         string is too long.
  */
 bool ui_squareline_add_app(const ui_squareline_app_t *app);
+
+/* A bounded five-entry cache reads packages on demand; count is not uint8_t.
+ * Provider runs under the display lock and must return strings valid until the
+ * next call. No LVGL objects are allocated per application. */
+typedef bool (*ui_squareline_app_provider_t)(uint32_t index, ui_squareline_app_t *out, void *ctx);
+void ui_squareline_set_app_provider(uint32_t count, ui_squareline_app_provider_t provider, void *ctx);
+typedef void (*ui_squareline_app_rename_cb_t)(uint32_t page, const char *id, const char *title, void *ctx);
+void ui_squareline_set_app_rename_cb(ui_squareline_app_rename_cb_t cb, void *ctx);
+void ui_squareline_request_app_rename(uint32_t page, const char *id, const char *title);
 
 /** @brief Forget every installed app added so far. Call before ui_squareline_init(). */
 void ui_squareline_clear_apps(void);
@@ -164,7 +178,7 @@ typedef enum {
  * @param action    What the user asked for.
  * @param user_ctx  Context passed to ui_squareline_set_page_action_cb().
  */
-typedef void (*ui_squareline_page_action_cb_t)(uint8_t page, const char *app_id,
+typedef void (*ui_squareline_page_action_cb_t)(uint32_t page, const char *app_id,
                                                ui_squareline_page_action_t action,
                                                void *user_ctx);
 

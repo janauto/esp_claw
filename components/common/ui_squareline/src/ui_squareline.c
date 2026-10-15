@@ -79,7 +79,7 @@ const char *ui_squareline_resolve_img(const char *name)
     return ui_img_sd_path(name);
 }
 
-void ui_squareline_page_selected(uint8_t page, const char *app_id, const char *script)
+void ui_squareline_page_selected(uint32_t page, const char *app_id, const char *script)
 {
     /* A page-select handler takes over the decision entirely; without one, fall
      * back to the page's own script so the default behaviour still works. */
@@ -90,7 +90,7 @@ void ui_squareline_page_selected(uint8_t page, const char *app_id, const char *s
     ui_squareline_launch_app(script);
 }
 
-void ui_squareline_page_action(uint8_t page, const char *app_id,
+void ui_squareline_page_action(uint32_t page, const char *app_id,
                                ui_squareline_page_action_t action)
 {
     if (s_page_action_cb != NULL) {
@@ -98,17 +98,17 @@ void ui_squareline_page_action(uint8_t page, const char *app_id,
     }
 }
 
-uint8_t ui_squareline_page_count(void)
+uint32_t ui_squareline_page_count(void)
 {
     return ui_page_count();
 }
 
-uint8_t ui_squareline_current_page(void)
+uint32_t ui_squareline_current_page(void)
 {
     return ui_page_current();
 }
 
-void ui_squareline_show_page(uint8_t page)
+void ui_squareline_show_page(uint32_t page)
 {
     ui_page_show(page);
 }
@@ -137,4 +137,14 @@ lv_obj_t *ui_squareline_init(void)
 void ui_squareline_destroy(void)
 {
     ui_page_screen_destroy();
+}
+
+static ui_squareline_app_rename_cb_t s_rename_cb;
+static void *s_rename_ctx;
+void ui_squareline_set_app_rename_cb(ui_squareline_app_rename_cb_t cb, void *ctx) { s_rename_cb = cb; s_rename_ctx = ctx; }
+void ui_squareline_request_app_rename(uint32_t page, const char *id, const char *title) {
+    if (s_rename_cb) s_rename_cb(page, id, title, s_rename_ctx);
+}
+void ui_squareline_set_app_provider(uint32_t count, ui_squareline_app_provider_t provider, void *ctx) {
+    ui_page_set_provider(count, provider, ctx);
 }

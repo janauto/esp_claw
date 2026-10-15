@@ -68,7 +68,7 @@
 
 /* Installed apps: one accent for all of them, and room for their own strings. */
 #define UI_PAGE_APP_ACCENT      0xF0C430
-#define UI_PAGE_APP_TITLE_LEN   40
+#define UI_PAGE_APP_TITLE_LEN   96
 #define UI_PAGE_APP_ID_LEN      40
 #define UI_PAGE_APP_LOCATION_LEN 128
 
@@ -89,6 +89,7 @@ typedef struct {
     uint32_t    pill_color;     /* small pill on top of that frame               */
     const char *icon_sel;       /* centre slot – selected state                  */
     const char *icon_unsel;     /* flanking slots – unselected state             */
+    bool        renameable;
     bool        installed;      /* on the data partition, so it can be removed   */
     const char *location;       /* installed apps: where they live, for 详细      */
 } ui_app_desc_t;
@@ -112,11 +113,53 @@ static struct {
     char location[UI_PAGE_APP_LOCATION_LEN];
 } s_app_text[UI_PAGE_MAX];
 
+
+#define PACKAGE_CACHE_SLOTS 5
+static ui_squareline_app_provider_t s_provider;
+static void *s_provider_ctx;
+static uint32_t s_package_count;
+static uint32_t s_provider_clock;
+static struct {
+    uint32_t page, used;
+    ui_app_desc_t app;
+    char title[96], id[40], location[256], selected[320], unselected[320];
+} s_package_cache[PACKAGE_CACHE_SLOTS];
+static uint32_t page_total(void) { return s_page_count + s_package_count; }
+static uint32_t dot_count(void) { uint32_t n = page_total(); return n < 10 ? n : 10; }
+void ui_page_set_provider(uint32_t count, ui_squareline_app_provider_t provider, void *ctx) {
+    s_provider = provider; s_provider_ctx = ctx; s_package_count = provider ? count : 0;
+    memset(s_package_cache, 0, sizeof(s_package_cache)); s_provider_clock = 0;
+}
+static const ui_app_desc_t *page_at(uint32_t page) {
+    if (page < s_page_count) return &s_pages[page];
+    uint32_t slot = 0;
+    for (uint32_t i = 0; i < PACKAGE_CACHE_SLOTS; i++) {
+        if (s_package_cache[i].used && s_package_cache[i].page == page) { s_package_cache[i].used = ++s_provider_clock; return &s_package_cache[i].app; }
+        if (s_package_cache[i].used < s_package_cache[slot].used) slot = i;
+    }
+    ui_squareline_app_t app = {0};
+    bool ok = s_provider && s_provider(page - s_page_count, &app, s_provider_ctx);
+    strlcpy(s_package_cache[slot].title, ok && app.title ? app.title : "应用不可用", sizeof(s_package_cache[slot].title));
+    strlcpy(s_package_cache[slot].id, ok && app.app_id ? app.app_id : "", sizeof(s_package_cache[slot].id));
+    strlcpy(s_package_cache[slot].location, ok && app.location ? app.location : "", sizeof(s_package_cache[slot].location));
+    strlcpy(s_package_cache[slot].selected, ok && app.icon_selected ? app.icon_selected : UI_ICON_APP_NAME, sizeof(s_package_cache[slot].selected));
+    strlcpy(s_package_cache[slot].unselected, ok && app.icon_unselected ? app.icon_unselected : UI_ICON_APP_NAME, sizeof(s_package_cache[slot].unselected));
+    s_package_cache[slot].app = (ui_app_desc_t){
+        .title = s_package_cache[slot].title, .app_id = s_package_cache[slot].id,
+        .location = s_package_cache[slot].location, .icon_sel = s_package_cache[slot].selected,
+        .icon_unsel = s_package_cache[slot].unselected,
+        .frame_color = ok ? app.frame_color : UI_PAGE_APP_ACCENT, .pill_color = ok ? app.pill_color : UI_PAGE_APP_ACCENT,
+        .installed = ok, .renameable = ok && app.renameable,
+    };
+    s_package_cache[slot].page = page; s_package_cache[slot].used = ++s_provider_clock;
+    return &s_package_cache[slot].app;
+}
+
 /* Ring accessor: index modulo live count. */
-static inline uint8_t page_ring(int idx)
+static inline uint32_t page_ring(int64_t idx)
 {
-    int n = (int)s_page_count;
-    return (uint8_t)(((idx % n) + n) % n);
+    int64_t n = (int64_t)page_total();
+    return (uint32_t)(((idx % n) + n) % n);
 }
 
 /* Compile-time page table.  Every app lists only its own two icons; the carousel
@@ -203,8 +246,8 @@ static struct {
     lv_obj_t *footer_open;      /* middle caption, relabelled while the menu is up */
     lv_obj_t **dots;            /* allocated in screen_init, length = s_page_count */
     lv_timer_t *settle;         /* fires when a slide finishes, then re-binds */
-    uint8_t   page;
-    uint8_t   pending;          /* page to bind when s_ui.settle fires */
+    uint32_t  page;
+    uint32_t  pending;          /* page to bind when s_ui.settle fires */
 } s_ui;
 
 /* ------------------------------------------------------------------ helpers */
@@ -321,6 +364,7 @@ static const void *ui_page_icon_src(lv_obj_t *parent, const char *name, bool sel
     if (strcmp(name, UI_ICON_APP_NAME) == 0) {
         return ui_icon_app_src(parent, selected);
     }
+    if (strncmp(name, "S:/", 3) == 0) return name;
     return ui_img_sd_path(name);
 }
 
@@ -370,11 +414,11 @@ static lv_obj_t *ui_page_button(lv_obj_t *parent, int w, int h, int x, int y, bo
 /* Apply a page's data to the shared widgets and restore the designed carousel
  * layout. The slide animations write real object properties, so their end state
  * has to be undone before the next page is shown. */
-static void ui_page_bind(uint8_t page)
+static void ui_page_bind(uint32_t page)
 {
     lv_obj_t *slots[5];
 
-    if (s_ui.screen == NULL || page >= s_page_count) {
+    if (s_ui.screen == NULL || page >= page_total()) {
         return;
     }
     s_ui.page = page;
@@ -387,11 +431,11 @@ static void ui_page_bind(uint8_t page)
      *   right_in = pages[cur+2].icon_unsel — source the next page flies in from
      *   left_in  = pages[cur-2].icon_unsel — source the prev page flies in from
      */
-    const ui_app_desc_t *cur  = &s_pages[page];
-    const ui_app_desc_t *next = &s_pages[page_ring((int)page + 1)];
-    const ui_app_desc_t *prev = &s_pages[page_ring((int)page - 1)];
-    const ui_app_desc_t *next2 = &s_pages[page_ring((int)page + 2)];
-    const ui_app_desc_t *prev2 = &s_pages[page_ring((int)page - 2)];
+    const ui_app_desc_t *cur  = page_at(page);
+    const ui_app_desc_t *next = page_at(page_ring((int64_t)page + 1));
+    const ui_app_desc_t *prev = page_at(page_ring((int64_t)page - 1));
+    const ui_app_desc_t *next2 = page_at(page_ring((int64_t)page + 2));
+    const ui_app_desc_t *prev2 = page_at(page_ring((int64_t)page - 2));
 
     slots[0] = s_ui.icon_mid;
     slots[1] = s_ui.icon_right;
@@ -424,8 +468,10 @@ static void ui_page_bind(uint8_t page)
                                   LV_PART_MAIN | LV_STATE_DEFAULT);
     ui_page_block_fill(s_ui.pill, cur->pill_color);
 
-    for (uint8_t i = 0; i < s_page_count; i++) {
-        bool sel = (i == page);
+    for (uint32_t i = 0; i < dot_count(); i++) {
+        bool sel = (i == page % 10);
+        if (page / 10 * 10 + i < page_total()) lv_obj_remove_flag(s_ui.dots[i], LV_OBJ_FLAG_HIDDEN);
+        else lv_obj_add_flag(s_ui.dots[i], LV_OBJ_FLAG_HIDDEN);
         int size = sel ? UI_PAGE_DOT_SIZE_SEL : UI_PAGE_DOT_SIZE;
         lv_obj_set_width(s_ui.dots[i], size);
         lv_obj_set_height(s_ui.dots[i], size);
@@ -445,7 +491,7 @@ static void ui_page_settle_cb(lv_timer_t *timer)
 /* Start the slide towards @p target and re-bind once it has played out. While a
  * slide is in flight further presses are ignored, which the old screen-swapping
  * code could not do. */
-static void ui_page_slide(uint8_t target, bool forward)
+static void ui_page_slide(uint32_t target, bool forward)
 {
     if (s_ui.screen == NULL || s_ui.settle != NULL) {
         return;
@@ -472,6 +518,64 @@ static void ui_page_slide(uint8_t target, bool forward)
     }
 }
 
+static lv_obj_t *s_rename_overlay, *s_rename_input;
+static void ui_page_rename_finish(bool save)
+{
+    if (!s_rename_overlay) return;
+    if (save) {
+        const char *text = lv_textarea_get_text(s_rename_input);
+        if (!text[0] || strlen(text) > 95 || strspn(text, " ") == strlen(text)) {
+            ui_page_menu_toast(s_ui.screen, UI_PAGE_TOAST_Y, "名称不能为空，最多95字节"); return;
+        }
+        ui_squareline_request_app_rename(s_ui.page, page_at(s_ui.page)->app_id, text);
+    }
+    lv_obj_delete(s_rename_overlay); s_rename_overlay = s_rename_input = NULL;
+    lv_textarea_set_text(s_ui.footer_open, UI_PAGE_OPEN_CAPTION);
+}
+static void ui_page_rename_event(lv_event_t *e)
+{
+    if (lv_event_get_code(e) == LV_EVENT_READY) ui_page_rename_finish(true);
+    else if (lv_event_get_code(e) == LV_EVENT_CANCEL) ui_page_rename_finish(false);
+}
+static void ui_page_rename_button(lv_event_t *e)
+{
+    ui_page_rename_finish((uintptr_t)lv_event_get_user_data(e) != 0);
+}
+static void ui_page_rename_open(void)
+{
+    if (s_rename_overlay) return;
+    s_rename_overlay = lv_obj_create(s_ui.screen);
+    lv_obj_set_size(s_rename_overlay, 480, 744); lv_obj_set_pos(s_rename_overlay, 0, 0);
+    lv_obj_set_style_bg_color(s_rename_overlay, lv_color_hex(0x141414), 0);
+    lv_obj_set_style_border_width(s_rename_overlay, 0, 0);
+    lv_obj_t *heading = lv_label_create(s_rename_overlay);
+    lv_obj_set_style_text_color(heading, lv_color_hex(0xFAFBF5), 0);
+    lv_label_set_text(heading, "重命名应用"); lv_obj_align(heading, LV_ALIGN_TOP_MID, 0, 90);
+    if (ui_page_menu_get_font()) lv_obj_set_style_text_font(s_rename_overlay, ui_page_menu_get_font(), 0);
+    s_rename_input = lv_textarea_create(s_rename_overlay);
+    lv_textarea_set_one_line(s_rename_input, true); lv_textarea_set_max_length(s_rename_input, 95);
+    lv_obj_set_size(s_rename_input, 410, 72); lv_obj_align(s_rename_input, LV_ALIGN_TOP_MID, 0, 160);
+    lv_textarea_set_text(s_rename_input, page_at(s_ui.page)->title);
+    lv_obj_t *hint = lv_label_create(s_rename_overlay);
+    lv_obj_set_style_text_color(hint, lv_color_hex(0xBFC7C0), 0);
+    lv_label_set_text(hint, "确认保存 / 取消返回\n中文名称也可从电脑端修改");
+    lv_obj_align(hint, LV_ALIGN_TOP_MID, 0, 260);
+    for (int i = 0; i < 2; i++) {
+        lv_obj_t *button = lv_button_create(s_rename_overlay);
+        lv_obj_set_size(button, 175, 50); lv_obj_align(button, LV_ALIGN_TOP_MID, i ? 105 : -105, 340);
+        lv_obj_set_style_bg_color(button, lv_color_hex(i ? 0x23866D : 0x354039), 0);
+        lv_obj_t *label = lv_label_create(button); lv_label_set_text(label, i ? "保存" : "取消");
+        lv_obj_center(label); lv_obj_set_style_text_color(label, lv_color_hex(0xFAFBF5), 0);
+        lv_obj_add_event_cb(button, ui_page_rename_button, LV_EVENT_CLICKED, (void *)(uintptr_t)i);
+    }
+    lv_obj_t *keyboard = lv_keyboard_create(s_rename_overlay);
+    lv_obj_set_size(keyboard, 448, 290); lv_obj_align(keyboard, LV_ALIGN_BOTTOM_MID, 0, 0);
+    lv_keyboard_set_textarea(keyboard, s_rename_input);
+    lv_obj_add_event_cb(keyboard, ui_page_rename_event, LV_EVENT_READY, NULL);
+    lv_obj_add_event_cb(keyboard, ui_page_rename_event, LV_EVENT_CANCEL, NULL);
+    lv_textarea_set_text(s_ui.footer_open, UI_PAGE_MENU_CAPTION);
+}
+
 /* The three user actions the screen offers. Both the on-screen hit targets and
  * the board's physical keys funnel through these, so a key press behaves exactly
  * like a tap: same slide animation, same settle timer, same select dispatch.
@@ -481,25 +585,28 @@ static void ui_page_slide(uint8_t target, bool forward)
  * were, so the ring index moves opposite to the captions. */
 void ui_page_prev(void)
 {
+    if (s_rename_overlay) return;
     if (ui_page_menu_is_open()) {
         ui_page_menu_step(-1);
         return;
     }
-    ui_page_slide(page_ring((int)s_ui.page - 1), false);
+    ui_page_slide(page_ring((int64_t)s_ui.page - 1), false);
 }
 
 void ui_page_next(void)
 {
+    if (s_rename_overlay) return;
     if (ui_page_menu_is_open()) {
         ui_page_menu_step(1);
         return;
     }
-    ui_page_slide(page_ring((int)s_ui.page + 1), true);
+    ui_page_slide(page_ring((int64_t)s_ui.page + 1), true);
 }
 
 /* "M OPEN": report the selection and let the owner decide what to open. */
 void ui_page_select(void)
 {
+    if (s_rename_overlay) { ui_page_rename_finish(true); return; }
     const ui_app_desc_t *p;
 
     if (s_ui.screen == NULL) {
@@ -509,7 +616,7 @@ void ui_page_select(void)
         ui_page_menu_confirm();
         return;
     }
-    p = &s_pages[s_ui.page];
+    p = page_at(s_ui.page);
     ui_squareline_page_selected(s_ui.page, p->app_id, p->script);
 }
 
@@ -606,11 +713,12 @@ typedef enum {
     UI_PAGE_SHEET_DETAIL,
 } ui_page_sheet_t;
 
-enum { ACTION_UNINSTALL, ACTION_DETAIL, ACTION_CANCEL, ACTION_COUNT };
+enum { ACTION_UNINSTALL, ACTION_RENAME, ACTION_DETAIL, ACTION_CANCEL, ACTION_COUNT };
 enum { CONFIRM_UNINSTALL, CONFIRM_CANCEL, CONFIRM_COUNT };
 
 static const ui_page_menu_row_t s_action_rows[ACTION_COUNT] = {
     [ACTION_UNINSTALL] = { "卸载", UI_PAGE_MENU_ICON_TRASH, true  },
+    [ACTION_RENAME]    = { "重命名", UI_PAGE_MENU_ICON_INFO, false },
     [ACTION_DETAIL]    = { "详细", UI_PAGE_MENU_ICON_INFO,  false },
     [ACTION_CANCEL]    = { "取消", UI_PAGE_MENU_ICON_CLOSE, false },
 };
@@ -641,7 +749,7 @@ static void ui_page_toast(const char *text)
  * enough to cover the frame name the app in their heading instead. */
 static void ui_page_sheet_open(ui_page_sheet_t sheet, ui_page_menu_config_t *config, bool lift)
 {
-    const ui_app_desc_t *p = &s_pages[s_ui.page];
+    const ui_app_desc_t *p = page_at(s_ui.page);
     lv_obj_t *layer;
     lv_obj_t *icon;
 
@@ -666,13 +774,14 @@ static void ui_page_actions_open(void)
 {
     ui_page_menu_config_t config = {
         .panel_w    = UI_PAGE_SHEET_W,
+        .heading    = page_at(s_ui.page)->title,
         .rows       = s_action_rows,
         .row_count  = ACTION_COUNT,
         .focus      = ACTION_CANCEL,
         .cancel_row = ACTION_CANCEL,
     };
 
-    ui_page_sheet_open(UI_PAGE_SHEET_ACTIONS, &config, true);
+    ui_page_sheet_open(UI_PAGE_SHEET_ACTIONS, &config, false);
 }
 
 static void ui_page_confirm_open(void)
@@ -687,13 +796,13 @@ static void ui_page_confirm_open(void)
         .cancel_row = CONFIRM_CANCEL,
     };
 
-    snprintf(s_sheet_heading, sizeof(s_sheet_heading), "卸载「%s」？", s_pages[s_ui.page].title);
+    snprintf(s_sheet_heading, sizeof(s_sheet_heading), "卸载「%s」？", page_at(s_ui.page)->title);
     ui_page_sheet_open(UI_PAGE_SHEET_CONFIRM, &config, false);
 }
 
 static void ui_page_detail_open(void)
 {
-    const ui_app_desc_t *p = &s_pages[s_ui.page];
+    const ui_app_desc_t *p = page_at(s_ui.page);
     const ui_page_menu_field_t fields[] = {
         { "类型", p->installed ? "已安装应用" : "内置应用" },
         { "应用 ID", p->app_id != NULL ? p->app_id : "-" },
@@ -714,7 +823,7 @@ static void ui_page_detail_open(void)
 
 static void ui_page_sheet_done(uint8_t row)
 {
-    const ui_app_desc_t *p = &s_pages[s_ui.page];
+    const ui_app_desc_t *p = page_at(s_ui.page);
 
     lv_textarea_set_text(s_ui.footer_open, UI_PAGE_OPEN_CAPTION);
     switch (s_sheet) {
@@ -725,6 +834,9 @@ static void ui_page_sheet_done(uint8_t row)
             } else {
                 ui_page_toast("系统应用不可卸载");
             }
+        } else if (row == ACTION_RENAME) {
+            if (p->renameable) ui_page_rename_open();
+            else ui_page_toast(p->installed ? "旧格式应用请从原上位机修改" : "系统应用不可重命名");
         } else if (row == ACTION_DETAIL) {
             ui_page_detail_open();
         }
@@ -743,7 +855,7 @@ static void ui_page_sheet_done(uint8_t row)
 
 static void ui_page_mid_icon_long_cb(lv_event_t *e)
 {
-    if (lv_event_get_code(e) != LV_EVENT_LONG_PRESSED || s_ui.settle != NULL) {
+    if (s_rename_overlay || lv_event_get_code(e) != LV_EVENT_LONG_PRESSED || s_ui.settle != NULL) {
         return;
     }
     ui_page_actions_open();
@@ -770,7 +882,7 @@ void ui_page_screen_init(void)
     ui_page_load_defaults();
 
     /* Allocate the dot-widget pointer array now that we know the live count. */
-    s_ui.dots = lv_malloc(s_page_count * sizeof(lv_obj_t *));
+    s_ui.dots = lv_malloc(dot_count() * sizeof(lv_obj_t *));
     if (s_ui.dots == NULL) {
         return;
     }
@@ -864,8 +976,8 @@ void ui_page_screen_init(void)
                                    UI_CAROUSEL_SIDE_ZOOM, false, false);
 
     /* Indicator dots, left to right. */
-    for (uint8_t i = 0; i < s_page_count; i++) {
-        int x = ((int)i * 2 - (s_page_count - 1)) * UI_PAGE_DOT_SPACING / 2;
+    for (uint32_t i = 0; i < dot_count(); i++) {
+        int x = ((int)i * 2 - (int)(dot_count() - 1)) * UI_PAGE_DOT_SPACING / 2;
         s_ui.dots[i] = ui_page_block(root, UI_PAGE_DOT_SIZE, UI_PAGE_DOT_SIZE,
                                      x, UI_PAGE_DOT_Y, 75);
         ui_page_block_fill(s_ui.dots[i], UI_PAGE_DOT_COLOR);
@@ -918,6 +1030,7 @@ void ui_page_screen_init(void)
 
 void ui_page_screen_destroy(void)
 {
+    ui_page_rename_finish(false);
     ui_page_menu_close();
     ui_page_menu_toast_clear();
     if (s_ui.settle != NULL) {
@@ -940,17 +1053,17 @@ lv_obj_t *ui_page_get_screen(void)
     return s_ui.screen;
 }
 
-uint8_t ui_page_count(void)
+uint32_t ui_page_count(void)
 {
-    return s_page_count;
+    return page_total();
 }
 
-uint8_t ui_page_current(void)
+uint32_t ui_page_current(void)
 {
     return s_ui.page;
 }
 
-void ui_page_show(uint8_t page)
+void ui_page_show(uint32_t page)
 {
     ui_page_menu_close();       /* the menu belongs to the page being replaced */
     if (s_ui.settle != NULL) {
@@ -1030,6 +1143,7 @@ bool ui_page_add_app(const char *title, const char *app_id, const char *location
 
 void ui_page_clear_apps(void)
 {
+    ui_page_set_provider(0, NULL, NULL);
     if (s_ui.screen == NULL && s_page_count > s_static_page_count) {
         s_page_count = s_static_page_count;
     }

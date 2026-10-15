@@ -1,4 +1,6 @@
 dependencies:
+  local_app_store:
+    path: ../../../../components/common/local_app_store
   cap_lua:
     path: ../../../../components/claw_capabilities/cap_lua
   espressif/cjson:

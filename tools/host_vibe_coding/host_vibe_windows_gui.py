@@ -11,6 +11,7 @@ import os
 import queue
 import threading
 import time
+from app_manager_gui import AppManagerMixin
 import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
@@ -405,7 +406,7 @@ class WorkBuddyAudioRuntime:
         self.audio_packet_stats = {"packets": 0, "bytes": 0, "pcm_bytes": 0, "last_log": current}
 
 
-class HostVibeApp(tk.Tk):
+class HostVibeApp(AppManagerMixin, tk.Tk):
     def __init__(self) -> None:
         super().__init__()
         self.title("ESP-Claw 电脑端图形上位机")
@@ -732,6 +733,7 @@ class HostVibeApp(tk.Tk):
 
         actions = ttk.Frame(frame)
         actions.grid(row=2, column=0, columnspan=2, sticky="w", pady=(6, 0))
+        ttk.Button(actions, text="安装到应用栏 / 管理应用", command=self._open_app_manager).pack(side="left", padx=(0, 6))
         ttk.Button(actions, text="打开本地 Lua", command=self._open_lua).pack(side="left", padx=(0, 6))
         ttk.Button(actions, text="保存 Lua 到本地", command=self._save_lua).pack(side="left")
 
@@ -1224,6 +1226,11 @@ class HostVibeApp(tk.Tk):
         errors: list[tuple[str, Exception]] = []
         while not self.result_queue.empty():
             name, result, error = self.result_queue.get()
+            if name.startswith("apps_"):
+                self._handle_apps_result(name, result, error)
+                if error:
+                    errors.append((name, error))
+                continue
             if error:
                 if name == "workbuddy_audio_tx":
                     self.workbuddy_audio_tx_running = False

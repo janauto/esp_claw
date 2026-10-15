@@ -24,6 +24,7 @@
 #include <unistd.h>
 
 #include "cap_lua.h"
+#include "local_app_store.h"
 #include "cJSON.h"
 #include "claw_paths.h"
 #include "claw_skill.h"
@@ -77,6 +78,10 @@ static bool home_apps_entry_is_installed_app(const claw_skill_catalog_entry_t *e
  * launcher's id field. Launching and stopping must agree on it. */
 static void home_apps_job_name(const char *app_id, char *out, size_t out_size)
 {
+    if (strncmp(app_id, "app:", 4) == 0) {
+        if (local_app_store_job_name(app_id + 4, out, out_size) != ESP_OK) out[0] = 0;
+        return;
+    }
     size_t len = strlcpy(out, app_id, out_size);
 
     if (len >= out_size) {
@@ -86,6 +91,59 @@ static void home_apps_job_name(const char *app_id, char *out, size_t out_size)
         }
         out[len] = '\0';
     }
+}
+
+/* Package apps have a distinct UI namespace, preserving old skill and system IDs. */
+#define HOME_PACKAGE_PREFIX "app:"
+static local_app_store_handle_t s_package_store;
+static bool s_reload_requested;
+static struct {
+    char title[96], id[40], location[SYSTEM_UI_PATH_MAX];
+    char selected[SYSTEM_UI_PATH_MAX + 32], unselected[SYSTEM_UI_PATH_MAX + 32];
+} s_package_text;
+static bool home_package_at(uint32_t index, ui_squareline_app_t *app, void *ctx)
+{
+    cJSON *item = NULL; local_app_store_handle_t store = ctx;
+    if (local_app_store_at(store, index, &item) != ESP_OK) return false;
+    const cJSON *id = cJSON_GetObjectItemCaseSensitive(item, "app_id");
+    const cJSON *title = cJSON_GetObjectItemCaseSensitive(item, "title");
+    const cJSON *dir = cJSON_GetObjectItemCaseSensitive(item, "directory");
+    bool ok = cJSON_IsString(id) && cJSON_IsString(title) && cJSON_IsString(dir);
+    if (ok) {
+        strlcpy(s_package_text.title, title->valuestring, sizeof(s_package_text.title));
+        snprintf(s_package_text.id, sizeof(s_package_text.id), HOME_PACKAGE_PREFIX "%s", id->valuestring);
+        snprintf(s_package_text.location, sizeof(s_package_text.location), "%s/apps/%s", claw_paths_get(CLAW_PATH_DATA), dir->valuestring);
+        snprintf(s_package_text.selected, sizeof(s_package_text.selected), "S:%s/icon_selected.bin", s_package_text.location);
+        snprintf(s_package_text.unselected, sizeof(s_package_text.unselected), "S:%s/icon_unselected.bin", s_package_text.location);
+        *app = (ui_squareline_app_t){.title = s_package_text.title, .app_id = s_package_text.id,
+            .location = s_package_text.location, .renameable = true,
+            .icon_selected = cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(item, "icon_selected")) ? s_package_text.selected : NULL,
+            .icon_unselected = cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(item, "icon_unselected")) ? s_package_text.unselected : NULL,
+            .frame_color = (uint32_t)cJSON_GetObjectItemCaseSensitive(item, "frame_color")->valuedouble,
+            .pill_color = (uint32_t)cJSON_GetObjectItemCaseSensitive(item, "pill_color")->valuedouble};
+    }
+    cJSON_Delete(item); return ok;
+}
+void system_ui_home_apps_close_locked(void)
+{
+    ui_squareline_set_app_provider(0, NULL, NULL);
+    local_app_store_delete(s_package_store); s_package_store = NULL;
+}
+static void home_packages_register(void)
+{
+    char *root = malloc(SYSTEM_UI_PATH_MAX);
+    if (!root) return;
+    local_app_store_config_t config = {.root = root};
+    esp_err_t err = claw_paths_join(CLAW_PATH_DATA, LOCAL_APP_DIRECTORY, root, SYSTEM_UI_PATH_MAX);
+    if (err == ESP_OK) err = local_app_store_create(&config, &s_package_store);
+    cJSON *summary = NULL;
+    if (err == ESP_OK) err = local_app_store_summary(s_package_store, &summary);
+    if (err == ESP_OK) {
+        uint32_t count = (uint32_t)cJSON_GetObjectItemCaseSensitive(summary, "count")->valuedouble;
+        ui_squareline_set_app_provider(count, home_package_at, s_package_store);
+        ESP_LOGI(SYSTEM_UI_TAG, "home: %lu package app(s), lazy groups", (unsigned long)count);
+    } else ESP_LOGW(SYSTEM_UI_TAG, "home package index unavailable: %s", esp_err_to_name(err));
+    cJSON_Delete(summary); free(root);
 }
 
 /* ------------------------------------------------------------- carousel list */
@@ -139,7 +197,9 @@ void system_ui_home_apps_register_locked(void)
     size_t count = 0;
     esp_err_t err;
 
+    system_ui_home_apps_close_locked();
     ui_squareline_clear_apps();
+    home_packages_register();
     err = claw_skill_foreach_catalog_entry(home_apps_add_entry, &count);
     if (err == ESP_ERR_INVALID_STATE) {
         /* First boot pass: app_claw rebuilds the home once the registry is up. */
@@ -163,6 +223,23 @@ bool system_ui_home_apps_launch(const char *app_id)
         .generation = s_ui.generation,
     };
 
+    if (app_id && strncmp(app_id, HOME_PACKAGE_PREFIX, strlen(HOME_PACKAGE_PREFIX)) == 0) {
+        char *relative = malloc(SYSTEM_UI_PATH_MAX);
+        if (!relative) return true;
+        cJSON *manifest = NULL;
+        esp_err_t err = s_package_store ? local_app_store_get(s_package_store, app_id + strlen(HOME_PACKAGE_PREFIX), &manifest) : ESP_ERR_INVALID_STATE;
+        if (err == ESP_OK) err = local_app_store_directory(s_package_store, app_id + strlen(HOME_PACKAGE_PREFIX), relative, SYSTEM_UI_PATH_MAX);
+        if (err == ESP_OK) {
+            int n = snprintf(event.launcher_action, sizeof(event.launcher_action), "%s/apps/%s/main.lua", claw_paths_get(CLAW_PATH_DATA), relative);
+            if (n > 0 && n < sizeof(event.launcher_action)) {
+                home_apps_job_name(app_id, event.launcher_id, sizeof(event.launcher_id));
+                strlcpy(event.launcher_title, cJSON_GetObjectItemCaseSensitive(manifest, "title")->valuestring, sizeof(event.launcher_title));
+                if (event.launcher_id[0]) (void)system_ui_post_work_event(&event, 0);
+            }
+        } else ESP_LOGW(SYSTEM_UI_TAG, "package launch failed: %s", esp_err_to_name(err));
+        cJSON_Delete(manifest); free(relative); return true;
+    }
+
     if (app_id == NULL || claw_skill_get_catalog_entry(app_id, &entry) != ESP_OK ||
             !home_apps_entry_is_installed_app(&entry)) {
         return false;
@@ -183,7 +260,7 @@ bool system_ui_home_apps_launch(const char *app_id)
 
 /* ---------------------------------------------------------------- uninstall */
 
-void system_ui_home_apps_request_uninstall(uint8_t page, const char *app_id)
+void system_ui_home_apps_request_uninstall(uint32_t page, const char *app_id)
 {
     system_ui_work_event_t event = {
         .type = SYSTEM_UI_WORK_EVENT_APP_UNINSTALL,
@@ -287,6 +364,19 @@ static esp_err_t home_apps_uninstall(const char *app_id)
     char *output = NULL;
     esp_err_t err;
 
+    if (app_id && strncmp(app_id, HOME_PACKAGE_PREFIX, strlen(HOME_PACKAGE_PREFIX)) == 0) {
+        home_apps_job_name(app_id, job_name, sizeof(job_name));
+        if (!job_name[0]) return ESP_FAIL;
+        char *reply = calloc(1, HOME_APPS_STOP_OUTPUT_LEN);
+        if (!reply) return ESP_ERR_NO_MEM;
+        err = cap_lua_stop_job(job_name, HOME_APPS_STOP_WAIT_MS, reply, HOME_APPS_STOP_OUTPUT_LEN); free(reply);
+        if (err != ESP_OK && err != ESP_ERR_NOT_FOUND) return err;
+        if (display_service_has_exclusive_session()) return ESP_ERR_INVALID_STATE;
+        if (system_ui_lock() != ESP_OK) return ESP_ERR_INVALID_STATE;
+        err = s_package_store ? local_app_store_remove(s_package_store, app_id + strlen(HOME_PACKAGE_PREFIX)) : ESP_ERR_INVALID_STATE;
+        system_ui_unlock(); return err;
+    }
+
     ESP_RETURN_ON_ERROR(claw_skill_get_catalog_entry(app_id, &entry), SYSTEM_UI_TAG,
                         "home: uninstall %s: not in the skill registry", app_id);
     ESP_RETURN_ON_FALSE(home_apps_dir_is_installed(entry.skill_dir), ESP_ERR_NOT_SUPPORTED,
@@ -353,11 +443,63 @@ void system_ui_home_apps_handle_uninstall(const system_ui_work_event_t *event)
         return;
     }
     if (system_ui_lock() == ESP_OK) {
-        uint8_t count = ui_squareline_page_count();
-        uint8_t page = event->app_uninstall.page;
+        uint32_t count = ui_squareline_page_count();
+        uint32_t page = event->app_uninstall.page;
 
-        ui_squareline_show_page(page < count ? page : (uint8_t)(count - 1));
+        ui_squareline_show_page(page < count ? page : (uint32_t)(count - 1));
         ui_squareline_show_toast(toast);
         system_ui_unlock();
     }
+}
+
+/* Polling on the existing UI task coalesces refreshes and never destroys an
+ * active native/Lua screen. The same display mutex protects store readers. */
+esp_err_t system_ui_schedule_home_reload(void)
+{
+    if (!s_ui.started) return ESP_ERR_INVALID_STATE;
+    esp_err_t err = system_ui_lock(); if (err != ESP_OK) return err;
+    s_reload_requested = true; system_ui_unlock(); return ESP_OK;
+}
+void system_ui_home_apps_process_reload(void)
+{
+    if (!s_ui.started || system_ui_lock() != ESP_OK) return;
+    if (s_reload_requested && !display_service_has_exclusive_session() && lv_screen_active() == s_ui.home_screen) {
+        s_reload_requested = false;
+        uint32_t page = ui_squareline_current_page();
+        system_ui_delete_home_locked();
+        esp_err_t err = system_ui_create_home_locked();
+        if (err == ESP_OK) {
+            display_service_set_default_screen_locked(s_ui.home_screen);
+            uint32_t count = ui_squareline_page_count();
+            ui_squareline_show_page(page < count ? page : count - 1);
+        } else {
+            display_service_set_default_screen_locked(NULL);
+            ESP_LOGE(SYSTEM_UI_TAG, "home refresh failed: %s", esp_err_to_name(err));
+        }
+    }
+    system_ui_unlock();
+}
+void system_ui_home_apps_request_rename(uint32_t page, const char *id, const char *title)
+{
+    if (!id || !title) return;
+    system_ui_work_event_t *event = calloc(1, sizeof(*event));
+    if (!event) return;
+    event->type = SYSTEM_UI_WORK_EVENT_APP_RENAME; event->generation = s_ui.generation;
+    if (strlen(id) >= sizeof(event->app_uninstall.app_id) || strlen(title) >= sizeof(event->app_uninstall.title)) { free(event); return; }
+    event->app_uninstall.page = page;
+    strlcpy(event->app_uninstall.app_id, id, sizeof(event->app_uninstall.app_id));
+    strlcpy(event->app_uninstall.title, title, sizeof(event->app_uninstall.title));
+    if (system_ui_post_work_event(event, 0) != ESP_OK) ui_squareline_show_toast("重命名请求失败");
+    free(event);
+}
+void system_ui_home_apps_handle_rename(const system_ui_work_event_t *event)
+{
+    const char *id = event->app_uninstall.app_id;
+    esp_err_t err = ESP_ERR_NOT_SUPPORTED;
+    if (strncmp(id, HOME_PACKAGE_PREFIX, strlen(HOME_PACKAGE_PREFIX)) == 0 && system_ui_lock() == ESP_OK) {
+        err = s_package_store ? local_app_store_rename(s_package_store, id + strlen(HOME_PACKAGE_PREFIX), event->app_uninstall.title) : ESP_ERR_INVALID_STATE;
+        system_ui_unlock();
+    }
+    if (err == ESP_OK) (void)system_ui_schedule_home_reload();
+    if (system_ui_lock() == ESP_OK) { ui_squareline_show_toast(err == ESP_OK ? "已保存名称" : "重命名失败，名称最多95字节"); system_ui_unlock(); }
 }

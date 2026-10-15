@@ -261,3 +261,38 @@ python test_host_vibe.py        # 或 pytest test_host_vibe.py
 用假 bridge 和固定 LLM 返回覆盖迭代循环的停止条件，不需要真设备。
 
 GUI 使用 Python 自带的 Tkinter，不新增第三方 GUI 依赖。BLE 和 LLM 网络操作运行在后台线程，界面不会被请求阻塞。电脑端配置和历史默认保存在 `~/.esp_claw/host_vibe_coding/`，不会写入设备端 NVS。
+
+## 应用管理整合 · 2026-10-15
+
+本地 `codex/ble-live-apps` 已整合 GitLab b9332b3c 的应用包、图标、SD 导出和 BLE
+安装／下载／删除入口，并补齐设备端存储、动态首页和长按重命名。只整合应用管理；
+当前分支语音协议保留，不引入该 GitLab 提交未交齐的音频事件接口。
+
+两版电脑 GUI 的 Lua 编辑区新增“安装到应用栏 / 管理应用”：可设置 ID、名称、边框
+和标签颜色、两态图标；新增、导出、列出、查看详情、读取代码和图标、删除及重命名。
+图标可使用 PNG/JPEG/BMP 或原始 BIN；只选一张会生成暗色版本。不选择图片时使用默认图标。
+
+```sh
+python host_vibe.py export-app app.lua --app-id my_app --title 我的应用 --apps-dir /Volumes/CARD/apps
+python host_vibe.py --device DEVICE install-app app.lua --app-id my_app --title 我的应用 --color 35C7A5 --pill-color 23866D
+python host_vibe.py --device DEVICE list-apps
+python host_vibe.py --device DEVICE app-info my_app
+python host_vibe.py --device DEVICE download-app my_app --apps-dir ./backup/apps
+python host_vibe.py --device DEVICE rename-app my_app 新名称
+python host_vibe.py --device DEVICE remove-app my_app
+python host_vibe.py --device DEVICE reload-apps
+```
+
+新包位于 DATA 的 `apps/gXXXXXXXX/<id>/app.json`，每组最多十项；ID 不覆盖，升级须
+明确删除旧版后再安装。安装前检查固件 hello 能力，按1024字节分块写入，校验文件
+大小、SHA-256 和图标格式后发布；取消或断传不发布半包。提交超时不代表失败，先查列表。
+下载也校验每块身份、长度、EOF 和最终 SHA，仅读取，不执行代码。
+
+设备安装后返回首页自动刷新，重启从索引恢复；长按菜单可查看、卸载（二次确认）、
+重命名新格式用户应用。系统应用不可删除／重命名；旧 skills 格式继续由原入口管理。
+正在运行或排队的应用不能从电脑端删除，应先停止；原生页面／Lua 在前台时延迟刷新。
+中文名称可从电脑修改，设备虚拟键盘提供拉丁字符输入。
+
+单脚本最多64KiB，图标为256×256 RGB565；协议只打包入口脚本和两张图标。
+多文件 Lua、字体、海报、歌词及音频需另行部署。板型构建、宿主回归与实机验收分别记录，
+详见[存储与验证说明](../../components/common/local_app_store/README.md)。

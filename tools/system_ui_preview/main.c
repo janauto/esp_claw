@@ -35,9 +35,32 @@ static int32_t s_w, s_h;
 static lv_point_t s_touch_point;
 static bool s_touch_pressed;
 
+static void preview_action(uint32_t page, const char *id, ui_squareline_page_action_t action, void *ctx)
+{
+    (void)ctx; fprintf(stderr, "PREVIEW_ACTION page=%lu id=%s action=%d\n", (unsigned long)page, id, action);
+}
+static void preview_rename(uint32_t page, const char *id, const char *title, void *ctx)
+{
+    (void)ctx; fprintf(stderr, "PREVIEW_RENAME page=%lu id=%s title=%s\n", (unsigned long)page, id, title);
+}
+
+static bool preview_package(uint32_t index, ui_squareline_app_t *out, void *ctx)
+{
+    (void)ctx;
+    static char title[96], id[40], location[128];
+    snprintf(title, sizeof(title), "应用 %lu", (unsigned long)index + 1);
+    snprintf(id, sizeof(id), "app:demo%lu", (unsigned long)index);
+    snprintf(location, sizeof(location), "/sdcard/apps/g%08lx/demo%lu", (unsigned long)(index / 10), (unsigned long)index);
+    *out = (ui_squareline_app_t){.title = title, .app_id = id, .location = location,
+        .frame_color = 0x35c7a5, .pill_color = 0x35c7a5, .renameable = true};
+    return true;
+}
+
 /* Register the comma-separated PREVIEW_APPS as installed home apps. */
 static void add_preview_apps(void)
 {
+    const char *packages = getenv("PREVIEW_PACKAGE_COUNT");
+    if (packages) ui_squareline_set_app_provider((uint32_t)strtoul(packages, NULL, 10), preview_package, NULL);
     const char *env = getenv("PREVIEW_APPS");
     char list[256];
     char location[128];
@@ -183,9 +206,11 @@ int main(int argc, char **argv)
         ui_squareline_set_img_base_path(PREVIEW_IMG_BASE);
         ui_squareline_set_menu_font(s_ui.font);
         add_preview_apps();
+        ui_squareline_set_page_action_cb(preview_action, NULL);
+        ui_squareline_set_app_rename_cb(preview_rename, NULL);
         scr = ui_squareline_init();
         if (scr != NULL && screen[4] == ':') {
-            ui_squareline_show_page((uint8_t)atoi(screen + 5));
+            ui_squareline_show_page((uint32_t)strtoul(screen + 5, NULL, 10));
         }
     } else if (strcmp(screen, "boot") == 0) {
         system_ui_create_boot_locked();
@@ -216,5 +241,7 @@ int main(int argc, char **argv)
         }
     }
     render();
+    if (strncmp(screen, "home", 4) == 0) fprintf(stderr, "PREVIEW_HOME page=%lu total=%lu\n",
+        (unsigned long)ui_squareline_current_page(), (unsigned long)ui_squareline_page_count());
     return write_bmp(argv[4]) == 0 ? 0 : 1;
 }

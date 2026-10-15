@@ -6,6 +6,7 @@ set(ble_host_bridge_requires
     mbedtls
     nvs_flash
     system_ui
+    local_app_store
 )
 
 # The HID services are registered into this component's GATT server, so the
@@ -17,6 +18,7 @@ endif()
 idf_component_register(
     SRCS
         "src/ble_host_bridge.c"
+        "src/ble_host_apps.c"
         "src/voice_frame.c"
     INCLUDE_DIRS
         "include"

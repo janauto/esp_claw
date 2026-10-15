@@ -22,3 +22,10 @@ apps after the built-in pages (page 9 onwards), as if they lived under
 `/sdcard/skills/<name>`.
 Carousel icons come from the compiled-in copies under
 `ui_squareline/src/images` instead of the SD-card `.bin` files.
+
+
+2026-10-15 package UI checks: `PREVIEW_PACKAGE_COUNT=267` supplies synthetic
+package descriptors to the real carousel, allowing `home:275` (9 built-ins +
+267 packages), long-press rename, confirmation and task callback capture.
+The preview prints `PREVIEW_HOME`, `PREVIEW_RENAME`, and `PREVIEW_ACTION` lines;
+these are UI routing checks, not filesystem writes or device acceptance.

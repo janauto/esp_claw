@@ -24,6 +24,7 @@ idf_component_register(
         claw_cap
         claw_core
         claw_skill
+        local_app_store
         display_service
         esp_audio_codec
         esp_board_manager

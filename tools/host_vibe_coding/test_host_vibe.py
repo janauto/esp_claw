@@ -52,6 +52,11 @@ class FakeBridge:
 
     async def request(self, command, timeout=None):
         op = command.get("op")
+        if op == "job_stop":
+            # The runner now stops an existing job before every upload. Model
+            # that acknowledgement without consuming the next execution result.
+            self.current = status_text("stopped", "previous job stopped")
+            return {"ok": True, "data": "previous job stopped"}
         if op == "put_lua":
             return {"ok": True, "data": "/fatfs/scripts/host/x.lua"}
         if op == "run_lua":
@@ -637,3 +642,16 @@ def main():
 
 if __name__ == "__main__":
     sys.exit(main())
+
+
+def test_unconfirmed_stop_never_uploads_new_script():
+    class BusyBridge(FakeBridge):
+        async def request(self, command, timeout=None):
+            if command['op'] == 'job_stop':
+                raise ConnectionError('stop acknowledgement lost')
+            if command['op'] == 'put_lua':
+                raise AssertionError('must not upload after unknown stop result')
+            return await super().request(command, timeout)
+    import pytest
+    with pytest.raises(RuntimeError, match='停止旧 Lua job 未确认'):
+        asyncio.run(h.run_lua_and_collect(BusyBridge([]), GOOD_SCRIPT))

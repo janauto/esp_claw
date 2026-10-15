@@ -2055,6 +2055,37 @@ def parse_result_data(value: Any) -> Any:
     return value
 
 
+async def cmd_apps(args: argparse.Namespace) -> None:
+    from app_package import app_request, build_package, download_app, install_app, validate_identity
+    package = None
+    if args.command in {"install-app", "export-app"}:
+        script = Path(args.script).read_text(encoding="utf-8")
+        validate_generated_lua(script)
+        package = build_package(script, args.app_id, args.title, selected=args.icon_selected,
+                                unselected=args.icon_unselected, frame_color=args.color, pill_color=args.pill_color)
+        if args.command == "export-app":
+            print(package.export(args.apps_dir))
+            return
+    if args.command in {"remove-app", "rename-app", "app-info", "download-app"}:
+        validate_identity(args.app_id, args.title if args.command == "rename-app" else "app")
+
+    async def run(bridge: BleBridge) -> None:
+        if args.command == "install-app":
+            print_json(await install_app(bridge, package, print))
+        elif args.command == "remove-app":
+            print_json(await app_request(bridge, "app_remove", app_id=args.app_id))
+        elif args.command == "rename-app":
+            print_json(await app_request(bridge, "app_rename", app_id=args.app_id, title=args.title))
+        elif args.command == "app-info":
+            print_json(await app_request(bridge, "app_info", app_id=args.app_id))
+        elif args.command == "download-app":
+            downloaded = await download_app(bridge, args.app_id, print)
+            print(downloaded.export(args.apps_dir))
+        else:
+            print_json(await app_request(bridge, "app_reload" if args.command == "reload-apps" else "app_list"))
+    await with_bridge(args, run)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="ESP-Claw 电脑端图形上位机")
     parser.add_argument("--device", help="BLE 地址；不传则按名称前缀扫描")
@@ -2109,12 +2140,37 @@ def build_parser() -> argparse.ArgumentParser:
     plan = sub.add_parser("plan", help="只看模块路由结果，不连接设备")
     plan.add_argument("prompt")
 
+    for command in ("install-app", "export-app"):
+        app = sub.add_parser(command, help="安装到设备应用栏" if command == "install-app" else "导出到 SD 卡 apps 文件夹")
+        app.add_argument("script")
+        app.add_argument("--app-id", required=True)
+        app.add_argument("--title", required=True)
+        app.add_argument("--icon-selected", type=Path)
+        app.add_argument("--icon-unselected", type=Path)
+        app.add_argument("--color", type=lambda value: int(value.removeprefix("#"), 16), default=0xEDC22E)
+        app.add_argument("--pill-color", type=lambda value: int(value.removeprefix("#"), 16))
+        if command == "export-app":
+            app.add_argument("--apps-dir", type=Path, required=True)
+    sub.add_parser("list-apps", help="列出已安装应用")
+    sub.add_parser("reload-apps", help="从 SD 卡重新加载应用栏")
+    info = sub.add_parser("app-info", help="获取用户应用的名称、颜色、代码与图标路径及文件摘要")
+    info.add_argument("app_id")
+    download = sub.add_parser("download-app", help="通过蓝牙取回用户应用的配置、Lua 和图标")
+    download.add_argument("app_id")
+    download.add_argument("--apps-dir", type=Path, required=True)
+    rename = sub.add_parser("rename-app", help="修改用户应用显示名称，保持ID和文件路径")
+    rename.add_argument("app_id")
+    rename.add_argument("title")
+    remove = sub.add_parser("remove-app", help="删除已安装应用（先停止正在运行的应用）")
+    remove.add_argument("app_id")
     sub.add_parser("modules", help="打印设备可用 Lua 模块清单")
     return parser
 
 
 async def main_async(args: argparse.Namespace) -> None:
-    if args.command == "scan":
+    if args.command in {"install-app", "export-app", "list-apps", "remove-app", "rename-app", "reload-apps", "app-info", "download-app"}:
+        await cmd_apps(args)
+    elif args.command == "scan":
         await cmd_scan(args)
     elif args.command == "hello":
         await cmd_hello(args)

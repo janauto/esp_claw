@@ -48,6 +48,7 @@ target_include_directories(system_ui_preview PRIVATE
     "${LVGL_DIR}"
     "${UI_SQ}/include" "${UI_SQ}/src"
     "${SYS_UI}/include" "${SYS_UI}/src"
+    "${REPO}/components/claw_modules/claw_core/include"
     "${REPO}/components/common/display_service/include"
     "${REPO}/components/lua_modules/lua_module_audio/src"
     "${APP}/managed_components/espressif__esp_audio_codec/include"

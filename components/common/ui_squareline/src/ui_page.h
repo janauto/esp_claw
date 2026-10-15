@@ -9,6 +9,7 @@
 #include <stdint.h>
 
 #include "lvgl.h"
+#include "ui_squareline.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -34,10 +35,10 @@ void ui_page_screen_destroy(void);
 lv_obj_t *ui_page_get_screen(void);
 
 /** @brief Number of pages currently in the carousel ring. */
-uint8_t ui_page_count(void);
+uint32_t ui_page_count(void);
 
 /** @brief Index of the page currently bound to the screen. */
-uint8_t ui_page_current(void);
+uint32_t ui_page_current(void);
 
 /**
  * @brief Register an additional app page at runtime.
@@ -101,8 +102,10 @@ void ui_page_select(void);
  *
  * Out-of-range indices are ignored. Does nothing if the screen is not built.
  */
-void ui_page_show(uint8_t page);
+void ui_page_show(uint32_t page);
 
 #ifdef __cplusplus
 } /*extern "C"*/
 #endif
+
+void ui_page_set_provider(uint32_t count, ui_squareline_app_provider_t provider, void *ctx);
