@@ -17,6 +17,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <dirent.h>
+#include "esp_vfs_fat.h"
 
 static struct { uint8_t *screen_pixels; size_t screen_bytes;
                 unsigned screen_width, screen_height, screen_id; } s_capture;
@@ -68,6 +70,14 @@ static cJSON *command_reply(const cJSON *command) {
         }
         cJSON_AddStringToObject(reply, "mode", system_ui_home_mode_name());
         cJSON_AddStringToObject(reply, "firmware", claw_get_git_version());
+        {
+            /* DATA（SD 卡）剩余空间：写不进去时先看是不是满了 */
+            uint64_t total = 0, free_bytes = 0;
+            if (esp_vfs_fat_info(claw_paths_get(CLAW_PATH_DATA), &total, &free_bytes) == ESP_OK) {
+                cJSON_AddNumberToObject(reply, "data_total", (double)total);
+                cJSON_AddNumberToObject(reply, "data_free", (double)free_bytes);
+            }
+        }
         cJSON_AddBoolToObject(reply, "ble_voice", true);
         cJSON_AddBoolToObject(reply, "live_actions", true);
         cJSON_AddBoolToObject(reply, "recording", system_ui_workbuddy_audio_capturing());
@@ -98,6 +108,76 @@ static cJSON *command_reply(const cJSON *command) {
                        "display", true, output, 4096);
                    cJSON_AddStringToObject(reply, "job", output); free(output); }
         }
+    } else if (!strcmp(op, "fs_list")) {
+        /* 只读诊断：列出 DATA 下某个目录（不超过 200 项），每项带大小；子目录给出总大小（只往下数两层） */
+        const char *rel = string_field(command, "path");
+        char *path = malloc(256), *child = malloc(512);
+        cJSON *items = cJSON_CreateArray();
+        err = (path && child && items) ? ESP_OK : ESP_ERR_NO_MEM;
+        if (err == ESP_OK) {
+            snprintf(path, 256, "%s/%s", claw_paths_get(CLAW_PATH_DATA), rel ? rel : "");
+            DIR *dir = opendir(path);
+            if (!dir) {
+                err = ESP_ERR_NOT_FOUND;
+            } else {
+                struct dirent *de;
+                int n = 0;
+                while ((de = readdir(dir)) && n < 200) {
+                    struct stat st;
+                    snprintf(child, 512, "%s/%s", path, de->d_name);
+                    if (stat(child, &st) != 0) continue;
+                    double size = (double)st.st_size;
+                    if (S_ISDIR(st.st_mode)) {
+                        size = 0;
+                        DIR *d2 = opendir(child);
+                        struct dirent *e2;
+                        while (d2 && (e2 = readdir(d2))) {
+                            char *g = malloc(768);
+                            struct stat s2;
+                            if (g) {
+                                snprintf(g, 768, "%s/%s", child, e2->d_name);
+                                if (stat(g, &s2) == 0) {
+                                    if (S_ISDIR(s2.st_mode)) {
+                                        DIR *d3 = opendir(g);
+                                        struct dirent *e3;
+                                        while (d3 && (e3 = readdir(d3))) {
+                                            char *h3 = malloc(1024);
+                                            struct stat s3;
+                                            if (h3) {
+                                                snprintf(h3, 1024, "%s/%s", g, e3->d_name);
+                                                if (stat(h3, &s3) == 0 && !S_ISDIR(s3.st_mode)) size += (double)s3.st_size;
+                                                free(h3);
+                                            }
+                                        }
+                                        if (d3) closedir(d3);
+                                    } else {
+                                        size += (double)s2.st_size;
+                                    }
+                                }
+                                free(g);
+                            }
+                        }
+                        if (d2) closedir(d2);
+                    }
+                    cJSON *it = cJSON_CreateObject();
+                    if (it) {
+                        cJSON_AddStringToObject(it, "name", de->d_name);
+                        cJSON_AddBoolToObject(it, "dir", S_ISDIR(st.st_mode));
+                        cJSON_AddNumberToObject(it, "size", size);
+                        cJSON_AddItemToArray(items, it);
+                    }
+                    n++;
+                }
+                closedir(dir);
+            }
+        }
+        if (err == ESP_OK) {
+            cJSON_AddItemToObject(reply, "items", items);
+            items = NULL;
+        }
+        cJSON_Delete(items);
+        free(path);
+        free(child);
     } else if (!strcmp(op, "app_stop")) {
         char *output = calloc(1, 4096);
         err = output ? cap_lua_stop_all_jobs("display", 3000, output, 4096) : ESP_ERR_NO_MEM;
