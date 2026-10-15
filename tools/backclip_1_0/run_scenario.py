@@ -95,6 +95,17 @@ def run(dev, scenario, out):
     sdir = out / name
     sdir.mkdir(parents=True, exist_ok=True)
     report = {"name": name, "steps": [], "passed": 0, "failed": 0}
+    if scenario.get("reset", True):
+        # 每个场景从干净的首页开始：先退出前台应用，再收起面板/编辑/语音卡片
+        try:
+            st = dev.rpc({"op": "home_state"})
+            if st.get("exclusive_app"):
+                dev.rpc({"op": "app_stop"})
+                time.sleep(1.5)
+            dev.rpc({"op": "home_reset"})
+            time.sleep(0.6)
+        except RuntimeError as e:
+            report["reset_error"] = str(e)
     for i, step in enumerate(scenario.get("steps", [])):
         rec = {"i": i, "step": step}
         try:

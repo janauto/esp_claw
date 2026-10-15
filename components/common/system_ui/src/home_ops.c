@@ -258,7 +258,7 @@ esp_err_t system_ui_home_handle_op(const char *op, const cJSON *req, bool uart, 
         err = hv_plat_mode_set(!strcmp(m, "dock") ? HV_MODE_DOCK : HV_MODE_CLIP);
         hv_refresh_status();
         hv_control_refresh();
-        hv_toast(!strcmp(m, "dock") ? "已切到底座模式（来自手机）" : "已切到背夹模式（来自手机）");
+        hv_toast(!strcmp(m, "dock") ? "已切到底座模式" : "已切到背夹模式");
         *out = hv_mode_json();
         system_ui_unlock();
         return err;
@@ -390,6 +390,17 @@ esp_err_t system_ui_home_handle_op(const char *op, const cJSON *req, bool uart, 
         return ESP_ERR_NOT_SUPPORTED;
     }
     /* ---------------------------------------------- 只给 UART 自动验收用 */
+    if (!strcmp(op, "home_reset")) {
+        /* 自动验收：每个场景从干净的首页开始（不退出正在运行的应用，应用用 app_stop） */
+        if (system_ui_lock() != ESP_OK) return ESP_ERR_TIMEOUT;
+        hv_go_home();
+        hv_set_page(0, false);
+        hv_focus_ring(NULL, false);
+        system_ui_jobs_set_visible_locked(false);
+        *out = hv_state_json();
+        system_ui_unlock();
+        return *out ? ESP_OK : ESP_ERR_NO_MEM;
+    }
     if (!strcmp(op, "home_state")) {
         if (system_ui_lock() != ESP_OK) return ESP_ERR_TIMEOUT;
         *out = hv_state_json();

@@ -1,0 +1,97 @@
+{
+ "name": "s06_voice_dock_text",
+ "steps": [
+  {
+   "note": "底座模式：文字直达对话（跳过录音与识别），验证设备直连云端与工具调用"
+  },
+  {
+   "op": "mode_set",
+   "mode": "dock"
+  },
+  {
+   "wait": 500
+  },
+  {
+   "op": "mode_get",
+   "expect": {
+    "mode": "dock",
+    "voice_route": "wifi",
+    "ai_ready": true
+   }
+  },
+  {
+   "op": "voice_text",
+   "text": "你好，你是谁？"
+  },
+  {
+   "wait": 9000
+  },
+  {
+   "op": "home_state",
+   "expect": {
+    "voice": "reply"
+   }
+  },
+  {
+   "shot": "reply_hello"
+  },
+  {
+   "wait": 800
+  },
+  {
+   "op": "voice_text",
+   "text": "把音量调到百分之三十"
+  },
+  {
+   "wait": 9000
+  },
+  {
+   "op": "home_state",
+   "expect": {
+    "voice": "reply"
+   }
+  },
+  {
+   "shot": "reply_volume"
+  },
+  {
+   "wait": 800
+  },
+  {
+   "op": "voice_text",
+   "text": "打开贪吃蛇"
+  },
+  {
+   "wait": 10000
+  },
+  {
+   "op": "home_state",
+   "expect": {
+    "exclusive_app": true
+   }
+  },
+  {
+   "shot": "snake_opened_by_voice"
+  },
+  {
+   "op": "app_stop"
+  },
+  {
+   "wait": 1500
+  },
+  {
+   "op": "mode_set",
+   "mode": "clip"
+  },
+  {
+   "wait": 300
+  },
+  {
+   "op": "home_state",
+   "expect": {
+    "view": "home",
+    "mode": "clip"
+   }
+  }
+ ]
+}

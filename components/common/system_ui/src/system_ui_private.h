@@ -163,6 +163,7 @@ typedef enum {
     SYSTEM_UI_TOUCH_GESTURE_EXIT_APP,
     SYSTEM_UI_TOUCH_GESTURE_HOME_TOP,       /* 首页顶部下拉：控制中心 */
     SYSTEM_UI_TOUCH_GESTURE_HOME_BOTTOM,    /* 首页底部上滑：应用总览 / 回首页 */
+    SYSTEM_UI_TOUCH_GESTURE_BUSY,           /* 这次按压不是系统手势（或已触发过） */
 } system_ui_touch_gesture_t;
 
 typedef enum {

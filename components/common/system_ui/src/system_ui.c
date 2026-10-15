@@ -17,8 +17,6 @@
 EXT_RAM_BSS_ATTR system_ui_state_t s_ui;
 
 static const char *SYSTEM_UI_DISPLAY_OWNER_NAME = "system_ui";
-static int32_t s_touch_start_x;
-static int32_t s_touch_start_y;
 
 #define SYSTEM_UI_JOBS_SWIPE_EDGE_PX 32
 #define SYSTEM_UI_JOBS_SWIPE_TRIGGER_PX 54
@@ -306,65 +304,74 @@ static void system_ui_stop_event_task(void)
     s_ui.event_task_stop = false;
 }
 
-static void system_ui_touch_observer_cb(const display_service_touch_sample_t *sample, void *user_ctx)
-{
-    (void)user_ctx;
+/* 手势识别状态。真实触摸与自动验收注入的触摸各用一份：触摸控制器空闲时也会
+ * 不停送“未按下”采样，共用一份会把注入的手势中途清掉。 */
+typedef struct {
+    system_ui_touch_gesture_t gesture;
+    int32_t start_x;
+    int32_t start_y;
+} system_ui_gesture_state_t;
 
-    if (sample == NULL || !s_ui.started) {
-        return;
-    }
+static system_ui_gesture_state_t s_gesture_real;
+static system_ui_gesture_state_t s_gesture_inject;
+
+static void system_ui_gesture_feed(system_ui_gesture_state_t *st, const display_service_touch_sample_t *sample)
+{
     if (sample->pressed) {
-        if (s_ui.touch_gesture == SYSTEM_UI_TOUCH_GESTURE_NONE) {
+        if (st->gesture == SYSTEM_UI_TOUCH_GESTURE_NONE) {
             bool exclusive = display_service_has_exclusive_session();
-            s_touch_start_x = sample->x;
-            s_touch_start_y = sample->y;
+            st->start_x = sample->x;
+            st->start_y = sample->y;
 #ifndef SYSTEM_UI_BOTTOM_SWIPE_EXIT_DISABLED
-            if (exclusive && s_touch_start_y >= (int32_t)s_ui.height - SYSTEM_UI_BOTTOM_SWIPE_EDGE_PX) {
-                s_ui.touch_gesture = SYSTEM_UI_TOUCH_GESTURE_EXIT_APP;
+            if (exclusive && st->start_y >= (int32_t)s_ui.height - SYSTEM_UI_BOTTOM_SWIPE_EDGE_PX) {
+                st->gesture = SYSTEM_UI_TOUCH_GESTURE_EXIT_APP;
             } else
 #endif
-            if (!exclusive && !s_ui.jobs_visible && s_touch_start_y <= SYSTEM_UI_HOME_TOP_EDGE_PX) {
-                s_ui.touch_gesture = SYSTEM_UI_TOUCH_GESTURE_HOME_TOP;
-            } else if (!exclusive && s_touch_start_y >= (int32_t)s_ui.height - SYSTEM_UI_HOME_BOTTOM_EDGE_PX) {
-                s_ui.touch_gesture = SYSTEM_UI_TOUCH_GESTURE_HOME_BOTTOM;
+            if (!exclusive && !s_ui.jobs_visible && st->start_y <= SYSTEM_UI_HOME_TOP_EDGE_PX) {
+                st->gesture = SYSTEM_UI_TOUCH_GESTURE_HOME_TOP;
+            } else if (!exclusive && st->start_y >= (int32_t)s_ui.height - SYSTEM_UI_HOME_BOTTOM_EDGE_PX) {
+                st->gesture = SYSTEM_UI_TOUCH_GESTURE_HOME_BOTTOM;
+            } else {
+                /* 从中间按下的不是系统手势：标记为“已占用”，直到抬起 */
+                st->gesture = SYSTEM_UI_TOUCH_GESTURE_BUSY;
             }
-        } else if ((s_ui.touch_gesture == SYSTEM_UI_TOUCH_GESTURE_HOME_TOP &&
-                    sample->y - s_touch_start_y >= SYSTEM_UI_HOME_SWIPE_TRIGGER_PX) ||
-                   (s_ui.touch_gesture == SYSTEM_UI_TOUCH_GESTURE_HOME_BOTTOM &&
-                    s_touch_start_y - sample->y >= SYSTEM_UI_HOME_SWIPE_TRIGGER_PX)) {
-            if (system_ui_abs_i32(sample->x - s_touch_start_x) <= SYSTEM_UI_BOTTOM_SWIPE_HORIZONTAL_TOL_PX) {
+        } else if ((st->gesture == SYSTEM_UI_TOUCH_GESTURE_HOME_TOP &&
+                    sample->y - st->start_y >= SYSTEM_UI_HOME_SWIPE_TRIGGER_PX) ||
+                   (st->gesture == SYSTEM_UI_TOUCH_GESTURE_HOME_BOTTOM &&
+                    st->start_y - sample->y >= SYSTEM_UI_HOME_SWIPE_TRIGGER_PX)) {
+            if (system_ui_abs_i32(sample->x - st->start_x) <= SYSTEM_UI_BOTTOM_SWIPE_HORIZONTAL_TOL_PX) {
                 system_ui_work_event_t event = {
                     .type = SYSTEM_UI_WORK_EVENT_HOME_GESTURE,
                     .generation = s_ui.generation,
-                    .home_gesture = s_ui.touch_gesture == SYSTEM_UI_TOUCH_GESTURE_HOME_TOP ?
+                    .home_gesture = st->gesture == SYSTEM_UI_TOUCH_GESTURE_HOME_TOP ?
                                     SYSTEM_UI_HOME_GESTURE_PULL_DOWN_TOP : SYSTEM_UI_HOME_GESTURE_SWIPE_UP_BOTTOM,
                 };
                 (void)system_ui_post_work_event(&event, 0);
             }
-            s_ui.touch_gesture = SYSTEM_UI_TOUCH_GESTURE_NONE;
-        } else if (s_ui.touch_gesture == SYSTEM_UI_TOUCH_GESTURE_SHOW_JOBS &&
-                   !s_ui.jobs_visible &&
-                   sample->y - s_touch_start_y >= SYSTEM_UI_JOBS_SWIPE_TRIGGER_PX &&
-                   system_ui_abs_i32(sample->x - s_touch_start_x) <= SYSTEM_UI_JOBS_SWIPE_HORIZONTAL_TOL_PX) {
-            system_ui_work_event_t event = {
-                .type = SYSTEM_UI_WORK_EVENT_SHOW_JOBS,
-                .generation = s_ui.generation,
-            };
-            (void)system_ui_post_work_event(&event, 0);
-            s_ui.touch_gesture = SYSTEM_UI_TOUCH_GESTURE_NONE;
-        } else if (s_ui.touch_gesture == SYSTEM_UI_TOUCH_GESTURE_EXIT_APP &&
-                   s_touch_start_y - sample->y >= SYSTEM_UI_BOTTOM_SWIPE_TRIGGER_PX &&
-                   system_ui_abs_i32(sample->x - s_touch_start_x) <= SYSTEM_UI_BOTTOM_SWIPE_HORIZONTAL_TOL_PX) {
+            st->gesture = SYSTEM_UI_TOUCH_GESTURE_BUSY;     /* 一次按压只触发一次 */
+        } else if (st->gesture == SYSTEM_UI_TOUCH_GESTURE_EXIT_APP &&
+                   st->start_y - sample->y >= SYSTEM_UI_BOTTOM_SWIPE_TRIGGER_PX &&
+                   system_ui_abs_i32(sample->x - st->start_x) <= SYSTEM_UI_BOTTOM_SWIPE_HORIZONTAL_TOL_PX) {
             system_ui_work_event_t event = {
                 .type = SYSTEM_UI_WORK_EVENT_APP_EXIT_SWIPE,
                 .generation = s_ui.generation,
             };
             (void)system_ui_post_work_event(&event, 0);
-            s_ui.touch_gesture = SYSTEM_UI_TOUCH_GESTURE_NONE;
+            st->gesture = SYSTEM_UI_TOUCH_GESTURE_BUSY;
         }
     } else {
-        s_ui.touch_gesture = SYSTEM_UI_TOUCH_GESTURE_NONE;
+        st->gesture = SYSTEM_UI_TOUCH_GESTURE_NONE;
     }
+}
+
+static void system_ui_touch_observer_cb(const display_service_touch_sample_t *sample, void *user_ctx)
+{
+    (void)user_ctx;
+    if (sample == NULL || !s_ui.started) {
+        return;
+    }
+    system_ui_gesture_feed(&s_gesture_real, sample);
+    s_ui.touch_gesture = s_gesture_real.gesture;
 }
 
 bool system_ui_system_overlay_allowed(void)
@@ -416,7 +423,9 @@ void system_ui_touch_inject_sample(int32_t x, int32_t y, bool pressed)
     sample.x = x;
     sample.y = y;
     sample.pressed = pressed;
-    system_ui_touch_observer_cb(&sample, NULL);
+    if (s_ui.started) {
+        system_ui_gesture_feed(&s_gesture_inject, &sample);
+    }
 }
 
 /* 首页手势：在 UI 事件任务里、持锁执行。 */
