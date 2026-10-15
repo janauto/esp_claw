@@ -153,6 +153,8 @@ typedef struct {
     bool host_synced;
     bool controller_inited;
     bool controller_enabled;
+    bool nimble_inited;
+    bool host_task_started;
     bool subscribed;
     bool audio_subscribed;
     uint8_t own_addr_type;
@@ -2153,6 +2155,7 @@ esp_err_t ble_host_bridge_start(const ble_host_bridge_config_t *config)
     ESP_GOTO_ON_ERROR(err, fail, TAG, "nvs init failed");
     ESP_GOTO_ON_ERROR(start_controller(), fail, TAG, "controller start failed");
     ESP_GOTO_ON_ERROR(esp_nimble_init(), fail, TAG, "nimble init failed");
+    s_bridge.nimble_inited = true;
     rc = ble_att_set_preferred_mtu(BLE_HOST_BRIDGE_PREFERRED_MTU);
     ESP_GOTO_ON_FALSE(rc == 0, ESP_FAIL, fail, TAG, "set preferred mtu failed rc=%d", rc);
 
@@ -2197,6 +2200,7 @@ esp_err_t ble_host_bridge_start(const ble_host_bridge_config_t *config)
     ESP_GOTO_ON_FALSE(rc == 0, ESP_FAIL, fail, TAG, "gatt add failed rc=%d", rc);
 
     nimble_port_freertos_init(ble_host_bridge_host_task);
+    s_bridge.host_task_started = true;
     if (xSemaphoreTake(s_bridge.sync_sem, pdMS_TO_TICKS(5000)) != pdTRUE) {
         ESP_GOTO_ON_FALSE(false, ESP_ERR_TIMEOUT, fail, TAG, "host sync timeout");
     }
@@ -2265,9 +2269,20 @@ esp_err_t ble_host_bridge_stop(void)
         }
         vQueueDelete(voice_queue);
     }
-    if (s_bridge.started) {
-        (void)ble_gap_adv_stop();
+    if (s_adv_retry_timer) {
+        (void)esp_timer_stop(s_adv_retry_timer);
+    }
+    /* Tear down by what actually came up, not by s_bridge.started: a start
+     * that fails after esp_nimble_init() (MTU, GATT, sync timeout) would
+     * otherwise deinit the controller under a live NimBLE host and trip the
+     * btdm_osal_elem_mempool_deinit assert. */
+    if (s_bridge.host_task_started) {
+        if (s_bridge.host_synced) {
+            (void)ble_gap_adv_stop();
+        }
         (void)nimble_port_stop();
+    }
+    if (s_bridge.nimble_inited) {
         (void)esp_nimble_deinit();
     }
     if (s_bridge.controller_enabled) {
