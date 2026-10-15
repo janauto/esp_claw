@@ -60,3 +60,5 @@ On Linux set `APP_TEST_OPENSSL=/usr`; cJSON can be overridden with
 `APP_TEST_CJSON=/path/to/cJSON`. The real command handler/storage are compiled;
 BLE radio, display ownership and task-list calls are explicit test stubs.
 Do not describe these checks as device installation/uninstallation acceptance.
+
+[2026-10-15 integration results and evidence](VALIDATION.md).
