@@ -8,8 +8,11 @@
 #include <unistd.h>
 #ifdef LOCAL_APP_HOST
 #include <openssl/evp.h>
+#define LAS_LOGW(...) ((void)0)
 #else
 #include "psa/crypto.h"
+#include "esp_log.h"
+#define LAS_LOGW(...) ESP_LOGW("local_app_store", __VA_ARGS__)
 #endif
 
 bool app_id_valid(const char *id)
@@ -220,8 +223,15 @@ esp_err_t local_app_store_write(local_app_store_handle_t s, const char *id, cons
                     if (fclose(f))
                         ok = false;
                     e = ok ? ESP_OK : ESP_FAIL;
-                } else
+                    if (!ok)
+                        LAS_LOGW("write %s/%s @%u: write failed errno=%d", id, file, (unsigned)offset, errno);
+                } else {
                     e = ESP_FAIL;
+                    LAS_LOGW("write %s/%s @%u: fopen failed errno=%d", id, file, (unsigned)offset, errno);
+                }
+            } else {
+                LAS_LOGW("write %s/%s @%u: unexpected state exists=%d size=%ld", id, file, (unsigned)offset,
+                         (int)exists, exists ? (long)st.st_size : -1L);
             }
         }
     }
