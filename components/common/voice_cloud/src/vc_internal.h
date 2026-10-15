@@ -259,6 +259,8 @@ typedef struct vc_job {
     const char *tools_json;    /* 规范化后的 tools 数组，可为 NULL */
     voice_cloud_tool_cb_t tool_cb;
     void *tool_ctx;
+    voice_cloud_intent_cb_t intent_cb;   /* 可为 NULL：识别后先试本地指令 */
+    void *intent_ctx;
     const vc_turn_t *history;
     size_t history_n;
     const char *now_text;

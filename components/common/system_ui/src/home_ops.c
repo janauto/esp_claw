@@ -26,7 +26,7 @@ void system_ui_home_key_post_delayed(hv_key_t key, uint32_t ms);
 
 static const char *s_ops_json =
     "\"mode_get\",\"mode_set\",\"ai_config_get\",\"ai_config_set\",\"apps_all\",\"app_launch\","
-    "\"home_get\",\"home_set\",\"assistant_show\"";
+    "\"home_get\",\"home_set\",\"assistant_show\",\"voice_intent\"";
 
 const char *system_ui_home_ops_json(void)
 {
@@ -414,6 +414,22 @@ esp_err_t system_ui_home_handle_op(const char *op, const cJSON *req, bool uart, 
             *out = hv_err_obj("state 无效");
         }
         return err;
+    }
+    if (!strcmp(op, "voice_intent")) {
+        /* 背夹·手机模式：手机识别出文字后先问背夹能不能直接执行（调音量/亮度、切模式、打开应用），
+         * 能执行就不再请求对话模型；和底座模式用同一套规则 */
+        const char *text = str_field(req, "text");
+        char reply[160];
+        bool handled = text && hv_intent_run(text, reply, sizeof(reply), true);
+        *out = cJSON_CreateObject();
+        if (!*out) {
+            return ESP_ERR_NO_MEM;
+        }
+        cJSON_AddBoolToObject(*out, "handled", handled);
+        if (handled) {
+            cJSON_AddStringToObject(*out, "reply", reply);
+        }
+        return ESP_OK;
     }
     if (!uart) {
         return ESP_ERR_NOT_SUPPORTED;

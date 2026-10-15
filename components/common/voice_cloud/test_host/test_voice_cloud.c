@@ -1277,6 +1277,53 @@ static void test_pipeline_history_and_no_tools(void)
     vc_job_release(&j);
 }
 
+/* 本地指令：认得的句子不请求对话模型，回复直接用设备给的确认语 */
+static int g_intent_calls;
+static bool intent_volume(const char *text, char *reply, size_t size, void *ctx)
+{
+    (void)ctx;
+    g_intent_calls++;
+    if (strstr(text, "音量") && strstr(text, "40")) {
+        snprintf(reply, size, "好的，音量已调到40%%。");
+        return true;
+    }
+    return false;
+}
+
+static void test_pipeline_intent(void)
+{
+    buf_t f = fake_frames(30);
+    vc_job_t j;
+    rec_t r;
+    job_init(&j, &r, &f, NULL);
+    j.intent_cb = intent_volume;
+    g_intent_calls = 0;
+    fake_add(VC_NET_OK, 200, "{\"choices\":[{\"message\":{\"content\":\"背夹，把音量调到40%。\"}}]}", 900);
+    CHECK(vc_pipeline_run(&j) == VC_RUN_OK);
+    CHECK(g_intent_calls == 1);
+    CHECK(F.nreq == 1);                       /* 只有 ASR，没有对话请求 */
+    CHECK(r.tool_calls == 0);
+    CHECK(r.n == 2 && r.ev[1].evt == VOICE_CLOUD_EVT_HEARD);
+    CHECK(j.final.evt == VOICE_CLOUD_EVT_REPLY);
+    CHECK_STR(j.final.text, "好的，音量已调到40%。");
+    CHECK_STR(j.out_user, "背夹，把音量调到40%。");
+    CHECK_STR(j.out_reply, "好的，音量已调到40%。");
+    vc_job_release(&j);
+    free(f.data);
+
+    /* 不认得的句子照常走对话模型 */
+    job_init(&j, &r, NULL, "今天天气怎么样");
+    j.intent_cb = intent_volume;
+    g_intent_calls = 0;
+    fake_add(VC_NET_OK, 200, "{\"choices\":[{\"message\":{\"content\":\"多云，17度。\"}}]}", 0);
+    CHECK(vc_pipeline_run(&j) == VC_RUN_OK);
+    CHECK(g_intent_calls == 1);
+    CHECK(F.nreq == 1);
+    CHECK_STR(F.url[0], j.chat_url);
+    CHECK_STR(j.final.text, "多云，17度。");
+    vc_job_release(&j);
+}
+
 /* ---------------- 公开 API 测试（pthread 桩 + 假传输，真实线程） ---------------- */
 
 static struct {
@@ -1791,6 +1838,7 @@ int main(int argc, char **argv)
     test_pipeline_deadlines();
     test_pipeline_cancel();
     test_pipeline_history_and_no_tools();
+    test_pipeline_intent();
     test_api_uninit_and_config();
     test_api_push_limits();
     test_api_voice_session();

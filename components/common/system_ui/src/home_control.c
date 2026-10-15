@@ -480,6 +480,11 @@ void hv_control_key(hv_key_t key)
     }
 }
 
+int hv_control_brightness(void)
+{
+    return (60 - CC.dim_level) * 100 / 60;
+}
+
 int hv_control_dim_level(void)
 {
     return CC.dim_level;

@@ -440,6 +440,26 @@ vc_run_t vc_pipeline_run(vc_job_t *j)
         return VC_RUN_CANCELLED;
     }
 
+    if (j->intent_cb) {
+        /* 本地指令：设备能确定执行的（调音量/亮度、切模式、打开应用）不交给对话模型 */
+        char reply[VC_REPLY_MAX_BYTES + 1];
+        reply[0] = '\0';
+        if (j->intent_cb(user_text, reply, sizeof(reply), j->intent_ctx) && reply[0]) {
+            j->final.evt = VOICE_CLOUD_EVT_REPLY;
+            j->final.text = vc_strdup(reply);
+            j->out_reply = vc_strdup(reply);
+            if (!j->final.text || !j->out_reply) {
+                free(j->out_reply);
+                j->out_reply = NULL;
+                free(user_text);
+                return fail(j, VC_MSG_NO_MEM, "no_mem");
+            }
+            VC_LOGI("intent: handled on device, reply=%u bytes", (unsigned)strlen(reply));
+            j->out_user = user_text;
+            return VC_RUN_OK;
+        }
+    }
+
     rc = run_chat(j, user_text);
     if (rc == VC_RUN_OK) {
         j->out_user = user_text;

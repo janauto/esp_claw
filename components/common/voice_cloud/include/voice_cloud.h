@@ -73,6 +73,15 @@ const char *voice_cloud_default_tools_json(void);
 /* 清空对话历史（最近 4 轮），例如切换模式或用户说“重新开始”时调用。 */
 void voice_cloud_history_clear(void);
 
+/*
+ * 本地指令：识别出文字之后、请求对话模型之前调用。设备能确定执行的指令（调音量、调亮度、
+ * 切换模式、打开应用）由设备自己执行，把给用户看的确认语写进 reply 并返回 true，
+ * 本轮不再请求对话模型（这句问答照常写进历史）。返回 false 时照常走对话模型。
+ * 在 voice_cloud 工作任务里调用（栈可能在 PSRAM）：回调里不要写 flash、不要直接改界面，投递到自己的任务。
+ */
+typedef bool (*voice_cloud_intent_cb_t)(const char *text, char *reply, size_t reply_size, void *user_ctx);
+esp_err_t voice_cloud_set_intent(voice_cloud_intent_cb_t cb, void *user_ctx);
+
 #ifdef __cplusplus
 }
 #endif

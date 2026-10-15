@@ -10,6 +10,7 @@ idf_component_register(
         "src/home_control.c"
         "src/home_edit.c"
         "src/home_input.c"
+        "src/home_intent.c"
         "src/home_key.c"
         "src/home_layout.c"
         "src/home_ops.c"

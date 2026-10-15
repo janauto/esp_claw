@@ -7,6 +7,7 @@
  * 字体，以及按住说话的两条链路（BLE 交给手机 / 设备经 Wi-Fi 直连 voice_cloud）。
  */
 #include "home_priv.h"
+#include "home_intent.h"
 #include "system_ui_home.h"
 
 #include <stdio.h>
@@ -409,8 +410,9 @@ static void hv_update_voice_context(void)
     char weather[160] = {0};
     size_t used;
 
-    used = (size_t)snprintf(ctx, sizeof(ctx), "工作模式%s",
-                            hv_plat_mode_get() == HV_MODE_DOCK ? "底座·Wi-Fi" : "背夹·手机");
+    used = (size_t)snprintf(ctx, sizeof(ctx), "工作模式%s；音量%d%%；亮度%d%%",
+                            hv_plat_mode_get() == HV_MODE_DOCK ? "底座·Wi-Fi" : "背夹·手机",
+                            hv_plat_volume_get(), hv_control_brightness());
     if (hv_weather_context(weather, sizeof(weather))) {
         used += (size_t)snprintf(ctx + used, sizeof(ctx) - used, "；天气：%s（用户问天气时直接据此回答）", weather);
     }
@@ -551,6 +553,120 @@ static void hv_tool_mode(int dock, void *payload)
     }
 }
 
+/* 按用户说的名称在应用目录里找（调用方持有 system_ui 锁）：标题互相包含时取最长的那个，
+ * 再看几个常用别名。名称至少两个字，免得一个字到处命中。 */
+static const hv_app_t *hv_match_app_locked(const char *name)
+{
+    const hv_app_t *best = NULL;
+    size_t best_len = 0;
+
+    if (!name || strlen(name) < 2) {
+        return NULL;
+    }
+    for (size_t i = 0; i < hv_catalog_count(); i++) {
+        const hv_app_t *app = hv_catalog_at(i);
+        size_t tl = strlen(app->title);
+        if (tl < 2) {
+            continue;
+        }
+        if ((strstr(name, app->title) || strstr(app->title, name)) && tl > best_len) {
+            best = app;
+            best_len = tl;
+        }
+    }
+    if (!best && (strstr(name, "花园") || strstr(name, "我的") || strstr(name, "小磁"))) {
+        best = hv_catalog_find("garden");
+    }
+    if (!best && strstr(name, "天气")) {
+        best = hv_catalog_find("skill:live_weather");
+    }
+    if (!best && strstr(name, "股")) {
+        best = hv_catalog_find("skill:live_stocks");
+    }
+    if (!best && (strstr(name, "热") || strstr(name, "新闻") || strstr(name, "资讯"))) {
+        best = hv_catalog_find("skill:live_aihot");
+    }
+    if (!best && (strstr(name, "设置") || strstr(name, "控制中心"))) {
+        best = hv_catalog_find("sys:settings");
+    }
+    return best;
+}
+
+static void hv_tool_volume(int v, void *payload);
+static void hv_tool_brightness(int v, void *payload);
+static void hv_tool_mode(int dock, void *payload);
+
+bool hv_intent_run(const char *text, char *reply, size_t reply_size, bool via_phone)
+{
+    hv_intent_t it;
+    if (!text || !reply || !reply_size || !hv_intent_parse(text, &it)) {
+        return false;
+    }
+    switch (it.kind) {
+    case HV_INTENT_VOLUME: {
+        int v = it.relative ? hv_plat_volume_get() + it.value : it.value;
+        v = v < 0 ? 0 : v > 100 ? 100 : v;
+        if (hv_post_call(hv_tool_volume, v, NULL) != ESP_OK) {
+            return false;
+        }
+        if (v == 0) {
+            snprintf(reply, reply_size, "好的，已静音。");
+        } else {
+            snprintf(reply, reply_size, "好的，音量已调到%d%%。", v);
+        }
+        break;
+    }
+    case HV_INTENT_BRIGHTNESS: {
+        int v = it.relative ? hv_control_brightness() + it.value : it.value;
+        v = v < 10 ? 10 : v > 100 ? 100 : v;
+        if (hv_post_call(hv_tool_brightness, v, NULL) != ESP_OK) {
+            return false;
+        }
+        snprintf(reply, reply_size, "好的，亮度已调到%d%%。", v);
+        break;
+    }
+    case HV_INTENT_MODE:
+        if (hv_post_call(hv_tool_mode, it.dock ? 1 : 0, NULL) != ESP_OK) {
+            return false;
+        }
+        snprintf(reply, reply_size, "%s", it.dock ? "好的，已切换到底座·Wi-Fi 模式，之后背夹自己连云端对话。"
+                                                  : "好的，已切换到背夹·手机模式，之后语音经蓝牙交给手机。");
+        break;
+    case HV_INTENT_OPEN: {
+        if (system_ui_lock() != ESP_OK) {
+            return false;
+        }
+        const hv_app_t *app = hv_match_app_locked(it.app);
+        if (app) {
+            /* 先让用户看到回复，再打开应用 */
+            if (via_phone) {
+                extern void hv_voice_defer_launch(const char *id);
+                hv_voice_defer_launch(app->id);
+            } else {
+                strlcpy(s_pending_launch, app->id, sizeof(s_pending_launch));
+            }
+            snprintf(reply, reply_size, "好的，正在打开%s。", app->title);
+        }
+        system_ui_unlock();
+        if (!app) {
+            return false;   /* 目录里没有：交给对话模型回答 */
+        }
+        break;
+    }
+    default:
+        return false;
+    }
+    ESP_LOGI(SYSTEM_UI_TAG, "HV_INTENT kind=%d value=%d rel=%d dock=%d via=%s -> %s", (int)it.kind, it.value,
+             (int)it.relative, (int)it.dock, via_phone ? "phone" : "dock", reply);
+    return true;
+}
+
+static bool hv_intent_cloud_cb(const char *text, char *reply, size_t reply_size, void *ctx)
+{
+    (void)ctx;
+    return hv_intent_run(text, reply, reply_size, false);
+}
+
 /* 工具在 UI 事件任务外执行：这里只做必须拿锁的界面动作。 */
 static esp_err_t hv_tool_cb(const char *name, const cJSON *args, char *out, size_t out_size, void *ctx)
 {
@@ -568,25 +684,7 @@ static esp_err_t hv_tool_cb(const char *name, const cJSON *args, char *out, size
         if (system_ui_lock() != ESP_OK) {
             return ESP_ERR_TIMEOUT;
         }
-        for (size_t i = 0; i < hv_catalog_count(); i++) {
-            const hv_app_t *app = hv_catalog_at(i);
-            if (strstr(app->title, n->valuestring) || strstr(n->valuestring, app->title)) {
-                best = app;
-                break;
-            }
-        }
-        if (!best && (strstr(n->valuestring, "花园") || strstr(n->valuestring, "我的") || strstr(n->valuestring, "小磁"))) {
-            best = hv_catalog_find("garden");
-        }
-        if (!best && strstr(n->valuestring, "天气")) {
-            best = hv_catalog_find("skill:live_weather");
-        }
-        if (!best && strstr(n->valuestring, "股")) {
-            best = hv_catalog_find("skill:live_stocks");
-        }
-        if (!best && (strstr(n->valuestring, "热") || strstr(n->valuestring, "新闻"))) {
-            best = hv_catalog_find("skill:live_aihot");
-        }
+        best = hv_match_app_locked(n->valuestring);
         if (best) {
             /* 先把回复显示出来，回复到达后再打开应用（见 hv_cloud_event_cb）。 */
             strlcpy(s_pending_launch, best->id, sizeof(s_pending_launch));
@@ -627,6 +725,7 @@ void hv_platform_init(void)
 {
     (void)voice_cloud_init();
     (void)voice_cloud_set_tools(voice_cloud_default_tools_json(), hv_tool_cb, NULL);
+    (void)voice_cloud_set_intent(hv_intent_cloud_cb, NULL);
     (void)hv_plat_mode_get();
     (void)hv_plat_vibration_get();
     int vol = hv_plat_volume_get();

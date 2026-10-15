@@ -82,6 +82,8 @@ static struct {
     char *tools_json;
     voice_cloud_tool_cb_t tool_cb;
     void *tool_ctx;
+    voice_cloud_intent_cb_t intent_cb;
+    void *intent_ctx;
     vc_turn_t hist[VC_HISTORY_TURNS];
     size_t hist_n;
     vc_session_t *current; /* 最近一次启动的会话（可能已取消但还在收尾） */
@@ -453,6 +455,18 @@ esp_err_t voice_cloud_set_tools(const char *tools_json, voice_cloud_tool_cb_t cb
     return ESP_OK;
 }
 
+esp_err_t voice_cloud_set_intent(voice_cloud_intent_cb_t cb, void *user_ctx)
+{
+    if (!s_vc.inited) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    lock();
+    s_vc.intent_cb = cb;
+    s_vc.intent_ctx = cb ? user_ctx : NULL;
+    unlock();
+    return ESP_OK;
+}
+
 void voice_cloud_history_clear(void)
 {
     if (!s_vc.inited) {
@@ -659,6 +673,8 @@ static vc_session_t *session_new_locked(voice_cloud_event_cb_t cb, void *cb_ctx,
     j->tools_json = s->tools_json;
     j->tool_cb = s->tools_json ? s_vc.tool_cb : NULL;
     j->tool_ctx = s_vc.tool_ctx;
+    j->intent_cb = s_vc.intent_cb;
+    j->intent_ctx = s_vc.intent_ctx;
     j->history = s->hist;
     j->history_n = s->hist_n;
     j->now_text = s->now_text[0] ? s->now_text : NULL;
