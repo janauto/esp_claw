@@ -1,0 +1,293 @@
+{
+ "name": "r2s_13_resize_full_page",
+ "steps": [
+  {
+   "note": "补测（主会话新增）：第 1 轮 D07——第 1 页已满时把时钟换成 M。期望：不再让用户自己腾位置，自动换尺寸并移到有空位的页（这里新开第 3 页），提示说明去向；保存后读回。用户输入：长按时钟进编辑 → ▶▶ 把焦点移到时钟 → M 拿起 → M 换尺寸 → SET 放下 → SET 完成。"
+  },
+  {
+   "op": "home_set",
+   "layout": {
+    "v": 1,
+    "pages": [
+     [
+      {
+       "w": "mine",
+       "s": "S"
+      },
+      {
+       "w": "clock",
+       "s": "S"
+      },
+      {
+       "w": "weather",
+       "s": "S"
+      },
+      {
+       "w": "voice",
+       "s": "S"
+      }
+     ],
+     [
+      {
+       "w": "stocks",
+       "s": "S"
+      },
+      {
+       "w": "system",
+       "s": "S"
+      },
+      {
+       "w": "aihot",
+       "s": "M"
+      }
+     ]
+    ],
+    "dock": [
+     "sys:meeting",
+     "sys:ir",
+     "sys:card",
+     "sys:workbuddy"
+    ]
+   },
+   "gate": true
+  },
+  {
+   "op": "ui_touch",
+   "type": "long",
+   "x": 352,
+   "y": 182,
+   "ms": 900
+  },
+  {
+   "wait": 1500
+  },
+  {
+   "op": "home_state",
+   "expect": {
+    "view": "edit"
+   },
+   "gate": true
+  },
+  {
+   "shot": "edit_entered"
+  },
+  {
+   "op": "ui_key",
+   "key": "VOLUME_UP",
+   "action": "click"
+  },
+  {
+   "wait": 300
+  },
+  {
+   "op": "ui_key",
+   "key": "VOLUME_UP",
+   "action": "click"
+  },
+  {
+   "wait": 300
+  },
+  {
+   "op": "ui_key",
+   "key": "MODE",
+   "action": "click"
+  },
+  {
+   "wait": 600
+  },
+  {
+   "op": "home_state",
+   "expect": {
+    "view": "edit",
+    "picked": 1
+   },
+   "gate": true
+  },
+  {
+   "op": "ui_key",
+   "key": "MODE",
+   "action": "click"
+  },
+  {
+   "wait": 900
+  },
+  {
+   "shot": "resized_moved"
+  },
+  {
+   "op": "home_state",
+   "expect": {
+    "layout": {
+     "v": 1,
+     "pages": [
+      [
+       {
+        "w": "mine",
+        "s": "S"
+       },
+       {
+        "w": "weather",
+        "s": "S"
+       },
+       {
+        "w": "voice",
+        "s": "S"
+       }
+      ],
+      [
+       {
+        "w": "stocks",
+        "s": "S"
+       },
+       {
+        "w": "system",
+        "s": "S"
+       },
+       {
+        "w": "aihot",
+        "s": "M"
+       }
+      ],
+      [
+       {
+        "w": "clock",
+        "s": "M"
+       }
+      ]
+     ],
+     "dock": [
+      "sys:meeting",
+      "sys:ir",
+      "sys:card",
+      "sys:workbuddy"
+     ]
+    }
+   }
+  },
+  {
+   "op": "ui_key",
+   "key": "SET",
+   "action": "click"
+  },
+  {
+   "wait": 600
+  },
+  {
+   "op": "ui_key",
+   "key": "SET",
+   "action": "click"
+  },
+  {
+   "wait": 1200
+  },
+  {
+   "op": "home_state",
+   "expect": {
+    "view": "home",
+    "edit": false
+   }
+  },
+  {
+   "op": "home_get",
+   "expect": {
+    "layout": {
+     "v": 1,
+     "pages": [
+      [
+       {
+        "w": "mine",
+        "s": "S"
+       },
+       {
+        "w": "weather",
+        "s": "S"
+       },
+       {
+        "w": "voice",
+        "s": "S"
+       }
+      ],
+      [
+       {
+        "w": "stocks",
+        "s": "S"
+       },
+       {
+        "w": "system",
+        "s": "S"
+       },
+       {
+        "w": "aihot",
+        "s": "M"
+       }
+      ],
+      [
+       {
+        "w": "clock",
+        "s": "M"
+       }
+      ]
+     ],
+     "dock": [
+      "sys:meeting",
+      "sys:ir",
+      "sys:card",
+      "sys:workbuddy"
+     ]
+    }
+   }
+  },
+  {
+   "shot": "home_after_resize"
+  },
+  {
+   "note": "收尾：恢复默认布局，免得影响后面的场景。"
+  },
+  {
+   "op": "home_set",
+   "layout": {
+    "v": 1,
+    "pages": [
+     [
+      {
+       "w": "mine",
+       "s": "S"
+      },
+      {
+       "w": "clock",
+       "s": "S"
+      },
+      {
+       "w": "weather",
+       "s": "S"
+      },
+      {
+       "w": "voice",
+       "s": "S"
+      }
+     ],
+     [
+      {
+       "w": "stocks",
+       "s": "S"
+      },
+      {
+       "w": "system",
+       "s": "S"
+      },
+      {
+       "w": "aihot",
+       "s": "M"
+      }
+     ]
+    ],
+    "dock": [
+     "sys:meeting",
+     "sys:ir",
+     "sys:card",
+     "sys:workbuddy"
+    ]
+   }
+  }
+ ]
+}

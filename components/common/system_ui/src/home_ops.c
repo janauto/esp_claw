@@ -18,10 +18,54 @@
 #include "display_service.h"
 #include "esp_log.h"
 #include "voice_cloud.h"
+#include "esp_timer.h"
 
 esp_err_t hv_voice_ask_text(const char *text);
 void hv_touch_inject_start(int type, int32_t x, int32_t y, int32_t x2, int32_t y2, uint32_t ms);
 void system_ui_home_key_post(hv_key_t key);
+
+/* 由 lua_module_button 提供（固件里链接了按键模块时解析到它，否则为 NULL） */
+esp_err_t lua_module_button_inject(const char *label, const char *event) __attribute__((weak));
+
+/* UART ui_key 在有 Lua 应用独占显示时，也像实体键一样送给它（以前只走首页按键路径，Lua 应用收不到） */
+static char s_lua_key_up[16];
+
+static void hv_lua_key_up_cb(void *arg)
+{
+    (void)arg;
+    if (lua_module_button_inject && s_lua_key_up[0]) {
+        (void)lua_module_button_inject(s_lua_key_up, "press_up");
+        (void)lua_module_button_inject(s_lua_key_up, "long_press_up");
+    }
+}
+
+static void hv_lua_key_inject(const char *label, const char *action, uint32_t ms)
+{
+    static esp_timer_handle_t s_up_timer;
+    if (!lua_module_button_inject || !label || !display_service_has_exclusive_session()) {
+        return;
+    }
+    if (!action || !strcmp(action, "click")) {
+        (void)lua_module_button_inject(label, "press_down");
+        (void)lua_module_button_inject(label, "press_up");
+        (void)lua_module_button_inject(label, "single_click");
+    } else if (!strcmp(action, "press")) {
+        (void)lua_module_button_inject(label, "press_down");
+    } else if (!strcmp(action, "release")) {
+        (void)lua_module_button_inject(label, "press_up");
+    } else if (!strcmp(action, "long")) {
+        (void)lua_module_button_inject(label, "press_down");
+        strlcpy(s_lua_key_up, label, sizeof(s_lua_key_up));
+        if (!s_up_timer) {
+            const esp_timer_create_args_t args = {.callback = hv_lua_key_up_cb, .name = "hv_lua_key"};
+            if (esp_timer_create(&args, &s_up_timer) != ESP_OK) {
+                return;
+            }
+        }
+        (void)esp_timer_stop(s_up_timer);
+        (void)esp_timer_start_once(s_up_timer, (uint64_t)(ms ? ms : 900) * 1000);
+    }
+}
 void system_ui_home_key_post_delayed(hv_key_t key, uint32_t ms);
 
 static const char *s_ops_json =
@@ -463,6 +507,8 @@ esp_err_t system_ui_home_handle_op(const char *op, const cJSON *req, bool uart, 
             *out = hv_err_obj("key 需为 MODE/SET/VOLUME_UP/VOLUME_DOWN");
             return ESP_ERR_INVALID_ARG;
         }
+        hv_lua_key_inject(str_field(req, "key"), str_field(req, "action"),
+                          cJSON_IsNumber(ms) ? (uint32_t)ms->valuedouble : 900);
         system_ui_home_key_post(key);
         if (hold) {
             system_ui_home_key_post_delayed(HV_KEY_M_LONG_END, cJSON_IsNumber(ms) ? (uint32_t)ms->valuedouble : 2500);

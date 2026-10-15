@@ -103,6 +103,35 @@ static button_event_t btn_event_from_str(const char *s)
     return BUTTON_EVENT_MAX;
 }
 
+/*
+ * 自动验收（UART ui_key）：把一次按键事件当作板级按键组里 label 那颗键发出的，排进与实体键
+ * 相同的队列。只有正在运行的 Lua 脚本给这颗键的这个事件注册了回调时才投递——和实体键一样，
+ * 没人监听就不排队，免得积压到下一个应用。
+ */
+esp_err_t lua_module_button_inject(const char *label, const char *event)
+{
+    if (!s_queue || !label || !event) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    button_event_t ev = btn_event_from_str(event);
+    if (ev == BUTTON_EVENT_MAX) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    for (int i = 0; i < s_num_regs; i++) {
+        if (s_regs[i].label && strcmp(s_regs[i].label, label) == 0) {
+            if (s_regs[i].lua_refs[ev] == LUA_NOREF) {
+                return ESP_ERR_NOT_FOUND;
+            }
+            btn_event_item_t item = {
+                .handle = s_regs[i].handle,
+                .event = ev,
+            };
+            return xQueueSend(s_queue, &item, 0) == pdTRUE ? ESP_OK : ESP_FAIL;
+        }
+    }
+    return ESP_ERR_NOT_FOUND;
+}
+
 static btn_lua_reg_t *btn_find_reg(button_handle_t handle)
 {
     for (int i = 0; i < s_num_regs; i++) {
