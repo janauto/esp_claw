@@ -22,6 +22,7 @@
 
 #include <stddef.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "ui.h"
@@ -107,11 +108,11 @@ static uint8_t       s_static_page_count = 0;
 
 /* Copies of the installed apps' strings, indexed like s_pages: the owner's
  * buffers do not outlive ui_page_add_app(). */
-static struct {
+typedef struct {
     char title[UI_PAGE_APP_TITLE_LEN];
     char app_id[UI_PAGE_APP_ID_LEN];
     char location[UI_PAGE_APP_LOCATION_LEN];
-} s_app_text[UI_PAGE_MAX];
+} ui_app_text_t;
 
 
 #define PACKAGE_CACHE_SLOTS 5
@@ -119,19 +120,32 @@ static ui_squareline_app_provider_t s_provider;
 static void *s_provider_ctx;
 static uint32_t s_package_count;
 static uint32_t s_provider_clock;
-static struct {
+typedef struct {
     uint32_t page, used;
     ui_app_desc_t app;
     char title[96], id[40], location[256], selected[320], unselected[320];
-} s_package_cache[PACKAGE_CACHE_SLOTS];
+} ui_package_slot_t;
+
+/* ~18 KB of strings, heap-allocated on first use instead of living in .bss:
+ * with SPIRAM_MALLOC_ALWAYSINTERNAL=0 malloc prefers PSRAM, which leaves the
+ * internal RAM free for the BLE controller that starts later in boot. */
+static ui_app_text_t *s_app_text;           /* UI_PAGE_MAX entries */
+static ui_package_slot_t *s_package_cache;  /* PACKAGE_CACHE_SLOTS entries */
+static bool ui_page_text_ready(void) {
+    if (s_app_text == NULL) s_app_text = calloc(UI_PAGE_MAX, sizeof(*s_app_text));
+    if (s_package_cache == NULL) s_package_cache = calloc(PACKAGE_CACHE_SLOTS, sizeof(*s_package_cache));
+    return s_app_text != NULL && s_package_cache != NULL;
+}
 static uint32_t page_total(void) { return s_page_count + s_package_count; }
 static uint32_t dot_count(void) { uint32_t n = page_total(); return n < 10 ? n : 10; }
 void ui_page_set_provider(uint32_t count, ui_squareline_app_provider_t provider, void *ctx) {
+    if (!ui_page_text_ready()) provider = NULL;
     s_provider = provider; s_provider_ctx = ctx; s_package_count = provider ? count : 0;
-    memset(s_package_cache, 0, sizeof(s_package_cache)); s_provider_clock = 0;
+    if (s_package_cache != NULL) memset(s_package_cache, 0, PACKAGE_CACHE_SLOTS * sizeof(*s_package_cache));
+    s_provider_clock = 0;
 }
 static const ui_app_desc_t *page_at(uint32_t page) {
-    if (page < s_page_count) return &s_pages[page];
+    if (page < s_page_count || s_package_cache == NULL) return &s_pages[page < s_page_count ? page : 0];
     uint32_t slot = 0;
     for (uint32_t i = 0; i < PACKAGE_CACHE_SLOTS; i++) {
         if (s_package_cache[i].used && s_package_cache[i].page == page) { s_package_cache[i].used = ++s_provider_clock; return &s_package_cache[i].app; }
@@ -1119,6 +1133,9 @@ bool ui_page_add_app(const char *title, const char *app_id, const char *location
         }
     }
 
+    if (!ui_page_text_ready()) {
+        return false;
+    }
     index = s_page_count;
     if (strlcpy(s_app_text[index].title, title, UI_PAGE_APP_TITLE_LEN) >= UI_PAGE_APP_TITLE_LEN ||
             strlcpy(s_app_text[index].app_id, app_id, UI_PAGE_APP_ID_LEN) >= UI_PAGE_APP_ID_LEN ||
