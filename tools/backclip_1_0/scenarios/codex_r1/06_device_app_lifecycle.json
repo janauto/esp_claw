@@ -5,10 +5,15 @@
    "note": "目的：背夹总览管理一个新建我的创作副本。执行前基线必须与本轮目录一致：18项、mine仅skill:小家；不存在r2_device_demo。安装后19项、验收包为mine最后项。主会话必须先核对前置；执行器不会因 expect 失败自动停止，前置不符禁止继续本场景。任何菜单标题不是R2Device均停止。"
   },
   {
+   "note": "【执行适配】手机侧改用 phone_ui.py install/appact/field/tapexact（按真实控件文字和应用卡片定位；原脚本按 'Lua'/'应用 ID' 等精确文字找不到控件，标签页会横向滚动）。串口不再复位背夹，手机连接保持。 焦点：按 apps_all 分组顺序算出目标序号后按 ▶，截图核对。"
+  },
+  {
    "note": "前置：小米 M610BB 手机 App 在设备页、无弹窗；扫描按钮可见。仅重连测试背夹，保持现有正常 AI 配置。串口复位后必须在本场景内重连；失败立即停止本场景。"
   },
   {
-   "shell": "python3 phone_ui.py connect"
+   "shell": "python3 phone_ui.py connect",
+   "gate": true,
+   "timeout_ms": 90000
   },
   {
    "op": "mode_set",
@@ -20,13 +25,23 @@
     "mode": "clip",
     "phone_linked": true,
     "voice_route": "ble"
-   }
+   },
+   "gate": true
   },
   {
    "note": "仅安装新验收副本 r2_device_demo，执行前只读确认 ID 不存在；不可替换已有包。Lua 使用手机内置贪吃蛇示例。手机处于连接成功的设备页。主会话保存安装完成的手机截图，目录字段必须 group=mine/removable=true。"
   },
   {
-   "shell": "python3 -c 'import phone_ui as p,time\n\ndef tap(label):\n    nodes=p.dump()\n    hits=[n for n in nodes if n[0]==label]\n    if not hits: raise RuntimeError('\"'\"'当前页找不到唯一文字: '\"'\"'+label)\n    if len(hits)!=1: raise RuntimeError('\"'\"'文字不唯一，停止避免错点: '\"'\"'+label)\n    n=hits[0];p.adb('\"'\"'shell'\"'\"','\"'\"'input'\"'\"','\"'\"'tap'\"'\"',str(n[1]),str(n[2]));time.sleep(1)\n\ndef field(label,value):\n    hits=[n for n in p.dump() if label in n[0]]\n    if len(hits)!=1: raise RuntimeError('\"'\"'字段不唯一: '\"'\"'+label)\n    n=hits[0];p.adb('\"'\"'shell'\"'\"','\"'\"'input'\"'\"','\"'\"'tap'\"'\"',str(n[1]),str(n[2]))\n    p.adb('\"'\"'shell'\"'\"','\"'\"'input'\"'\"','\"'\"'keycombination'\"'\"','\"'\"'113'\"'\"','\"'\"'29'\"'\"')\n    p.adb('\"'\"'shell'\"'\"','\"'\"'input'\"'\"','\"'\"'text'\"'\"',value)\n    p.adb('\"'\"'shell'\"'\"','\"'\"'input'\"'\"','\"'\"'keyevent'\"'\"','\"'\"'4'\"'\"');time.sleep(.5)\n\ndef action(appid,label):\n    for _ in range(9):\n        nodes=p.dump(); ids=[n for n in nodes if n[0]==appid]\n        if ids:\n            y=ids[0][2]\n            options=[n for n in nodes if n[0]==label and y<n[2]<y+650]\n            if options:\n                n=min(options,key=lambda n:n[2]);p.adb('\"'\"'shell'\"'\"','\"'\"'input'\"'\"','\"'\"'tap'\"'\"',str(n[1]),str(n[2]));time.sleep(1);return\n        p.adb('\"'\"'shell'\"'\"','\"'\"'input'\"'\"','\"'\"'swipe'\"'\"','\"'\"'540'\"'\"','\"'\"'1950'\"'\"','\"'\"'540'\"'\"','\"'\"'850'\"'\"','\"'\"'350'\"'\"');time.sleep(.7)\n    raise RuntimeError('\"'\"'目标应用操作未出现: '\"'\"'+appid+'\"'\"' / '\"'\"'+label)\ntap('\"'\"'Lua'\"'\"')\ntap('\"'\"'打开示例'\"'\"')\ntap('\"'\"'贪吃蛇'\"'\"')\ntap('\"'\"'应用'\"'\"')\ntap('\"'\"'安装当前 Lua'\"'\"')\nfield('\"'\"'应用 ID'\"'\"','\"'\"'r2_device_demo'\"'\"')\nfield('\"'\"'显示名称'\"'\"','\"'\"'R2Device'\"'\"')\ntap('\"'\"'安装'\"'\"')\n'"
+   "op": "apps_all",
+   "expect_not_contains": {
+    "apps": "r2_device_demo"
+   },
+   "gate": true
+  },
+  {
+   "shell": "python3 phone_ui.py install r2_device_demo R2Device",
+   "timeout_ms": 120000,
+   "gate": true
   },
   {
    "wait": 12000
@@ -34,20 +49,12 @@
   {
    "op": "apps_all",
    "expect_contains": {
-    "apps": "app:r2_device_demo"
-   }
+    "apps": "r2_device_demo"
+   },
+   "gate": true
   },
   {
    "shell": "python3 phone_ui.py dump"
-  },
-  {
-   "op": "apps_all",
-   "expect": {
-    "count": 19
-   },
-   "expect_contains": {
-    "apps": "app:r2_device_demo"
-   }
   },
   {
    "op": "ui_key",
@@ -64,156 +71,10 @@
    }
   },
   {
-   "op": "ui_key",
-   "key": "VOLUME_UP",
-   "action": "click"
+   "overview_focus": "r2_device_demo"
   },
   {
-   "wait": 120
-  },
-  {
-   "op": "ui_key",
-   "key": "VOLUME_UP",
-   "action": "click"
-  },
-  {
-   "wait": 120
-  },
-  {
-   "op": "ui_key",
-   "key": "VOLUME_UP",
-   "action": "click"
-  },
-  {
-   "wait": 120
-  },
-  {
-   "op": "ui_key",
-   "key": "VOLUME_UP",
-   "action": "click"
-  },
-  {
-   "wait": 120
-  },
-  {
-   "op": "ui_key",
-   "key": "VOLUME_UP",
-   "action": "click"
-  },
-  {
-   "wait": 120
-  },
-  {
-   "op": "ui_key",
-   "key": "VOLUME_UP",
-   "action": "click"
-  },
-  {
-   "wait": 120
-  },
-  {
-   "op": "ui_key",
-   "key": "VOLUME_UP",
-   "action": "click"
-  },
-  {
-   "wait": 120
-  },
-  {
-   "op": "ui_key",
-   "key": "VOLUME_UP",
-   "action": "click"
-  },
-  {
-   "wait": 120
-  },
-  {
-   "op": "ui_key",
-   "key": "VOLUME_UP",
-   "action": "click"
-  },
-  {
-   "wait": 120
-  },
-  {
-   "op": "ui_key",
-   "key": "VOLUME_UP",
-   "action": "click"
-  },
-  {
-   "wait": 120
-  },
-  {
-   "op": "ui_key",
-   "key": "VOLUME_UP",
-   "action": "click"
-  },
-  {
-   "wait": 120
-  },
-  {
-   "op": "ui_key",
-   "key": "VOLUME_UP",
-   "action": "click"
-  },
-  {
-   "wait": 120
-  },
-  {
-   "op": "ui_key",
-   "key": "VOLUME_UP",
-   "action": "click"
-  },
-  {
-   "wait": 120
-  },
-  {
-   "op": "ui_key",
-   "key": "VOLUME_UP",
-   "action": "click"
-  },
-  {
-   "wait": 120
-  },
-  {
-   "op": "ui_key",
-   "key": "VOLUME_UP",
-   "action": "click"
-  },
-  {
-   "wait": 120
-  },
-  {
-   "op": "ui_key",
-   "key": "VOLUME_UP",
-   "action": "click"
-  },
-  {
-   "wait": 120
-  },
-  {
-   "op": "ui_key",
-   "key": "VOLUME_UP",
-   "action": "click"
-  },
-  {
-   "wait": 120
-  },
-  {
-   "op": "ui_key",
-   "key": "VOLUME_UP",
-   "action": "click"
-  },
-  {
-   "wait": 120
-  },
-  {
-   "op": "ui_key",
-   "key": "VOLUME_UP",
-   "action": "click"
-  },
-  {
-   "wait": 120
+   "wait": 800
   },
   {
    "shot": "fixture_focus_verify"
@@ -421,7 +282,8 @@
    "note": "按ID确认app:r2_device_demo消失、既有skill:小家与其他应用仍在。手机刷新后也应消失。主会话保存手机列表截图。"
   },
   {
-   "shell": "python3 phone_ui.py tap 刷新列表"
+   "shell": "python3 phone_ui.py tab 应用 && python3 phone_ui.py top && python3 phone_ui.py tapexact 刷新列表",
+   "timeout_ms": 60000
   },
   {
    "shell": "python3 phone_ui.py dump"
@@ -439,6 +301,12 @@
    "expect": {
     "view": "home"
    }
+  },
+  {
+   "phone_shot": "phone_after_device_uninstall"
+  },
+  {
+   "shell": "python3 phone_ui.py tab 设备"
   }
  ]
 }

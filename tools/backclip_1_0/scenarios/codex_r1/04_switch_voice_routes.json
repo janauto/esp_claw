@@ -8,7 +8,9 @@
    "note": "前置：小米 M610BB 手机 App 在设备页、无弹窗；扫描按钮可见。仅重连测试背夹，保持现有正常 AI 配置。串口复位后必须在本场景内重连；失败立即停止本场景。"
   },
   {
-   "shell": "python3 phone_ui.py connect"
+   "shell": "python3 phone_ui.py connect",
+   "gate": true,
+   "timeout_ms": 90000
   },
   {
    "op": "mode_set",
@@ -20,7 +22,8 @@
     "mode": "clip",
     "phone_linked": true,
     "voice_route": "ble"
-   }
+   },
+   "gate": true
   },
   {
    "op": "ui_key",
@@ -53,7 +56,8 @@
     "mode": "dock",
     "voice_route": "wifi",
     "phone_linked": true
-   }
+   },
+   "gate": true
   },
   {
    "shot": "dock_selected"
@@ -131,7 +135,8 @@
     "mode": "clip",
     "voice_route": "ble",
     "phone_linked": true
-   }
+   },
+   "gate": true
   },
   {
    "shot": "clip_selected"

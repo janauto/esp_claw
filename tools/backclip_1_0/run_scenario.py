@@ -141,6 +141,8 @@ def run(dev, scenario, out):
                                     timeout=step.get("timeout_ms", 60000) / 1000.0, cwd=str(HERE))
                 rec["shell_rc"] = cp.returncode
                 rec["shell_out"] = (cp.stdout + cp.stderr)[-600:]
+                print(f"  shell: {step['shell'][:60]} -> rc={cp.returncode} {(cp.stdout + cp.stderr).strip()[-120:]}",
+                      flush=True)
                 if step.get("expect_rc", 0) is not None and cp.returncode != step.get("expect_rc", 0):
                     report["failed"] += 1
                     print(f"  [FAIL] step {i}: shell rc={cp.returncode} {rec['shell_out'][-200:]}", flush=True)
@@ -160,12 +162,40 @@ def run(dev, scenario, out):
                 report["passed" if ok else "failed"] += 1
                 if not ok:
                     print(f"  [FAIL] step {i}: wait_state {want} -> {json.dumps(last, ensure_ascii=False)[:300]}", flush=True)
+            elif "overview_focus" in step:
+                # 像用户一样在应用总览里按 ▶ 把焦点移到目标应用：总览按 内置/官方/我的创作 分组排列，
+                # 组内顺序与 apps_all 一致；第一下 ▶ 只是显示焦点（停在第 0 个）
+                apps = dev.rpc({"op": "apps_all"}).get("apps", [])
+                rank = {"builtin": 0, "official": 1, "mine": 2}
+                order = sorted(range(len(apps)), key=lambda k: (rank.get(apps[k].get("group"), 3), k))
+                target = step["overview_focus"]
+                idx = next((n for n, k in enumerate(order) if apps[k].get("id", "").endswith(target)), None)
+                rec["focus_index"] = idx
+                if idx is None:
+                    rec["ok"] = False
+                    report["failed"] += 1
+                    print(f"  [FAIL] step {i}: 总览里找不到 {target}", flush=True)
+                else:
+                    for _ in range(idx + 1):
+                        dev.rpc({"op": "ui_key", "key": "VOLUME_UP", "action": "click"})
+                        time.sleep(0.15)
+                    rec["ok"] = True
+                    rec["focus_title"] = apps[order[idx]].get("title")
+            elif "phone_shot" in step:
+                # 手机主屏截图，和背夹截图放在同一个场景目录里
+                import subprocess
+                png = sdir / f"{i:02d}_phone_{step['phone_shot']}.png"
+                cp = subprocess.run(["python3", "phone_ui.py", "shot", str(png)], capture_output=True, text=True,
+                                    timeout=60, cwd=str(HERE))
+                rec["shot"] = str(png)
+                rec["shell_rc"] = cp.returncode
             elif "shot" in step:
                 png = sdir / f"{i:02d}_{step['shot']}.png"
                 rec["shot"] = str(png)
                 rec["capture"] = capture(dev, png, step.get("scale", 1))
             else:
-                body = {k: v for k, v in step.items() if k not in ("expect", "expect_contains", "allow_error", "note")}
+                body = {k: v for k, v in step.items()
+                        if k not in ("expect", "expect_contains", "expect_not_contains", "allow_error", "note", "gate")}
                 try:
                     res = dev.rpc(body)
                     rec["result"] = res
@@ -178,8 +208,10 @@ def run(dev, scenario, out):
                     ok = ok and subset(step["expect"], res)
                 for key, sub in step.get("expect_contains", {}).items():
                     ok = ok and sub in json.dumps(res.get(key, ""), ensure_ascii=False)
+                for key, sub in step.get("expect_not_contains", {}).items():
+                    ok = ok and sub not in json.dumps(res.get(key, ""), ensure_ascii=False)
                 rec["ok"] = ok
-                if "expect" in step or "expect_contains" in step:
+                if "expect" in step or "expect_contains" in step or "expect_not_contains" in step:
                     report["passed" if ok else "failed"] += 1
                 if not ok:
                     print(f"  [FAIL] step {i}: {json.dumps(step, ensure_ascii=False)[:160]} -> "
@@ -189,6 +221,12 @@ def run(dev, scenario, out):
             report["failed"] += 1
             print(f"  [EXC] step {i}: {e!r}", flush=True)
         report["steps"].append(rec)
+        # gate：前置条件不满足就停下这个场景，避免在错误对象上继续操作
+        if step.get("gate") and (rec.get("ok") is False or rec.get("exception")
+                                 or rec.get("shell_rc", 0) not in (0, None)):
+            report["aborted_at"] = i
+            print(f"  [STOP] step {i} 是前置条件，失败后停止本场景", flush=True)
+            break
     (sdir / "report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2))
     return report
 

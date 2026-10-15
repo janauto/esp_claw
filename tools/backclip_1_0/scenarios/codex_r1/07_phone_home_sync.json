@@ -5,6 +5,9 @@
    "note": "目的：手机调整底栏顺序后背夹立即同步，退出重读仍保留。home_set仅建立默认基线，不能计为手机保存成功。手机页面按钮从当前dump定位，非背夹坐标。"
   },
   {
+   "note": "【执行适配】手机侧改用 phone_ui.py install/appact/field/tapexact（按真实控件文字和应用卡片定位；原脚本按 'Lua'/'应用 ID' 等精确文字找不到控件，标签页会横向滚动）。串口不再复位背夹，手机连接保持。"
+  },
+  {
    "op": "home_set",
    "layout": {
     "v": 1,
@@ -99,7 +102,9 @@
    "note": "前置：小米 M610BB 手机 App 在设备页、无弹窗；扫描按钮可见。仅重连测试背夹，保持现有正常 AI 配置。串口复位后必须在本场景内重连；失败立即停止本场景。"
   },
   {
-   "shell": "python3 phone_ui.py connect"
+   "shell": "python3 phone_ui.py connect",
+   "gate": true,
+   "timeout_ms": 90000
   },
   {
    "op": "mode_set",
@@ -111,13 +116,16 @@
     "mode": "clip",
     "phone_linked": true,
     "voice_route": "ble"
-   }
+   },
+   "gate": true
   },
   {
-   "shell": "python3 phone_ui.py tapxy 803 380"
+   "shell": "python3 phone_ui.py tab 应用 && python3 phone_ui.py top",
+   "timeout_ms": 60000
   },
   {
-   "shell": "python3 phone_ui.py tap 背夹首页"
+   "shell": "python3 phone_ui.py tapexact 背夹首页",
+   "gate": true
   },
   {
    "wait": 1500
@@ -199,6 +207,12 @@
   },
   {
    "note": "人工核对手机与背夹前两个图标为遥控器/会议录音；记录保存提示、重读顺序，退出手机编辑页再重进核对，主会话另存手机截图。后续默认坐标场景会重新设布局。"
+  },
+  {
+   "phone_shot": "phone_reloaded"
+  },
+  {
+   "shell": "python3 phone_ui.py tapexact Back; python3 phone_ui.py tab 设备"
   }
  ]
 }
