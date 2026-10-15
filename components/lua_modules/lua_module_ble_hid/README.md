@@ -137,7 +137,13 @@ checks passed. The a97cb556 app image was flashed at 0x20000 with device hash
 verification on 2026-10-15. Boot ELF prefix 5d4eb3211 and report handles
 37/41/45 were read back; the installed Lua application remains on SD.
 Actual iPhone pairing and media results remain separate acceptance gates.
+On 2026-10-15 at 09:27, after aligning the bootloader with the app's 0x9000
+partition layout, UART recorded encryption status 0 on the user-confirmed
+7133 iPhone connection. Lua read back ready/connected/encrypted/bonded and
+notifications enabled. The user confirmed media operations generally worked;
+logs captured play/pause and previous/next reports. Per-action volume and
+audible mute results, artwork/lyrics, and disconnect recovery remain open.
 macOS CoreBluetooth also subscribes to HID when using the bridge; subscription
 does not identify a phone platform. A Mac transfer started SMP and timed out;
-the Mac was released before asking for iPhone-only pairing. Simultaneous host
+the Mac was released before successful iPhone-only pairing. Simultaneous host
 acceptance has not passed.
