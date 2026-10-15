@@ -531,7 +531,7 @@ static esp_err_t meeting_minutes_audio_start(void)
     if (s_meeting_minutes_audio_active) {
         return ESP_OK;
     }
-    esp_err_t err = system_ui_workbuddy_start_audio_session(true);
+    esp_err_t err = system_ui_workbuddy_start_audio_session_from(true, "meeting");
     if (err != ESP_OK) {
         return err;
     }
@@ -546,7 +546,7 @@ static void meeting_minutes_audio_stop(void)
         return;
     }
     meeting_minutes_visualizer_stop();
-    (void)system_ui_workbuddy_stop_audio_session();
+    (void)system_ui_workbuddy_stop_audio_session_from("meeting");
     s_meeting_minutes_audio_active = false;
 }
 

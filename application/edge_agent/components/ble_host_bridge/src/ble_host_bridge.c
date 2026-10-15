@@ -4,7 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 #include "ble_host_bridge.h"
+#include "voice_frame.h"
 
+#include <inttypes.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -72,6 +74,18 @@ static const char *TAG = "ble_host_bridge";
  * the host-facing protocol; the "__" prefix keeps it out of the advertised ops. */
 #define BLE_HOST_BRIDGE_EVENT_OP         "__job_event"
 #define BLE_HOST_BRIDGE_EVENT_REQUEST_ID "job-event"
+/* Voice uplink: Opus packets go out on their own binary characteristic, session
+ * start/stop events on TX with this synthetic id. */
+#define BLE_HOST_BRIDGE_VOICE_EVENT_ID     "voice-event"
+#define BLE_HOST_BRIDGE_AUDIO_BITRATE      24000
+/* ~2.9 s of 60 ms packets: rides out a slow connection interval without making
+ * the capture task wait for the radio. */
+#define BLE_HOST_BRIDGE_VOICE_QUEUE_LEN    48
+#define BLE_HOST_BRIDGE_VOICE_TASK_STACK   4096
+#define BLE_HOST_BRIDGE_VOICE_MAX_MS_DEFAULT 30000
+#define BLE_HOST_BRIDGE_VOICE_MAX_MS_LIMIT   120000
+#define BLE_HOST_BRIDGE_VOICE_BUTTON_MAX_MS  60000
+#define BLE_HOST_BRIDGE_VOICE_TAG_LEN      16
 
 static const ble_uuid128_t s_service_uuid = BLE_UUID128_INIT(
     0x45, 0x53, 0x50, 0x43, 0x4c, 0x41, 0x57, 0x00,
@@ -85,6 +99,43 @@ static const ble_uuid128_t s_tx_uuid = BLE_UUID128_INIT(
 static const ble_uuid128_t s_status_uuid = BLE_UUID128_INIT(
     0x45, 0x53, 0x50, 0x43, 0x4c, 0x41, 0x57, 0x00,
     0x00, 0x00, 0x00, 0x00, 0x04, 0x10, 0x7d, 0x7b);
+static const ble_uuid128_t s_audio_uuid = BLE_UUID128_INIT(
+    0x45, 0x53, 0x50, 0x43, 0x4c, 0x41, 0x57, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x05, 0x10, 0x7d, 0x7b);
+
+typedef enum {
+    VOICE_ITEM_AUDIO = 0,
+    VOICE_ITEM_STARTED,
+    VOICE_ITEM_STOPPED,
+    VOICE_ITEM_STOP_REQUEST,
+} voice_item_kind_t;
+
+/* One entry of the voice queue: an Opus packet, or a session event that has to
+ * stay in order with the packets around it. */
+typedef struct {
+    uint8_t kind;
+    uint8_t session;
+    uint16_t seq;
+    uint32_t frames;
+    uint32_t dropped;
+    uint32_t gaps;
+    char tag[BLE_HOST_BRIDGE_VOICE_TAG_LEN];
+    size_t len;
+    uint8_t data[];
+} voice_item_t;
+
+typedef struct {
+    bool active;
+    uint8_t session;
+    uint8_t session_counter;
+    char source[BLE_HOST_BRIDGE_VOICE_TAG_LEN];
+    TickType_t started_at;
+    uint32_t max_ms;
+    uint32_t next_max_ms;
+    uint32_t frames;
+    uint32_t dropped;
+    uint32_t bytes;
+} ble_host_bridge_voice_t;
 
 typedef enum {
     BLE_HOST_BRIDGE_IDLE = 0,
@@ -99,11 +150,13 @@ typedef struct {
     bool controller_inited;
     bool controller_enabled;
     bool subscribed;
+    bool audio_subscribed;
     uint8_t own_addr_type;
     /* Live links across all tenants of this host, not just ours. */
     uint8_t conn_count;
     uint16_t conn_handle;
     uint16_t tx_val_handle;
+    uint16_t audio_val_handle;
     uint16_t negotiated_mtu;
     char device_name[32];
     char storage_base_path[BLE_HOST_BRIDGE_PATH_MAX];
@@ -119,6 +172,9 @@ typedef struct {
     SemaphoreHandle_t sync_sem;
     QueueHandle_t request_queue;
     TaskHandle_t request_task;
+    QueueHandle_t voice_queue;
+    TaskHandle_t voice_task;
+    ble_host_bridge_voice_t voice;
     ble_host_bridge_state_t state;
 } ble_host_bridge_ctx_t;
 
@@ -129,6 +185,14 @@ static int ble_host_bridge_rx_access(uint16_t conn_handle, uint16_t attr_handle,
                                      struct ble_gatt_access_ctxt *ctxt, void *arg);
 static int ble_host_bridge_status_access(uint16_t conn_handle, uint16_t attr_handle,
                                          struct ble_gatt_access_ctxt *ctxt, void *arg);
+static int ble_host_bridge_voice_access(uint16_t conn_handle, uint16_t attr_handle,
+                                        struct ble_gatt_access_ctxt *ctxt, void *arg);
+static void handle_voice_start(const char *id, const cJSON *root);
+static void handle_voice_stop(const char *id);
+static void handle_voice_status(const char *id);
+static void bridge_voice_state_cb(bool capturing, const char *tag, void *user_ctx);
+static bool voice_enqueue_locked(voice_item_t *item);
+static void ble_host_bridge_voice_task(void *arg);
 static esp_err_t ble_host_bridge_start_advertising(void);
 static void handle_hello(const char *id);
 static void handle_device_info(const char *id, const char *payload_json);
@@ -187,6 +251,14 @@ static const struct ble_gatt_chr_def s_bridge_chrs[] = {
         .uuid = &s_status_uuid.u,
         .access_cb = ble_host_bridge_status_access,
         .flags = BLE_GATT_CHR_F_READ,
+    },
+    {
+        /* Binary Opus uplink, see voice_frame.h. Reading it returns the voice
+         * session status JSON. */
+        .uuid = &s_audio_uuid.u,
+        .access_cb = ble_host_bridge_voice_access,
+        .val_handle = &s_bridge.audio_val_handle,
+        .flags = BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_NOTIFY,
     },
     {0},
 };
@@ -431,13 +503,19 @@ static void handle_put_lua(const char *id, const char *source)
 
 static void handle_hello(const char *id)
 {
-    char data[320];
+    char data[640];
     snprintf(data, sizeof(data),
              "{\"protocol\":%d,\"device_name\":\"%s\",\"ops\":[\"hello\",\"device_info\",\"put_lua\","
              "\"run_lua\",\"job_status\",\"job_tail\",\"job_stop\",\"workbuddy_ui\","
-             "\"workbuddy_audio_control\",\"workbuddy_audio_opus\"],"
-             "\"pushes\":[\"job_event\",\"workbuddy_audio_opus\"]}",
-             BLE_HOST_BRIDGE_PROTOCOL_VERSION, s_bridge.device_name);
+             "\"workbuddy_audio_control\",\"workbuddy_audio_opus\",\"voice_start\",\"voice_stop\","
+             "\"voice_status\"],"
+             "\"pushes\":[\"job_event\",\"workbuddy_audio_opus\",\"voice_event\"],"
+             "\"voice\":{\"version\":%d,\"char\":\"7b7d1005-0000-0000-0057-414c43505345\","
+             "\"codec\":\"opus\",\"sample_rate\":%d,\"channels\":%d,\"frame_ms\":%d,"
+             "\"bitrate\":%d,\"header\":%d}}",
+             BLE_HOST_BRIDGE_PROTOCOL_VERSION, s_bridge.device_name, VOICE_FRAME_VERSION,
+             BLE_HOST_BRIDGE_AUDIO_SAMPLE_RATE, BLE_HOST_BRIDGE_AUDIO_CHANNELS,
+             BLE_HOST_BRIDGE_AUDIO_FRAME_MS, BLE_HOST_BRIDGE_AUDIO_BITRATE, VOICE_FRAME_HEADER_LEN);
     send_response(id, true, "hello", data);
 }
 
@@ -854,7 +932,45 @@ static esp_err_t ble_host_bridge_send_workbuddy_audio(const uint8_t *opus,
     }
     bridge_lock();
     bool deliverable = s_bridge.subscribed && s_bridge.conn_handle != BLE_HS_CONN_HANDLE_NONE;
+    bool binary = s_bridge.audio_subscribed && s_bridge.conn_handle != BLE_HS_CONN_HANDLE_NONE &&
+                  s_bridge.voice_queue != NULL;
     bridge_unlock();
+
+    if (binary) {
+        /* Runs on the capture task: hand the packet to the voice task and return,
+         * so the radio never makes the mic reader miss a chunk. */
+        voice_item_t *item = malloc(sizeof(*item) + opus_size);
+        bool queued = false;
+
+        if (item) {
+            memset(item, 0, sizeof(*item));
+            item->kind = VOICE_ITEM_AUDIO;
+            item->seq = (uint16_t)seq;
+            item->len = opus_size;
+            memcpy(item->data, opus, opus_size);
+        }
+        bridge_lock();
+        /* Packets outside a session (encoder tail after stop) are discarded so
+         * the host never sees audio after the "stopped" event. */
+        bool active = s_bridge.voice.active;
+        if (item && active) {
+            item->session = s_bridge.voice.session;
+            queued = voice_enqueue_locked(item);
+            if (queued) {
+                s_bridge.voice.frames++;
+                s_bridge.voice.bytes += (uint32_t)opus_size;
+            } else {
+                s_bridge.voice.dropped++;
+            }
+        } else if (active) {
+            s_bridge.voice.dropped++;
+        }
+        bridge_unlock();
+        if (!queued) {
+            free(item);
+        }
+        return queued || !active ? ESP_OK : ESP_ERR_NO_MEM;
+    }
     if (!deliverable) {
         return ESP_ERR_INVALID_STATE;
     }
@@ -896,6 +1012,356 @@ static esp_err_t ble_host_bridge_send_workbuddy_audio(const uint8_t *opus,
     cJSON_Delete(root);
     free(b64);
     return err;
+}
+
+/* ---- Voice uplink -------------------------------------------------------- */
+
+/* Caller holds the bridge lock. Never blocks: the capture task and LVGL event
+ * handlers both end up here. */
+static bool voice_enqueue_locked(voice_item_t *item)
+{
+    if (!item || !s_bridge.voice_queue) {
+        return false;
+    }
+    return xQueueSend(s_bridge.voice_queue, &item, 0) == pdTRUE;
+}
+
+static voice_item_t *voice_item_new(voice_item_kind_t kind, const char *tag)
+{
+    voice_item_t *item = calloc(1, sizeof(*item));
+
+    if (item) {
+        item->kind = (uint8_t)kind;
+        strlcpy(item->tag, tag ? tag : "", sizeof(item->tag));
+    }
+    return item;
+}
+
+static esp_err_t notify_audio(const uint8_t *data, size_t len)
+{
+    for (int attempt = 0; attempt < BLE_HOST_BRIDGE_NOTIFY_RETRY_COUNT; attempt++) {
+        bridge_lock();
+        if (!s_bridge.audio_subscribed || s_bridge.conn_handle == BLE_HS_CONN_HANDLE_NONE) {
+            bridge_unlock();
+            return ESP_ERR_INVALID_STATE;
+        }
+        uint16_t conn_handle = s_bridge.conn_handle;
+        uint16_t audio_handle = s_bridge.audio_val_handle;
+        bridge_unlock();
+
+        struct os_mbuf *om = ble_hs_mbuf_from_flat(data, len);
+        if (!om) {
+            vTaskDelay(pdMS_TO_TICKS(8));
+            continue;
+        }
+        int rc = ble_gatts_notify_custom(conn_handle, audio_handle, om);
+        if (rc == 0) {
+            return ESP_OK;
+        }
+        vTaskDelay(pdMS_TO_TICKS(8));
+    }
+    return ESP_FAIL;
+}
+
+static void voice_send_packet(const voice_item_t *item)
+{
+    uint8_t frag[BLE_HOST_BRIDGE_PREFERRED_MTU];
+    voice_frame_cursor_t cursor;
+    size_t cap;
+    size_t n;
+
+    bridge_lock();
+    uint16_t mtu = s_bridge.negotiated_mtu ? s_bridge.negotiated_mtu : 23;
+    bridge_unlock();
+    /* ATT notification payload is MTU - 3. */
+    cap = mtu > 3 ? (size_t)mtu - 3 : 20;
+    if (cap > sizeof(frag)) {
+        cap = sizeof(frag);
+    }
+
+    voice_frame_cursor_init(&cursor, item->session, item->seq, item->data, item->len);
+    while ((n = voice_frame_next(&cursor, frag, cap)) > 0) {
+        if (notify_audio(frag, n) != ESP_OK) {
+            bridge_lock();
+            s_bridge.voice.dropped++;
+            bridge_unlock();
+            return;
+        }
+    }
+}
+
+static void voice_status_json(char *out, size_t out_size)
+{
+    bridge_lock();
+    uint32_t elapsed_ms = s_bridge.voice.active ?
+                          (uint32_t)pdTICKS_TO_MS(xTaskGetTickCount() - s_bridge.voice.started_at) : 0;
+    snprintf(out, out_size,
+             "{\"active\":%s,\"session\":%u,\"source\":\"%s\",\"frames\":%" PRIu32
+             ",\"dropped\":%" PRIu32 ",\"bytes\":%" PRIu32 ",\"elapsed_ms\":%" PRIu32
+             ",\"max_ms\":%" PRIu32 ",\"mic_gaps\":%" PRIu32 ",\"audio_subscribed\":%s,"
+             "\"codec\":\"opus\",\"sample_rate\":%d,\"channels\":%d,\"frame_ms\":%d,\"bitrate\":%d}",
+             s_bridge.voice.active ? "true" : "false",
+             (unsigned)s_bridge.voice.session,
+             s_bridge.voice.source,
+             s_bridge.voice.frames,
+             s_bridge.voice.dropped,
+             s_bridge.voice.bytes,
+             elapsed_ms,
+             s_bridge.voice.max_ms,
+             system_ui_workbuddy_audio_mic_gaps(),
+             s_bridge.audio_subscribed ? "true" : "false",
+             BLE_HOST_BRIDGE_AUDIO_SAMPLE_RATE,
+             BLE_HOST_BRIDGE_AUDIO_CHANNELS,
+             BLE_HOST_BRIDGE_AUDIO_FRAME_MS,
+             BLE_HOST_BRIDGE_AUDIO_BITRATE);
+    bridge_unlock();
+}
+
+static void voice_send_event(const voice_item_t *item)
+{
+    cJSON *root = cJSON_CreateObject();
+    char *text;
+
+    if (!root) {
+        return;
+    }
+    cJSON_AddStringToObject(root, "id", BLE_HOST_BRIDGE_VOICE_EVENT_ID);
+    cJSON_AddBoolToObject(root, "ok", true);
+    cJSON_AddStringToObject(root, "type", "voice_event");
+    cJSON_AddStringToObject(root, "state", item->kind == VOICE_ITEM_STARTED ? "started" : "stopped");
+    cJSON_AddNumberToObject(root, "session", item->session);
+    if (item->kind == VOICE_ITEM_STARTED) {
+        cJSON_AddStringToObject(root, "source", item->tag);
+    } else {
+        cJSON_AddStringToObject(root, "reason", item->tag);
+        cJSON_AddNumberToObject(root, "frames", (double)item->frames);
+        cJSON_AddNumberToObject(root, "dropped", (double)item->dropped);
+        cJSON_AddNumberToObject(root, "gaps", (double)item->gaps);
+    }
+    text = cJSON_PrintUnformatted(root);
+    cJSON_Delete(root);
+    if (text) {
+        if (notify_response_text(BLE_HOST_BRIDGE_VOICE_EVENT_ID, text) != ESP_OK) {
+            ESP_LOGW(TAG, "voice event not delivered: %s", text);
+        }
+        free(text);
+    }
+}
+
+/* Runs on the voice task or the request task, never in a NimBLE or LVGL
+ * callback: stopping touches the filesystem and the UI lock. */
+static void voice_stop_capture(const char *reason)
+{
+    if (!system_ui_workbuddy_audio_capturing()) {
+        return;
+    }
+    (void)system_ui_workbuddy_stop_audio_session_from(reason);
+    (void)system_ui_update_workbuddy(&(system_ui_workbuddy_update_t) {
+        .record = "0",
+        .workbuddy_status = strcmp(reason, "timeout") == 0 ? "录音已到上限" :
+                            strcmp(reason, "host") == 0 ? "识别中" : "等待中",
+    });
+    ESP_LOGI(TAG, "voice capture stopped reason=%s", reason);
+}
+
+/* system_ui reports every capture start/stop here, whoever caused it (record
+ * button, meeting screen, host op). May run inside an LVGL event handler, so
+ * only record state and queue the event. */
+static void bridge_voice_state_cb(bool capturing, const char *tag, void *user_ctx)
+{
+    voice_item_t *item = voice_item_new(capturing ? VOICE_ITEM_STARTED : VOICE_ITEM_STOPPED, tag);
+    (void)user_ctx;
+
+    bridge_lock();
+    if (capturing) {
+        if (s_bridge.voice.active) {
+            bridge_unlock();
+            free(item);
+            return;
+        }
+        s_bridge.voice.session_counter++;
+        if (s_bridge.voice.session_counter == 0) {
+            s_bridge.voice.session_counter = 1;
+        }
+        s_bridge.voice.active = true;
+        s_bridge.voice.session = s_bridge.voice.session_counter;
+        strlcpy(s_bridge.voice.source, tag ? tag : "device", sizeof(s_bridge.voice.source));
+        s_bridge.voice.started_at = xTaskGetTickCount();
+        /* Cap utterances (host op, record button) so a forgotten session does
+         * not stream forever; meeting recordings stay uncapped. */
+        if (s_bridge.voice.next_max_ms) {
+            s_bridge.voice.max_ms = s_bridge.voice.next_max_ms;
+        } else if (tag && strcmp(tag, "meeting") == 0) {
+            s_bridge.voice.max_ms = 0;
+        } else {
+            s_bridge.voice.max_ms = BLE_HOST_BRIDGE_VOICE_BUTTON_MAX_MS;
+        }
+        s_bridge.voice.next_max_ms = 0;
+        s_bridge.voice.frames = 0;
+        s_bridge.voice.dropped = 0;
+        s_bridge.voice.bytes = 0;
+    } else {
+        if (!s_bridge.voice.active) {
+            bridge_unlock();
+            free(item);
+            return;
+        }
+        s_bridge.voice.active = false;
+        if (item) {
+            item->frames = s_bridge.voice.frames;
+            item->dropped = s_bridge.voice.dropped;
+            item->gaps = system_ui_workbuddy_audio_mic_gaps();
+        }
+    }
+    if (item) {
+        item->session = s_bridge.voice.session;
+        if (!voice_enqueue_locked(item)) {
+            ESP_LOGW(TAG, "voice event dropped, queue full (session=%u)", item->session);
+            free(item);
+        }
+    }
+    bridge_unlock();
+}
+
+static void ble_host_bridge_voice_task(void *arg)
+{
+    (void)arg;
+
+    for (;;) {
+        voice_item_t *item = NULL;
+        BaseType_t got = xQueueReceive(s_bridge.voice_queue, &item, pdMS_TO_TICKS(200));
+
+        /* Checked on every turn: while packets flow the receive never times out. */
+        bridge_lock();
+        bool expired = s_bridge.voice.active && s_bridge.voice.max_ms > 0 &&
+                       (xTaskGetTickCount() - s_bridge.voice.started_at) >=
+                       pdMS_TO_TICKS(s_bridge.voice.max_ms);
+        bridge_unlock();
+        if (expired) {
+            voice_stop_capture("timeout");
+        }
+        if (got != pdTRUE || !item) {
+            continue;
+        }
+
+        switch (item->kind) {
+        case VOICE_ITEM_AUDIO:
+            voice_send_packet(item);
+            break;
+        case VOICE_ITEM_STARTED:
+        case VOICE_ITEM_STOPPED:
+            voice_send_event(item);
+            break;
+        case VOICE_ITEM_STOP_REQUEST:
+            voice_stop_capture(item->tag);
+            break;
+        default:
+            break;
+        }
+        free(item);
+    }
+}
+
+static uint32_t voice_payload_u32(const cJSON *root, const char *name, uint32_t fallback)
+{
+    const cJSON *payload = cJSON_GetObjectItemCaseSensitive(root, "payload");
+    const cJSON *item = payload && cJSON_IsObject(payload) ?
+                        cJSON_GetObjectItemCaseSensitive(payload, name) : NULL;
+
+    if (!item) {
+        item = cJSON_GetObjectItemCaseSensitive(root, name);
+    }
+    return cJSON_IsNumber(item) && item->valuedouble > 0 ? (uint32_t)item->valuedouble : fallback;
+}
+
+static bool voice_payload_bool(const cJSON *root, const char *name, bool fallback)
+{
+    const cJSON *payload = cJSON_GetObjectItemCaseSensitive(root, "payload");
+    const cJSON *item = payload && cJSON_IsObject(payload) ?
+                        cJSON_GetObjectItemCaseSensitive(payload, name) : NULL;
+
+    if (!item) {
+        item = cJSON_GetObjectItemCaseSensitive(root, name);
+    }
+    return cJSON_IsBool(item) ? cJSON_IsTrue(item) : fallback;
+}
+
+static void handle_voice_start(const char *id, const cJSON *root)
+{
+    char data[400];
+    uint32_t max_ms = voice_payload_u32(root, "max_ms", BLE_HOST_BRIDGE_VOICE_MAX_MS_DEFAULT);
+    bool show_ui = voice_payload_bool(root, "show_ui", false);
+    esp_err_t err = ESP_OK;
+
+    if (max_ms > BLE_HOST_BRIDGE_VOICE_MAX_MS_LIMIT) {
+        max_ms = BLE_HOST_BRIDGE_VOICE_MAX_MS_LIMIT;
+    }
+    bridge_lock();
+    bool subscribed = s_bridge.audio_subscribed;
+    bool active = s_bridge.voice.active;
+    if (!active) {
+        s_bridge.voice.next_max_ms = max_ms;
+    }
+    bridge_unlock();
+
+    if (!subscribed) {
+        send_response(id, false, "voice_start", "audio_char_not_subscribed");
+        return;
+    }
+    if (!active) {
+        if (show_ui) {
+            /* Fails while a Lua app owns the display; capture still starts. */
+            (void)system_ui_show_workbuddy();
+        }
+        err = system_ui_workbuddy_start_capture_background("host");
+        if (err == ESP_OK) {
+            (void)system_ui_update_workbuddy(&(system_ui_workbuddy_update_t) {
+                .record = "1",
+                .workbuddy_status = "录音中",
+            });
+        }
+    }
+    if (err != ESP_OK) {
+        bridge_lock();
+        s_bridge.voice.next_max_ms = 0;
+        bridge_unlock();
+        send_response(id, false, "voice_start", esp_err_to_name(err));
+        return;
+    }
+    voice_status_json(data, sizeof(data));
+    send_response(id, true, "voice_start", data);
+}
+
+static void handle_voice_stop(const char *id)
+{
+    char data[400];
+
+    voice_stop_capture("host");
+    voice_status_json(data, sizeof(data));
+    send_response(id, true, "voice_stop", data);
+}
+
+static void handle_voice_status(const char *id)
+{
+    char data[400];
+
+    voice_status_json(data, sizeof(data));
+    send_response(id, true, "voice_status", data);
+}
+
+static int ble_host_bridge_voice_access(uint16_t conn_handle, uint16_t attr_handle,
+                                        struct ble_gatt_access_ctxt *ctxt, void *arg)
+{
+    char status[400];
+    (void)conn_handle;
+    (void)attr_handle;
+    (void)arg;
+
+    if (ctxt->op != BLE_GATT_ACCESS_OP_READ_CHR) {
+        return BLE_ATT_ERR_UNLIKELY;
+    }
+    voice_status_json(status, sizeof(status));
+    return os_mbuf_append(ctxt->om, status, strlen(status)) == 0 ? 0 : BLE_ATT_ERR_INSUFFICIENT_RES;
 }
 
 /* cap_lua_job_status_name() lives in cap_lua's private header, so keep a local
@@ -1068,6 +1534,12 @@ static void dispatch_request(const char *json_text)
         handle_workbuddy_audio_control(id, root);
     } else if (strcmp(op, "workbuddy_audio_opus") == 0) {
         handle_workbuddy_audio_opus(id, root);
+    } else if (strcmp(op, "voice_start") == 0) {
+        handle_voice_start(id, root);
+    } else if (strcmp(op, "voice_stop") == 0) {
+        handle_voice_stop(id);
+    } else if (strcmp(op, "voice_status") == 0) {
+        handle_voice_status(id);
     } else if (strcmp(op, BLE_HOST_BRIDGE_EVENT_OP) == 0) {
         cJSON *job_id = cJSON_GetObjectItemCaseSensitive(root, "job_id");
         cJSON *status = cJSON_GetObjectItemCaseSensitive(root, "status");
@@ -1284,7 +1756,15 @@ static int ble_host_bridge_gap_event(struct ble_gap_event *event, void *arg)
             ESP_LOGI(TAG, "host disconnected reason=%d", event->disconnect.reason);
             s_bridge.conn_handle = BLE_HS_CONN_HANDLE_NONE;
             s_bridge.subscribed = false;
+            s_bridge.audio_subscribed = false;
             s_bridge.negotiated_mtu = BLE_HOST_BRIDGE_PREFERRED_MTU;
+            if (s_bridge.voice.active) {
+                /* Nobody is listening any more; stop on the voice task. */
+                voice_item_t *stop = voice_item_new(VOICE_ITEM_STOP_REQUEST, "disconnect");
+                if (stop && !voice_enqueue_locked(stop)) {
+                    free(stop);
+                }
+            }
             reset_request_locked();
             s_bridge.state = BLE_HOST_BRIDGE_IDLE;
         } else {
@@ -1329,6 +1809,22 @@ static int ble_host_bridge_gap_event(struct ble_gap_event *event, void *arg)
             bridge_unlock();
             ESP_LOGI(TAG, "host notify subscription=%d conn_handle=%u",
                      s_bridge.subscribed, event->subscribe.conn_handle);
+        } else if (event->subscribe.attr_handle == s_bridge.audio_val_handle) {
+            bridge_lock();
+            s_bridge.conn_handle = event->subscribe.conn_handle;
+            s_bridge.audio_subscribed = event->subscribe.cur_notify;
+            if (s_bridge.state == BLE_HOST_BRIDGE_IDLE) {
+                s_bridge.state = BLE_HOST_BRIDGE_CONNECTED;
+            }
+            if (!s_bridge.audio_subscribed && s_bridge.voice.active) {
+                voice_item_t *stop = voice_item_new(VOICE_ITEM_STOP_REQUEST, "unsubscribed");
+                if (stop && !voice_enqueue_locked(stop)) {
+                    free(stop);
+                }
+            }
+            bridge_unlock();
+            ESP_LOGI(TAG, "host audio subscription=%d conn_handle=%u",
+                     s_bridge.audio_subscribed, event->subscribe.conn_handle);
         }
         return 0;
     case BLE_GAP_EVENT_MTU:
@@ -1513,6 +2009,8 @@ esp_err_t ble_host_bridge_start(const ble_host_bridge_config_t *config)
     s_bridge.request_queue = xQueueCreate(BLE_HOST_BRIDGE_REQUEST_QUEUE_LEN, sizeof(char *));
     ESP_GOTO_ON_FALSE(s_bridge.mutex && s_bridge.sync_sem && s_bridge.request_queue,
                       ESP_ERR_NO_MEM, fail, TAG, "runtime object alloc failed");
+    s_bridge.voice_queue = xQueueCreate(BLE_HOST_BRIDGE_VOICE_QUEUE_LEN, sizeof(voice_item_t *));
+    ESP_GOTO_ON_FALSE(s_bridge.voice_queue, ESP_ERR_NO_MEM, fail, TAG, "voice queue alloc failed");
     BaseType_t task_ok = xTaskCreate(ble_host_bridge_request_task,
                                      "ble_bridge_req",
                                      BLE_HOST_BRIDGE_REQUEST_TASK_STACK,
@@ -1521,6 +2019,16 @@ esp_err_t ble_host_bridge_start(const ble_host_bridge_config_t *config)
                                      &s_bridge.request_task);
     ESP_GOTO_ON_FALSE(task_ok == pdPASS, ESP_ERR_NO_MEM, fail, TAG,
                       "request task create failed");
+    /* Same priority as the request task: below NimBLE's host task, above the
+     * capture task (3), so queued packets drain as soon as the radio allows. */
+    task_ok = xTaskCreate(ble_host_bridge_voice_task,
+                          "ble_bridge_voice",
+                          BLE_HOST_BRIDGE_VOICE_TASK_STACK,
+                          NULL,
+                          5,
+                          &s_bridge.voice_task);
+    ESP_GOTO_ON_FALSE(task_ok == pdPASS, ESP_ERR_NO_MEM, fail, TAG,
+                      "voice task create failed");
 
     err = nvs_flash_init();
     if (err == ESP_ERR_INVALID_STATE) {
@@ -1584,6 +2092,7 @@ esp_err_t ble_host_bridge_start(const ble_host_bridge_config_t *config)
         ESP_LOGW(TAG, "job event subscribe failed: %s", esp_err_to_name(err));
     }
     (void)system_ui_workbuddy_set_audio_tx_callback(ble_host_bridge_send_workbuddy_audio, NULL);
+    (void)system_ui_workbuddy_set_audio_state_callback(bridge_voice_state_cb, NULL);
 
     s_bridge.started = true;
     ESP_LOGI(TAG, "started name=%s storage=%s", s_bridge.device_name, s_bridge.storage_base_path);
@@ -1600,10 +2109,15 @@ esp_err_t ble_host_bridge_stop(void)
      * queue that is about to be deleted. */
     (void)cap_lua_unregister_job_event_cb(bridge_job_event_cb, NULL);
     (void)system_ui_workbuddy_set_audio_tx_callback(NULL, NULL);
+    (void)system_ui_workbuddy_set_audio_state_callback(NULL, NULL);
 
     if (s_bridge.request_task) {
         vTaskDelete(s_bridge.request_task);
         s_bridge.request_task = NULL;
+    }
+    if (s_bridge.voice_task) {
+        vTaskDelete(s_bridge.voice_task);
+        s_bridge.voice_task = NULL;
     }
     /* Detach the queue under the lock so no producer can still see it, then
      * drain and delete it. */
@@ -1617,6 +2131,17 @@ esp_err_t ble_host_bridge_stop(void)
             free(request);
         }
         vQueueDelete(request_queue);
+    }
+    bridge_lock();
+    QueueHandle_t voice_queue = s_bridge.voice_queue;
+    s_bridge.voice_queue = NULL;
+    bridge_unlock();
+    if (voice_queue) {
+        voice_item_t *item = NULL;
+        while (xQueueReceive(voice_queue, &item, 0) == pdTRUE) {
+            free(item);
+        }
+        vQueueDelete(voice_queue);
     }
     if (s_bridge.started) {
         (void)ble_gap_adv_stop();

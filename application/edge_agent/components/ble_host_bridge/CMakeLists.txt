@@ -17,6 +17,7 @@ endif()
 idf_component_register(
     SRCS
         "src/ble_host_bridge.c"
+        "src/voice_frame.c"
     INCLUDE_DIRS
         "include"
     PRIV_INCLUDE_DIRS

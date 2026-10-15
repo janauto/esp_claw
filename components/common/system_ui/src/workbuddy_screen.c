@@ -25,6 +25,7 @@
  */
 #include "system_ui_private.h"
 #include "system_ui_audio.h"
+#include "claw_paths.h"
 
 #include <inttypes.h>
 #include <stdio.h>
@@ -66,6 +67,15 @@ extern esp_err_t cap_lua_async_submit(const cap_lua_async_job_t *job,
                                       size_t job_id_out_size,
                                       char *err_out,
                                       size_t err_out_size);
+
+extern esp_err_t cap_lua_run_script_async(const char *path,
+                                          const char *args_json,
+                                          uint32_t timeout_ms,
+                                          const char *name,
+                                          const char *exclusive,
+                                          bool replace,
+                                          char *output,
+                                          size_t output_size);
 
 #define PA_CTRL_GPIO 7
 
@@ -156,6 +166,10 @@ typedef struct {
 static SemaphoreHandle_t s_audio_playback_lock;
 static workbuddy_opus_bridge_t s_audio_playback_opus;
 static uint32_t s_audio_tx_seq;
+static system_ui_workbuddy_audio_state_cb_t s_audio_state_cb;
+static void *s_audio_state_user_ctx;
+static volatile bool s_audio_capturing;
+static volatile uint32_t s_audio_mic_gaps;
 
 bool workbuddy_get_audio_data(audio_data_packet_t *packet, uint32_t timeout_ms)
 {
@@ -573,6 +587,11 @@ static void workbuddy_audio_bridge_task(void *arg)
                                          false);
 
         if (err == ESP_OK) {
+            /* The mic area holds one chunk; a seq jump means this task was too
+             * slow and chunks were overwritten before it could read them. */
+            if (last_mic_seq != 0 && seq > last_mic_seq + 1) {
+                s_audio_mic_gaps += seq - last_mic_seq - 1;
+            }
             last_mic_seq = seq;
             if (fmt.sample_rate != AUDIO_OPUS_SAMPLE_RATE ||
                 fmt.channels != AUDIO_OPUS_CHANNELS ||
@@ -663,26 +682,117 @@ static void workbuddy_audio_bridge_stop(void)
     s_audio_bridge_stop = true;
 }
 
-esp_err_t system_ui_workbuddy_start_audio_session(bool capture_mic)
+esp_err_t system_ui_workbuddy_set_audio_state_callback(system_ui_workbuddy_audio_state_cb_t cb,
+                                                       void *user_ctx)
 {
+    s_audio_state_cb = cb;
+    s_audio_state_user_ctx = user_ctx;
+    return ESP_OK;
+}
+
+bool system_ui_workbuddy_audio_capturing(void)
+{
+    return s_audio_capturing;
+}
+
+uint32_t system_ui_workbuddy_audio_mic_gaps(void)
+{
+    return s_audio_mic_gaps;
+}
+
+static void workbuddy_audio_session_begin(bool capture_mic)
+{
+    if (capture_mic && !s_audio_capturing) {
+        /* A fresh session numbers its packets from 1 again. */
+        s_audio_tx_seq = 0;
+        s_audio_mic_gaps = 0;
+    }
+}
+
+static void workbuddy_audio_session_started(bool capture_mic, const char *source)
+{
+    ESP_LOGI(SYSTEM_UI_TAG, "workbuddy audio session started capture_mic=%d source=%s",
+             capture_mic, source ? source : "device");
+    if (capture_mic && !s_audio_capturing) {
+        s_audio_capturing = true;
+        system_ui_workbuddy_audio_state_cb_t cb = s_audio_state_cb;
+        if (cb != NULL) {
+            cb(true, source ? source : "device", s_audio_state_user_ctx);
+        }
+    }
+}
+
+esp_err_t system_ui_workbuddy_start_audio_session_from(bool capture_mic, const char *source)
+{
+    workbuddy_audio_session_begin(capture_mic);
     if (capture_mic && !workbuddy_audio_bridge_start()) {
         return ESP_FAIL;
     }
     ui_squareline_launch_app(AUDIO_SCRIPT_PATH);
-    ESP_LOGI(SYSTEM_UI_TAG, "workbuddy audio session started capture_mic=%d", capture_mic);
+    workbuddy_audio_session_started(capture_mic, source);
     return ESP_OK;
 }
 
-esp_err_t system_ui_workbuddy_stop_audio_session(void)
+esp_err_t system_ui_workbuddy_start_capture_background(const char *source)
 {
+    char path[256];
+    char output[160] = {0};
+    esp_err_t err;
+
+    if (s_audio_capturing) {
+        return ESP_OK;
+    }
+    ESP_RETURN_ON_ERROR(claw_paths_join(CLAW_PATH_SYSTEM, AUDIO_SCRIPT_PATH, path, sizeof(path)),
+                        SYSTEM_UI_TAG, "resolve audio script failed");
+    workbuddy_audio_session_begin(true);
+    if (!workbuddy_audio_bridge_start()) {
+        return ESP_FAIL;
+    }
+    /* Its own exclusive group: unlike the launcher ("display"), this does not
+     * replace a Lua app that is on screen, so a host can listen while an app
+     * keeps running. */
+    err = cap_lua_run_script_async(path, NULL, 0, "voice_mic", "voice", true,
+                                   output, sizeof(output));
+    if (err != ESP_OK) {
+        ESP_LOGE(SYSTEM_UI_TAG, "voice mic script start failed: %s %s",
+                 esp_err_to_name(err), output);
+        workbuddy_audio_bridge_stop();
+        return err;
+    }
+    workbuddy_audio_session_started(true, source);
+    return ESP_OK;
+}
+
+esp_err_t system_ui_workbuddy_start_audio_session(bool capture_mic)
+{
+    return system_ui_workbuddy_start_audio_session_from(capture_mic, "device");
+}
+
+esp_err_t system_ui_workbuddy_stop_audio_session_from(const char *reason)
+{
+    bool was_capturing = s_audio_capturing;
+
+    s_audio_capturing = false;
     workbuddy_audio_bridge_stop();
     FILE *f = fopen(AUDIO_CONTROL_FILE, "w");
     if (f) {
         fprintf(f, "stop\n");
         fclose(f);
     }
-    ESP_LOGI(SYSTEM_UI_TAG, "workbuddy audio session stop requested");
+    ESP_LOGI(SYSTEM_UI_TAG, "workbuddy audio session stop requested reason=%s gaps=%" PRIu32,
+             reason ? reason : "device", s_audio_mic_gaps);
+    if (was_capturing) {
+        system_ui_workbuddy_audio_state_cb_t cb = s_audio_state_cb;
+        if (cb != NULL) {
+            cb(false, reason ? reason : "device", s_audio_state_user_ctx);
+        }
+    }
     return ESP_OK;
+}
+
+esp_err_t system_ui_workbuddy_stop_audio_session(void)
+{
+    return system_ui_workbuddy_stop_audio_session_from("device");
 }
 
 static bool workbuddy_truthy_value(const char *value)
@@ -775,14 +885,14 @@ static void workbuddy_record_cb(lv_event_t *e)
     lv_label_set_text(s_wb.status, s_wb.recording ? "录音中" : "等待中");
 
     if (s_wb.recording) {
-        if (system_ui_workbuddy_start_audio_session(true) != ESP_OK) {
+        if (system_ui_workbuddy_start_audio_session_from(true, "button") != ESP_OK) {
             workbuddy_set_record_visual_locked(false);
             lv_label_set_text(s_wb.status, "等待中");
             return;
         }
         ESP_LOGI(SYSTEM_UI_TAG, "WorkBuddy BLE audio uplink triggered");
     } else {
-        (void)system_ui_workbuddy_stop_audio_session();
+        (void)system_ui_workbuddy_stop_audio_session_from("button");
     }
 }
 
@@ -917,6 +1027,9 @@ esp_err_t system_ui_create_workbuddy_locked(void)
 
 void system_ui_delete_workbuddy_locked(void)
 {
+    if (s_audio_capturing) {
+        (void)system_ui_workbuddy_stop_audio_session_from("ui_closed");
+    }
     workbuddy_audio_bridge_stop();
     if (s_wb.screen != NULL) {
         lv_obj_del(s_wb.screen);

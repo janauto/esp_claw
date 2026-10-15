@@ -53,6 +53,29 @@ esp_err_t system_ui_workbuddy_start_audio_session(bool capture_mic);
 esp_err_t system_ui_workbuddy_stop_audio_session(void);
 esp_err_t system_ui_workbuddy_play_opus(const uint8_t *opus, size_t opus_size);
 
+/*
+ * Mic capture session state, for hosts that turn the uplink into speech
+ * recognition. `source` names who started it ("button", "meeting", "host", ...)
+ * and `reason` who stopped it ("button", "host", "timeout", "disconnect", ...).
+ * The callback runs in the caller's context, which can be an LVGL event
+ * handler holding the UI lock: it must only record state and return.
+ */
+typedef void (*system_ui_workbuddy_audio_state_cb_t)(bool capturing,
+                                                     const char *source_or_reason,
+                                                     void *user_ctx);
+
+esp_err_t system_ui_workbuddy_set_audio_state_callback(system_ui_workbuddy_audio_state_cb_t cb,
+                                                       void *user_ctx);
+esp_err_t system_ui_workbuddy_start_audio_session_from(bool capture_mic, const char *source);
+/* Same capture, but runs the mic script in its own job group without going
+ * through the launcher, so an on-screen Lua app keeps running. */
+esp_err_t system_ui_workbuddy_start_capture_background(const char *source);
+esp_err_t system_ui_workbuddy_stop_audio_session_from(const char *reason);
+bool system_ui_workbuddy_audio_capturing(void);
+/* Mic chunks the uplink missed in the current/last session (single-slot handoff). */
+uint32_t system_ui_workbuddy_audio_mic_gaps(void);
+esp_err_t system_ui_show_workbuddy(void);
+
 #ifdef __cplusplus
 }
 #endif
