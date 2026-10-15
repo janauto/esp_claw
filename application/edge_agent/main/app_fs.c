@@ -23,6 +23,7 @@
 #define APP_FS_SYSTEM_PARTITION_LABEL   "system"
 #define APP_FS_STORAGE_PARTITION_LABEL  "storage"
 #define APP_FS_SDCARD_DEVICE_NAME       "fs_sdcard"
+#define APP_FS_SD_BOUNCE_BYTES          2048    /* 4 个扇区 */
 
 #define APP_FS_RAMFS_MAX_FILES          (8)
 #define APP_FS_RAMFS_MAX_BYTES          (512 * 1024)
@@ -173,6 +174,19 @@ static const char *storage_sdcard_mount_point(void)
     if (!handle->mount_point || !handle->mount_point[0] || handle->card == NULL) {
         ESP_LOGW(TAG, "SD card device present but not mounted, using flash fatfs");
         return NULL;
+    }
+
+    /* 1.0：缓冲区在 PSRAM 时，SD 驱动每次读写都要临时申请内部 DMA 内存做中转。内部内存紧张时
+     * （「我的」花园界面加后台 TLS 刷新）连 512 字节都申请不到，日志 allocate_dma_buf: not enough mem，
+     * 花园存档每次都失败、应用安装偶发 app_write 失败。开机时内存充裕，给驱动预留一块常驻中转区。 */
+    if (handle->card->host.dma_aligned_buffer == NULL) {
+        void *bounce = heap_caps_malloc(APP_FS_SD_BOUNCE_BYTES, MALLOC_CAP_DMA);
+        if (bounce) {
+            handle->card->host.dma_aligned_buffer = bounce;
+            ESP_LOGI(TAG, "SD card: reserved %d-byte DMA bounce buffer", APP_FS_SD_BOUNCE_BYTES);
+        } else {
+            ESP_LOGW(TAG, "SD card: could not reserve DMA bounce buffer");
+        }
     }
 
     return handle->mount_point;
