@@ -1,6 +1,6 @@
 idf_component_register(
     SRCS "src/live_apps.c" "src/live_apps_cli.c" "src/clip_feed.c"
-         "src/clip_live.c" "src/clip_live_format.c"
+         "src/clip_live.c" "src/clip_live_format.c" "src/live_http.c"
     INCLUDE_DIRS "include"
     EMBED_FILES "china_regions.tsv"
     REQUIRES app_claw app_config cap_lua claw_core claw_skill

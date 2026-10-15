@@ -19,3 +19,9 @@ with tempfile.TemporaryDirectory(prefix="ble-live-test-") as temp:
         str(component / "src/clip_live_format.c"), str(cjson / "cJSON.c"),
         "-o", str(binary)], check=True)
     subprocess.run([str(binary), str(data)], check=True)
+    http_binary = Path(temp) / "http_test"
+    subprocess.run(["clang", "-std=c11", "-g", "-O1", "-fsanitize=address,undefined",
+                    "-I" + str(component / "tests/include"), "-I" + str(component / "include"),
+                    str(component / "src/live_http.c"), str(component / "tests/http_regression.c"),
+                    "-o", str(http_binary)], check=True)
+    subprocess.run([str(http_binary)], check=True)

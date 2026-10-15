@@ -1,4 +1,5 @@
 #include "clip_live.h"
+#include "live_http.h"
 #include "esp_crt_bundle.h"
 #include "esp_event.h"
 #include "esp_http_client.h"
@@ -30,6 +31,7 @@ typedef struct {
 } fetch_state_t;
 struct clip_live_t {
     clip_live_config_t callbacks;
+    live_http_handle_t http;
     clip_live_settings_t settings;
     SemaphoreHandle_t lock;
     nvs_handle_t nvs;
@@ -204,32 +206,17 @@ static esp_err_t http_event(esp_http_client_event_t *event) {
     }
     return ESP_OK;
 }
-static esp_err_t get(const char *url, const char *etag, capture_t *capture, int *status) {
-    esp_http_client_config_t *config = calloc(1, sizeof(*config));
-    if (!config) {
-        return ESP_ERR_NO_MEM;
-    }
-    config->url = url;
-    config->timeout_ms = 9000;
-    config->buffer_size = 1024;
-    config->buffer_size_tx = 1024;
-    config->crt_bundle_attach = esp_crt_bundle_attach;
-    config->event_handler = http_event;
-    config->user_data = capture;
-    esp_http_client_handle_t client = esp_http_client_init(config);
-    free(config);
-    if (!client) {
-        return ESP_ERR_NO_MEM;
-    }
-    esp_http_client_set_header(client, "User-Agent", "PisenAIClip/0.4.0 (internal-test)");
-    esp_http_client_set_header(client, "Accept-Encoding", "identity");
-    if (etag && *etag) {
-        esp_http_client_set_header(client, "If-None-Match", etag);
-    }
-    esp_err_t err = esp_http_client_perform(client);
-    *status = esp_http_client_get_status_code(client);
-    esp_http_client_cleanup(client);
-    return err;
+static void reset_response(void *data) {
+    capture_t *capture = data;
+    free(capture->body);
+    capture->body = NULL;
+    capture->used = capture->capacity = 0;
+    capture->etag[0] = 0;
+    capture->retry_ms = 0;
+}
+static esp_err_t get(clip_live_handle_t h, const char *url, const char *etag,
+                     capture_t *capture, int *status) {
+    return live_http_get(&h->http, url, etag, http_event, capture, reset_response, status);
 }
 static cJSON *fetch_one(clip_live_handle_t h, int index, const clip_live_settings_t *settings,
                         capture_t *capture, int *status, esp_err_t *error) {
@@ -262,7 +249,7 @@ static cJSON *fetch_one(clip_live_handle_t h, int index, const clip_live_setting
                      : !strncmp(symbol, "hk", 2) ? "hkMinute"
                                                  : "minute",
                      symbol);
-            *error = get(url, NULL, capture, status);
+            *error = get(h, url, NULL, capture, status);
             cJSON *r =
                 *error == ESP_OK && *status == 200 && capture->body ? cJSON_Parse(capture->body) : NULL;
             cJSON *c = r ? clip_live_parse_stock_card(r, symbol) : NULL;
@@ -315,7 +302,7 @@ static cJSON *fetch_one(clip_live_handle_t h, int index, const clip_live_setting
                 snprintf(url, 640, "https://web.ifzq.gtimg.cn/appstock/app/%s/get?param=%s,day,,,250,qfq",
                          !strncmp(symbol, "us", 2) ? "usfqkline" : "fqkline", history_symbol);
                 int history_status = 0;
-                esp_err_t history_error = get(url, NULL, capture, &history_status);
+                esp_err_t history_error = get(h, url, NULL, capture, &history_status);
                 cJSON *history = history_error == ESP_OK && history_status == 200 && capture->body
                                      ? cJSON_Parse(capture->body)
                                      : NULL;
@@ -353,7 +340,7 @@ static cJSON *fetch_one(clip_live_handle_t h, int index, const clip_live_setting
         } else {
             snprintf(url, 640, "https://aihot.news/api/v1/hot-topics");
         }
-        *error = get(url, index == 2 ? h->states[index].etag : NULL, capture, status);
+        *error = get(h, url, index == 2 ? h->states[index].etag : NULL, capture, status);
         if (*error == ESP_OK && *status == 304) {
             char *text = NULL;
             int64_t age;
@@ -382,7 +369,7 @@ static cJSON *fetch_one(clip_live_handle_t h, int index, const clip_live_setting
                  "air-quality?latitude=%.6f&longitude=%.6f&current=us_aqi&timezone=Asia%%2FShanghai",
                  settings->latitude, settings->longitude);
         int air_status = 0;
-        esp_err_t air_error = get(url, NULL, capture, &air_status);
+        esp_err_t air_error = get(h, url, NULL, capture, &air_status);
         cJSON *air =
             air_error == ESP_OK && air_status == 200 && capture->body ? cJSON_Parse(capture->body) : NULL;
         const cJSON *current = cJSON_GetObjectItemCaseSensitive(air, "current");
@@ -420,7 +407,7 @@ static cJSON *fetch_one(clip_live_handle_t h, int index, const clip_live_setting
             capture->used = capture->capacity = 0;
             capture->prefix_only = true;
             int detail_status = 0;
-            esp_err_t detail_error = get(url, NULL, capture, &detail_status);
+            esp_err_t detail_error = get(h, url, NULL, capture, &detail_status);
             if (detail_error == ESP_OK && detail_status == 200) {
                 clip_live_enrich_hot_card(card, capture->body);
             }
@@ -620,7 +607,7 @@ static cJSON *query_stock(clip_live_handle_t h, const char *query, capture_t *ca
         capture_reset(capture);
         snprintf(url, 256, "https://web.ifzq.gtimg.cn/appstock/app/minute/query?code=%s", symbol);
         int status = 0;
-        esp_err_t err = get(url, NULL, capture, &status);
+        esp_err_t err = get(h, url, NULL, capture, &status);
         cJSON *r = err == ESP_OK && status == 200 && capture->body ? cJSON_Parse(capture->body) : NULL;
         if (r) {
             card = clip_live_parse_stock_card(r, symbol);
@@ -762,7 +749,7 @@ static cJSON *area_properties(const char *html) {
     }
     return NULL;
 }
-static cJSON *city_search_remote(const char *query, capture_t *capture) {
+static cJSON *city_search_remote(clip_live_handle_t h, const char *query, capture_t *capture) {
     cJSON *local = city_search_catalog(query);
     if (local && cJSON_GetArraySize(local) > 0) {
         return local;
@@ -779,7 +766,7 @@ static cJSON *city_search_remote(const char *query, capture_t *capture) {
              encoded);
     free(encoded);
     int status = 0;
-    esp_err_t err = get(url, NULL, capture, &status);
+    esp_err_t err = get(h, url, NULL, capture, &status);
     free(url);
     cJSON *j = err == ESP_OK && status == 200 && capture->body ? cJSON_Parse(capture->body) : NULL;
     cJSON *a = cJSON_Duplicate(cJSON_GetObjectItemCaseSensitive(j, "results"), true);
@@ -823,7 +810,7 @@ static void process_action(clip_live_handle_t h) {
         }
     } else if (err == ESP_OK && !strcmp(op, "city_search")) {
         const char *query = string(request, "query");
-        cJSON *cities = query ? city_search_remote(query, capture) : NULL;
+        cJSON *cities = query ? city_search_remote(h, query, capture) : NULL;
         if (cities && cJSON_GetArraySize(cities) > 0) {
             cJSON_AddItemToObject(result, "cities", cities);
         } else {
@@ -840,7 +827,7 @@ static void process_action(clip_live_handle_t h) {
             capture_reset(capture);
             capture->prefix_only = true;
             int status = 0;
-            esp_err_t geo = get(url, NULL, capture, &status);
+            esp_err_t geo = get(h, url, NULL, capture, &status);
             cJSON *props = geo == ESP_OK && status == 200 ? area_properties(capture->body) : NULL;
             const cJSON *center = cJSON_GetObjectItemCaseSensitive(props, "center"),
                         *x = cJSON_GetArrayItem(center, 0), *y = cJSON_GetArrayItem(center, 1);
@@ -1059,6 +1046,7 @@ static void worker(void *ctx) {
         }
         if (!h->callbacks.paused(h->callbacks.ctx)) {
             process_action(h);
+            live_http_close(&h->http);
         }
         if (!atomic_load(&h->connected) || wall() < 1700000000000ULL ||
             h->callbacks.paused(h->callbacks.ctx)) {
@@ -1090,6 +1078,7 @@ static void worker(void *ctx) {
             esp_err_t err = ESP_OK;
             cJSON *payload = i == 0 ? fetch_locations(h, settings, capture, &status, &err)
                                     : fetch_one(h, i, settings, capture, &status, &err);
+            live_http_close(&h->http);
             if (payload && generation == atomic_load(&h->generation)) {
                 err = h->callbacks.publish(kinds[i], payload, h->callbacks.ctx);
             } else if (err == ESP_OK) {
@@ -1194,6 +1183,7 @@ esp_err_t clip_live_create(const clip_live_config_t *config, clip_live_handle_t 
 }
 void clip_live_delete_unstarted(clip_live_handle_t h) {
     if (h) {
+        live_http_close(&h->http);
         cJSON_Delete(h->locations);
         cJSON_Delete(h->action_request);
         cJSON_Delete(h->action_result);
@@ -1329,6 +1319,7 @@ cJSON *clip_live_status(clip_live_handle_t h) {
             cJSON_AddNumberToObject(state, "http_status", h->states[i].http);
             cJSON_AddStringToObject(state, "error", esp_err_to_name(h->states[i].error));
             cJSON_AddNumberToObject(state, "failures", h->states[i].failures);
+            cJSON_AddNumberToObject(state, "last_attempt_ms", (double)h->states[i].last_attempt);
             cJSON_AddNumberToObject(state, "last_success_ms", (double)h->states[i].last_success);
         }
     }
