@@ -21,6 +21,7 @@
 #include "claw_cap.h"
 #include "cap_lua.h"
 #include "system_ui.h"
+#include "display_service.h"
 #include "esp_bt.h"
 #include "esp_check.h"
 #include "esp_err.h"
@@ -739,6 +740,17 @@ static void handle_job_stop(const char *id, const char *job_id)
     ESP_LOGI(TAG, "job_stop request id=%s job_id=%s", id ? id : "", job_id ? job_id : "");
     if (!output) {
         send_response(id, false, "error", "out_of_memory");
+        return;
+    }
+    if ((!job_id || !job_id[0]) && display_service_has_exclusive_session()) {
+        /* 1.0：手机“停止运行”不带 job_id——停掉背夹前台正在运行的应用（首页、语音或 app_launch
+         * 打开的都算），以前只认手机自己 run_lua 起的 job，从应用页打开的应用停不掉 */
+        err = cap_lua_stop_all_jobs("display", 3000, output, BLE_HOST_BRIDGE_OUTPUT_MAX);
+        if (err == ESP_OK) {
+            (void)system_ui_show_home();
+        }
+        send_response(id, err == ESP_OK, "job_stop", output[0] ? output : esp_err_to_name(err));
+        free(output);
         return;
     }
     if (!job_id || !job_id[0]) {

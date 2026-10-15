@@ -9,6 +9,8 @@
 #include "mbedtls/base64.h"
 #include "system_ui.h"
 #include "cap_lua.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 
 #define APP_PATH_MAX 256
 #define APP_BASE64_CAPACITY (4 * ((LOCAL_APP_CHUNK_MAX + 2) / 3) + 1)
@@ -164,9 +166,28 @@ static bool app_is_running(local_app_store_handle_t store, const char *id)
     return busy;
 }
 
+/* 1.0：手机上确认卸载时，背夹前台若有应用在独占显示，先把它停掉回到首页——
+ * 运行中的应用占着自己的文件删不掉，以前直接回 invalid_state，手机上看着像“卸载没反应”。
+ * 必须在拿 display 锁之前做：应用退出时自己也要用这把锁。 */
+static void stop_foreground_app(void)
+{
+    char *out = calloc(1, 1024);
+    if (out) {
+        (void)cap_lua_stop_all_jobs("display", 3000, out, 1024);
+        free(out);
+    }
+    (void)system_ui_show_home();
+    for (int i = 0; i < 30 && display_service_has_exclusive_session(); i++) {
+        vTaskDelay(pdMS_TO_TICKS(100));
+    }
+}
+
 esp_err_t ble_host_apps_handle(const char *op, const cJSON *request, char **output)
 {
     *output = NULL;
+    if (strcmp(op, "app_remove") == 0 && display_service_is_started() && display_service_has_exclusive_session()) {
+        stop_foreground_app();
+    }
     char *root = malloc(APP_PATH_MAX);
     if (!root)
         return ESP_ERR_NO_MEM;
