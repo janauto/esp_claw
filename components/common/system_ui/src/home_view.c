@@ -1421,6 +1421,16 @@ cJSON *hv_state_json(void)
     cJSON_AddStringToObject(j, "voice_route", hv_voice_route_name());
     cJSON_AddItemToObject(j, "layout", hv_layout_to_json(&H.layout));
     cJSON_AddNumberToObject(j, "apps", (double)hv_catalog_count());
+    cJSON_AddNumberToObject(j, "volume", hv_plat_volume_get());
+    cJSON_AddNumberToObject(j, "brightness", hv_control_brightness());
+    const char *fid = hv_overview_focus_id();
+    const char *tid = hv_overview_target_id();
+    if (fid && H.view == HV_VIEW_OVERVIEW) {
+        cJSON_AddStringToObject(j, "ov_focus", fid);
+    }
+    if (tid) {
+        cJSON_AddStringToObject(j, "target", tid);
+    }
     if (H.toast && !lv_obj_has_flag(H.toast, LV_OBJ_FLAG_HIDDEN)) {
         cJSON_AddStringToObject(j, "toast", lv_label_get_text(H.toast_l));
     }

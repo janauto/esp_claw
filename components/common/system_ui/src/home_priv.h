@@ -274,6 +274,8 @@ void hv_modal_close(void);
 lv_obj_t *hv_control_build(lv_obj_t *scr);
 void hv_control_refresh(void);
 int hv_control_brightness(void);  /* 当前亮度百分比（软件调光） */
+const char *hv_overview_focus_id(void);   /* 自动验收用：总览焦点应用 / 菜单与弹窗针对的应用 */
+const char *hv_overview_target_id(void);
 /* 语音本地指令（home_platform.c）：认出并已执行返回 true，reply 是给用户看的确认语。
  * via_phone：背夹·手机模式由手机经 BLE 送来，打开应用要等首页显示回复后再开。任意任务可调用。 */
 bool hv_intent_run(const char *text, char *reply, size_t reply_size, bool via_phone);

@@ -58,15 +58,28 @@ def find(text):
     return None
 
 
+TAB_MARKERS = {"设备": ("扫描设备", "断开"), "应用": ("设备应用",), "Lua": ("打开示例",), "创作": ("生成 Lua",)}
+
+
+def on_tab(name):
+    marks = TAB_MARKERS.get(name)
+    if not marks:
+        return True
+    labels = [n[0] for n in dump()]
+    return any(any(m in l for l in labels) for m in marks)
+
+
 def open_tab(name):
-    """切到顶部某个标签页；标签条可横向滚动，看不到就先往对应方向拖。"""
+    """切到顶部某个标签页；标签条可横向滚动，看不到就先往对应方向拖。点完核对页面真的换了，没换再点。"""
     order = ["设备", "创作", "Lua", "预览", "应用", "日志", "商城", "取景与对话"]
-    for _ in range(4):
+    for _ in range(6):
         hit = find(name + " | Tab")
         if hit:
             adb("shell", "input", "tap", str(hit[0]), str(hit[1]))
             time.sleep(1.5)
-            return True
+            if on_tab(name):
+                return True
+            continue
         left = order.index(name) < 4 if name in order else True
         if left:
             adb("shell", "input", "swipe", "200", "380", "1000", "380", "250")

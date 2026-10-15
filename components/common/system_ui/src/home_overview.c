@@ -66,6 +66,27 @@ static hv_md_t *s_md;
 #define SH (*s_sh)
 #define MD (*s_md)
 
+/* 自动验收：总览当前焦点所在的应用、菜单/弹窗针对的应用（没有返回 NULL） */
+const char *hv_overview_focus_id(void)
+{
+    if (!s_ov || !OV.focus_visible || OV.focus < 0 || OV.focus >= OV.count) {
+        return NULL;
+    }
+    return OV.ids[OV.focus];
+}
+
+const char *hv_overview_target_id(void)
+{
+    hv_view_t v = hv_view();
+    if (v == HV_VIEW_SHEET && s_sh && SH.id[0]) {
+        return SH.id;
+    }
+    if ((v == HV_VIEW_CONFIRM || v == HV_VIEW_RENAME || v == HV_VIEW_INFO) && s_md && MD.id[0]) {
+        return MD.id;
+    }
+    return NULL;
+}
+
 void hv_overview_mem_init(void)
 {
     if (!s_ov) s_ov = hv_psram_calloc(sizeof(*s_ov));

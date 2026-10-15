@@ -410,6 +410,16 @@ void hv_control_refresh(void)
     lv_label_set_text(CC.tile_value[2], hv_plat_vibration_get() ? "开" : "关");
     lv_label_set_text(CC.tile_value[3], ai ? "已配置" : "未配置");
     lv_obj_set_style_bg_color(CC.item[CC_VIBRATE], lv_color_hex(hv_plat_vibration_get() ? 0x3A3F48 : 0x1A1D23), 0);
+    /* 音量、亮度可能被语音或手机改过：每次刷新都按当前值同步滑条（以前只在第一次建面板时设置，
+     * 语音把音量调到 40% 后再打开控制中心仍显示旧值） */
+    int vol = hv_plat_volume_get();
+    int bri = hv_control_brightness();
+    lv_slider_set_value(CC.slider[0], vol, LV_ANIM_OFF);
+    snprintf(buf, sizeof(buf), "音量 %d%%", vol);
+    lv_label_set_text(CC.slider_l[0], buf);
+    lv_slider_set_value(CC.slider[1], bri, LV_ANIM_OFF);
+    snprintf(buf, sizeof(buf), "亮度 %d%%", bri);
+    lv_label_set_text(CC.slider_l[1], buf);
 }
 
 void hv_open_control(void)
@@ -482,7 +492,7 @@ void hv_control_key(hv_key_t key)
 
 int hv_control_brightness(void)
 {
-    return (60 - CC.dim_level) * 100 / 60;
+    return 100 - CC.dim_level * 100 / 60;
 }
 
 int hv_control_dim_level(void)
