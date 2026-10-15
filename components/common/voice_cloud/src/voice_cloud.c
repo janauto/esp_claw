@@ -69,7 +69,7 @@ typedef struct vc_session {
     char *tools_json;
     vc_turn_t hist[VC_HISTORY_TURNS];
     size_t hist_n;
-    char now_text[64];
+    char now_text[480];
     bool stack_psram;
     int64_t started_ms;
 } vc_session_t;
@@ -77,6 +77,7 @@ typedef struct vc_session {
 static struct {
     bool inited;
     SemaphoreHandle_t lock;
+    char *device_context;   /* 首页给的设备状态，拼进系统提示 */
     vc_config_t *cfg;
     char *tools_json;
     voice_cloud_tool_cb_t tool_cb;
@@ -640,6 +641,11 @@ static vc_session_t *session_new_locked(voice_cloud_event_cb_t cb, void *cb_ctx,
         return NULL;
     }
     make_now_text(s->now_text, sizeof(s->now_text));
+    if (s_vc.device_context && s_vc.device_context[0]) {
+        size_t used = strlen(s->now_text);
+        snprintf(s->now_text + used, sizeof(s->now_text) - used, "%s背夹现在的状态：%s",
+                 used ? "。" : "未对时。", s_vc.device_context);
+    }
 
     vc_job_t *j = &s->job;
     j->asr_url = s->asr_url;
@@ -952,4 +958,21 @@ void vc_internal_reset(void)
     s_vc.cfg = NULL;
     s_vc.inited = false;
     unlock();
+}
+
+esp_err_t voice_cloud_set_context(const char *text)
+{
+    esp_err_t err = voice_cloud_init();
+    if (err != ESP_OK) {
+        return err;
+    }
+    char *copy = (text && text[0]) ? vc_strdup(text) : NULL;
+    if (text && text[0] && !copy) {
+        return ESP_ERR_NO_MEM;
+    }
+    xSemaphoreTake(s_vc.lock, portMAX_DELAY);
+    free(s_vc.device_context);
+    s_vc.device_context = copy;
+    xSemaphoreGive(s_vc.lock);
+    return ESP_OK;
 }

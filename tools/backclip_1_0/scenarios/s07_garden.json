@@ -2,7 +2,7 @@
  "name": "s07_garden",
  "steps": [
   {
-   "note": "从首页点「我的」进入 Lua 花园，等首屏，再用系统退出（长按 SET）回首页"
+   "note": "从首页点「我的」进入 Lua 花园，进花园页、回我的、进小家、换极简主题再换回，最后点「首页」退出"
   },
   {
    "op": "home_state",
@@ -14,7 +14,8 @@
    "op": "ui_touch",
    "type": "tap",
    "x": 128,
-   "y": 182
+   "y": 182,
+   "ms": 90
   },
   {
    "wait": 7000
@@ -26,43 +27,89 @@
    }
   },
   {
-   "shot": "garden_mine",
-   "scale": 1
+   "shot": "mine"
   },
   {
    "op": "ui_touch",
    "type": "tap",
-   "x": 240,
-   "y": 560
+   "x": 353,
+   "y": 508,
+   "ms": 90
   },
   {
    "wait": 3000
   },
   {
-   "shot": "garden_tap1",
-   "scale": 1
+   "shot": "garden_page"
   },
   {
    "op": "ui_touch",
    "type": "tap",
-   "x": 240,
-   "y": 700
-  },
-  {
-   "wait": 3000
-  },
-  {
-   "shot": "garden_tap2",
-   "scale": 1
-  },
-  {
-   "op": "ui_key",
-   "key": "SET",
-   "action": "long",
-   "ms": 900
+   "x": 60,
+   "y": 72,
+   "ms": 90
   },
   {
    "wait": 2500
+  },
+  {
+   "op": "ui_touch",
+   "type": "tap",
+   "x": 125,
+   "y": 508,
+   "ms": 90
+  },
+  {
+   "wait": 3500
+  },
+  {
+   "shot": "house_page"
+  },
+  {
+   "op": "ui_touch",
+   "type": "tap",
+   "x": 60,
+   "y": 72,
+   "ms": 90
+  },
+  {
+   "wait": 2500
+  },
+  {
+   "op": "ui_touch",
+   "type": "tap",
+   "x": 183,
+   "y": 670,
+   "ms": 90
+  },
+  {
+   "wait": 3500
+  },
+  {
+   "shot": "theme_minimal"
+  },
+  {
+   "op": "ui_touch",
+   "type": "tap",
+   "x": 68,
+   "y": 670,
+   "ms": 90
+  },
+  {
+   "wait": 3500
+  },
+  {
+   "shot": "theme_house_again"
+  },
+  {
+   "op": "ui_touch",
+   "type": "tap",
+   "x": 60,
+   "y": 72,
+   "ms": 90
+  },
+  {
+   "wait": 3000
   },
   {
    "op": "home_state",
@@ -72,8 +119,7 @@
    }
   },
   {
-   "shot": "back_home",
-   "scale": 1
+   "shot": "back_home_with_snapshot"
   }
  ]
 }

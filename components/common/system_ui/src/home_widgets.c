@@ -428,6 +428,39 @@ bool hv_weather_summary(char *out, size_t size, int *temp_out)
     return ok;
 }
 
+/* 给语音助手的天气上下文：城市、当前温度与天气、今天最低/最高。 */
+bool hv_weather_context(char *out, size_t size)
+{
+    int64_t age = 0;
+    char *text = hv_plat_feed_read("weather", &age);
+    cJSON *json = text ? cJSON_Parse(text) : NULL;
+    const cJSON *city = cJSON_GetObjectItemCaseSensitive(json, "city");
+    const cJSON *cur = cJSON_GetObjectItemCaseSensitive(json, "current");
+    const cJSON *daily = cJSON_GetObjectItemCaseSensitive(json, "daily");
+    const cJSON *t = cJSON_GetObjectItemCaseSensitive(cur, "temperature_2m");
+    const cJSON *code = cJSON_GetObjectItemCaseSensitive(cur, "weather_code");
+    const cJSON *hi = cJSON_GetArrayItem(cJSON_GetObjectItemCaseSensitive(daily, "temperature_2m_max"), 0);
+    const cJSON *lo = cJSON_GetArrayItem(cJSON_GetObjectItemCaseSensitive(daily, "temperature_2m_min"), 0);
+    const cJSON *hi2 = cJSON_GetArrayItem(cJSON_GetObjectItemCaseSensitive(daily, "temperature_2m_max"), 1);
+    const cJSON *lo2 = cJSON_GetArrayItem(cJSON_GetObjectItemCaseSensitive(daily, "temperature_2m_min"), 1);
+    bool ok = cJSON_IsNumber(t);
+
+    free(text);
+    if (ok) {
+        snprintf(out, size, "%s现在%d度%s，今天%d到%d度%s", cJSON_IsString(city) ? city->valuestring : "本地",
+                 (int)lround(t->valuedouble), cJSON_IsNumber(code) ? hv_weather_text(code->valueint) : "",
+                 cJSON_IsNumber(lo) ? (int)lround(lo->valuedouble) : 0,
+                 cJSON_IsNumber(hi) ? (int)lround(hi->valuedouble) : 0,
+                 (cJSON_IsNumber(lo2) && cJSON_IsNumber(hi2)) ? "" : "");
+        if (cJSON_IsNumber(lo2) && cJSON_IsNumber(hi2)) {
+            size_t used = strlen(out);
+            snprintf(out + used, size - used, "，明天%d到%d度", (int)lround(lo2->valuedouble), (int)lround(hi2->valuedouble));
+        }
+    }
+    cJSON_Delete(json);
+    return ok;
+}
+
 static void hv_weather_refresh(hv_wi_t *wi)
 {
     int64_t age = 0;

@@ -1,0 +1,53 @@
+{
+ "name": "s09_voice_dock_real",
+ "steps": [
+  {
+   "note": "底座·Wi-Fi 模式真实说话：背夹自己 Ogg 封装 → 百炼识别 → DeepSeek"
+  },
+  {
+   "op": "mode_set",
+   "mode": "dock"
+  },
+  {
+   "wait": 500
+  },
+  {
+   "op": "mode_get",
+   "expect": {
+    "mode": "dock",
+    "voice_route": "wifi"
+   }
+  },
+  {
+   "op": "ui_key",
+   "key": "MODE",
+   "action": "long",
+   "ms": 5200
+  },
+  {
+   "play": "背夹，把音量调到百分之四十。",
+   "voice": "Tingting",
+   "delay_ms": 1100
+  },
+  {
+   "wait": 1500
+  },
+  {
+   "shot": "listening",
+   "scale": 2
+  },
+  {
+   "wait_state": {
+    "voice": "reply"
+   },
+   "timeout_ms": 45000
+  },
+  {
+   "shot": "dock_reply"
+  },
+  {
+   "op": "mode_set",
+   "mode": "clip"
+  }
+ ]
+}

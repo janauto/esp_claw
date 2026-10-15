@@ -59,6 +59,8 @@ esp_err_t voice_cloud_ask_text(const char *text, voice_cloud_event_cb_t cb, void
 void voice_cloud_cancel(void);
 bool voice_cloud_busy(void);
 size_t voice_cloud_packet_count(void);
+/* 设备当前状态（天气、模式、可打开的应用等），拼进对话的系统提示；NULL/"" 清除。 */
+esp_err_t voice_cloud_set_context(const char *text);
 
 /* ---- 以下为新增的辅助接口（可选使用，不影响上面的签名） ---- */
 

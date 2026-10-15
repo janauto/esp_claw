@@ -368,11 +368,39 @@ static esp_err_t hv_local_sink(const uint8_t *opus, size_t size)
     return voice_cloud_push_opus(opus, size);
 }
 
+bool hv_weather_context(char *out, size_t size);
+
+/* 底座直连时把设备状态告诉对话模型：天气可以直接回答，不必每次都打开天气应用。 */
+static void hv_update_voice_context(void)
+{
+    char ctx[420];
+    char weather[160] = {0};
+    size_t used;
+
+    used = (size_t)snprintf(ctx, sizeof(ctx), "工作模式%s",
+                            hv_plat_mode_get() == HV_MODE_DOCK ? "底座·Wi-Fi" : "背夹·手机");
+    if (hv_weather_context(weather, sizeof(weather))) {
+        used += (size_t)snprintf(ctx + used, sizeof(ctx) - used, "；天气：%s（用户问天气时直接据此回答）", weather);
+    }
+    if (system_ui_lock() == ESP_OK) {
+        used += (size_t)snprintf(ctx + used, sizeof(ctx) - used, "；能打开的应用：");
+        for (size_t i = 0; i < hv_catalog_count() && used + 24 < sizeof(ctx); i++) {
+            const hv_app_t *app = hv_catalog_at(i);
+            if (app->kind != HV_KIND_SYSTEM || strcmp(app->id, "sys:settings") != 0) {
+                used += (size_t)snprintf(ctx + used, sizeof(ctx) - used, "%s%s", i ? "、" : "", app->title);
+            }
+        }
+        system_ui_unlock();
+    }
+    (void)voice_cloud_set_context(ctx);
+}
+
 esp_err_t hv_plat_voice_begin(bool local)
 {
     esp_err_t err;
 
     if (local) {
+        hv_update_voice_context();
         err = voice_cloud_begin();
         if (err != ESP_OK) {
             return err;
@@ -441,6 +469,7 @@ esp_err_t hv_plat_voice_end(bool local, bool cancel)
 
 esp_err_t hv_plat_voice_ask_text(const char *text)
 {
+    hv_update_voice_context();
     return voice_cloud_ask_text(text, hv_cloud_event_cb, NULL);
 }
 

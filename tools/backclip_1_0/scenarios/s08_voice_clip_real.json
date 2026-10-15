@@ -1,0 +1,68 @@
+{
+ "name": "s08_voice_clip_real",
+ "steps": [
+  {
+   "note": "背夹·手机模式真实说话：按住 M，电脑扬声器说一句，松开后手机识别 + DeepSeek，回复回到背夹卡片"
+  },
+  {
+   "note": "打开串口会复位背夹：等开机后让手机重新扫描并连接"
+  },
+  {
+   "wait": 3000
+  },
+  {
+   "shell": "python3 phone_ui.py tap 扫描设备"
+  },
+  {
+   "wait": 13000
+  },
+  {
+   "shell": "python3 phone_ui.py tapxy 904 1244"
+  },
+  {
+   "wait": 9000
+  },
+  {
+   "op": "mode_set",
+   "mode": "clip"
+  },
+  {
+   "wait": 500
+  },
+  {
+   "op": "mode_get",
+   "expect": {
+    "mode": "clip",
+    "phone_linked": true,
+    "voice_route": "ble"
+   }
+  },
+  {
+   "op": "ui_key",
+   "key": "MODE",
+   "action": "long",
+   "ms": 5200
+  },
+  {
+   "play": "背夹，今天天气怎么样？",
+   "voice": "Tingting",
+   "delay_ms": 1100
+  },
+  {
+   "wait": 1500
+  },
+  {
+   "shot": "listening",
+   "scale": 2
+  },
+  {
+   "wait_state": {
+    "voice": "reply"
+   },
+   "timeout_ms": 45000
+  },
+  {
+   "shot": "phone_reply"
+  }
+ ]
+}

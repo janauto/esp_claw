@@ -113,6 +113,44 @@ def run(dev, scenario, out):
                 rec["note"] = step["note"]
             elif "wait" in step:
                 time.sleep(step["wait"] / 1000.0)
+            elif "play" in step:
+                # 用电脑扬声器说一句话（macOS say 合成），模拟用户对背夹说话；不阻塞后续步骤
+                import subprocess, tempfile, hashlib as _h
+                text = step["play"]
+                voice = step.get("voice", "Tingting")
+                cache = Path(tempfile.gettempdir()) / ("bc_say_" + _h.sha1((voice + text).encode()).hexdigest()[:12] + ".aiff")
+                if not cache.exists():
+                    subprocess.run(["say", "-v", voice, "-o", str(cache), text], check=True, timeout=30)
+                if step.get("delay_ms"):
+                    time.sleep(step["delay_ms"] / 1000.0)
+                subprocess.Popen(["afplay", str(cache)])
+                rec["played"] = text
+            elif "shell" in step:
+                # 同一个串口会话里操作手机等外部工具（打开串口会复位背夹，蓝牙连接要在会话内重建）
+                import subprocess
+                cp = subprocess.run(step["shell"], shell=True, capture_output=True, text=True,
+                                    timeout=step.get("timeout_ms", 60000) / 1000.0, cwd=str(HERE))
+                rec["shell_rc"] = cp.returncode
+                rec["shell_out"] = (cp.stdout + cp.stderr)[-600:]
+                if step.get("expect_rc", 0) is not None and cp.returncode != step.get("expect_rc", 0):
+                    report["failed"] += 1
+                    print(f"  [FAIL] step {i}: shell rc={cp.returncode} {rec['shell_out'][-200:]}", flush=True)
+            elif "wait_state" in step:
+                # 轮询 home_state 直到字段匹配（子集），或超时
+                want = step["wait_state"]
+                deadline = time.time() + step.get("timeout_ms", 30000) / 1000.0
+                last = None
+                while time.time() < deadline:
+                    last = dev.rpc({"op": "home_state"})
+                    if subset(want, last):
+                        break
+                    time.sleep(1.0)
+                ok = last is not None and subset(want, last)
+                rec["result"] = last
+                rec["ok"] = ok
+                report["passed" if ok else "failed"] += 1
+                if not ok:
+                    print(f"  [FAIL] step {i}: wait_state {want} -> {json.dumps(last, ensure_ascii=False)[:300]}", flush=True)
             elif "shot" in step:
                 png = sdir / f"{i:02d}_{step['shot']}.png"
                 rec["shot"] = str(png)
