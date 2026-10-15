@@ -225,10 +225,18 @@ static void hv_age_text(int64_t age_ms, char *out, size_t size)
 
 static void hv_mine_create(hv_wi_t *wi, lv_obj_t *root)
 {
-    int32_t pet = wi->sz == HV_SZ_S ? wi->h - 8 : wi->h - 16;
+    int32_t pet = wi->sz == HV_SZ_S ? wi->h - 30 : wi->h - 16;
     lv_obj_t *p = hv_pet_create(root, pet);
-    lv_obj_align(p, wi->sz == HV_SZ_S ? LV_ALIGN_CENTER : LV_ALIGN_LEFT_MID, 0, 0);
+    lv_obj_align(p, wi->sz == HV_SZ_S ? LV_ALIGN_TOP_MID : LV_ALIGN_LEFT_MID, 0, 0);
     wi->extra[0] = p;
+    if (wi->sz == HV_SZ_S) {
+        /* 小尺寸也要看得出花园里的照料结果：心情与能量胶囊 */
+        lv_obj_t *pill = hv_box(root, 0, 0, wi->w - 40, 30, 0x2A2410, 15);
+        lv_obj_set_style_border_width(pill, 1, 0);
+        lv_obj_set_style_border_color(pill, lv_color_hex(0x6B5A1A), 0);
+        lv_obj_align(pill, LV_ALIGN_BOTTOM_MID, 0, -2);
+        wi->l[2] = hv_label_at(pill, F(g_hvf.f16), HV_C_ACCENT, "", LV_ALIGN_CENTER, 0, 0);
+    }
     if (wi->sz == HV_SZ_M) {
         lv_obj_t *bubble = hv_box(root, 0, 0, wi->w - pet - 12, 96, 0xFFF8E1, 20);
         lv_obj_align(bubble, LV_ALIGN_RIGHT_MID, 0, -12);
@@ -248,10 +256,22 @@ static void hv_mine_refresh(hv_wi_t *wi)
     const cJSON *say, *mood, *name, *theme;
     char line[128];
 
-    if (wi->sz != HV_SZ_M) {
+    snprintf(path, sizeof(path), "%s/garden/snapshot.json", hv_plat_data_root());
+    if (wi->sz == HV_SZ_S) {
+        cJSON *s = hv_read_json(path, 2048);
+        const cJSON *m = cJSON_GetObjectItemCaseSensitive(s, "mood");
+        const cJSON *e = cJSON_GetObjectItemCaseSensitive(s, "energy");
+        const cJSON *n = cJSON_GetObjectItemCaseSensitive(s, "pet_name");
+        if (cJSON_IsString(m)) {
+            snprintf(line, sizeof(line), "%s %s  能量%d", cJSON_IsString(n) ? n->valuestring : "小磁",
+                     m->valuestring, cJSON_IsNumber(e) ? e->valueint : 0);
+        } else {
+            strlcpy(line, "点我进入花园", sizeof(line));
+        }
+        hv_set_text(wi->l[2], line);
+        cJSON_Delete(s);
         return;
     }
-    snprintf(path, sizeof(path), "%s/garden/snapshot.json", hv_plat_data_root());
     snap = hv_read_json(path, 2048);
     say = cJSON_GetObjectItemCaseSensitive(snap, "say");
     mood = cJSON_GetObjectItemCaseSensitive(snap, "mood");

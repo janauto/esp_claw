@@ -155,8 +155,28 @@ static void hv_cycle_size(int p, int i)
             hv_commit(&l, p);
             return;
         }
+        /* 这一页放不下新尺寸：挪到有空位的页（必要时新开一页），而不是让用户自己腾位置 */
+        for (int q = 0; q <= HV_MAX_PAGES; q++) {
+            hv_layout_t t = l;
+            char w[HV_WID_LEN];
+            int landed = -1;
+            if (q == p || (q >= t.pages && q != t.pages) || q >= HV_MAX_PAGES + 1) {
+                continue;
+            }
+            if (q == t.pages && t.pages >= HV_MAX_PAGES) {
+                continue;
+            }
+            strlcpy(w, t.it[p][i].w, sizeof(w));
+            if (hv_move_to_page(&t, p, i, q, false) && hv_layout_find(&t, w, &landed, NULL)) {
+                char msg[64];
+                hv_commit(&t, landed);
+                snprintf(msg, sizeof(msg), "这一页放不下，已换尺寸并移到第 %d 页", landed + 1);
+                hv_toast(msg);
+                return;
+            }
+        }
         l.it[p][i].sz = cur;
-        hv_toast("这一页放不下，先移走一个再换尺寸");
+        hv_toast("首页 3 页都放不下这个尺寸，先移走一个");
         return;
     }
     hv_toast("这个小组件只有一种尺寸");

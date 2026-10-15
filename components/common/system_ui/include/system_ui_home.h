@@ -48,6 +48,9 @@ esp_err_t system_ui_home_handle_op(const char *op, const cJSON *request, bool ua
 /* hello 里要列出的新操作名，逗号分隔的 JSON 字符串片段（"a","b"）。 */
 const char *system_ui_home_ops_json(void);
 
+/* 本轮语音的设备状态（天气、模式、可打开的应用），BLE voice_event 带给手机。 */
+const char *system_ui_home_voice_context(void);
+
 /* 当前模式："clip" / "dock" */
 const char *system_ui_home_mode_name(void);
 

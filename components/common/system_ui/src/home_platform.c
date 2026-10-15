@@ -389,6 +389,14 @@ static esp_err_t hv_local_sink(const uint8_t *opus, size_t size)
 bool hv_weather_context(char *out, size_t size);
 
 /* 底座直连时把设备状态告诉对话模型：天气可以直接回答，不必每次都打开天气应用。 */
+static char s_voice_ctx[420];
+
+/* BLE 推 voice_event(started) 时附带，手机侧拼进对话系统提示。 */
+const char *system_ui_home_voice_context(void)
+{
+    return s_voice_ctx;
+}
+
 static void hv_update_voice_context(void)
 {
     char ctx[420];
@@ -410,6 +418,7 @@ static void hv_update_voice_context(void)
         }
         system_ui_unlock();
     }
+    strlcpy(s_voice_ctx, ctx, sizeof(s_voice_ctx));
     (void)voice_cloud_set_context(ctx);
 }
 
@@ -417,8 +426,8 @@ esp_err_t hv_plat_voice_begin(bool local)
 {
     esp_err_t err;
 
+    hv_update_voice_context();
     if (local) {
-        hv_update_voice_context();
         err = voice_cloud_begin();
         if (err != ESP_OK) {
             return err;

@@ -6,6 +6,7 @@
 #include "claw_version.h"
 #include "display_service.h"
 #include "esp_console.h"
+#include "esp_app_desc.h"
 #include "system_ui_home.h"
 #include "ble_host_bridge.h"
 #include "esp_heap_caps.h"
@@ -59,6 +60,12 @@ static cJSON *command_reply(const cJSON *command) {
         cJSON_AddStringToObject(reply, "protocol", "esp-claw-ble-live-apps");
         cJSON_AddStringToObject(reply, "version", "backclip-" SYSTEM_UI_RELEASE);
         cJSON_AddStringToObject(reply, "release", SYSTEM_UI_RELEASE);
+        {
+            /* git describe 缓存可能过期：以应用 ELF 哈希识别实际刷写的构建 */
+            char elf[17] = {0};
+            (void)esp_app_get_elf_sha256(elf, sizeof(elf));
+            cJSON_AddStringToObject(reply, "elf_sha256", elf);
+        }
         cJSON_AddStringToObject(reply, "mode", system_ui_home_mode_name());
         cJSON_AddStringToObject(reply, "firmware", claw_get_git_version());
         cJSON_AddBoolToObject(reply, "ble_voice", true);

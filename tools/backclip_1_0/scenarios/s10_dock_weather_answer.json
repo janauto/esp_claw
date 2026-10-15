@@ -1,0 +1,34 @@
+{
+ "name": "s10_dock_weather_answer",
+ "steps": [
+  {
+   "note": "底座模式：问天气应直接回答（带当地温度），不必打开天气应用"
+  },
+  {
+   "op": "mode_set",
+   "mode": "dock"
+  },
+  {
+   "wait": 400
+  },
+  {
+   "op": "voice_text",
+   "text": "今天天气怎么样？"
+  },
+  {
+   "wait_state": {
+    "voice": "reply"
+   },
+   "timeout_ms": 30000
+  },
+  {
+   "op": "home_state",
+   "expect": {
+    "exclusive_app": false
+   }
+  },
+  {
+   "shot": "weather_answer"
+  }
+ ]
+}

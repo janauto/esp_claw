@@ -14,6 +14,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "cap_lua.h"
 #include "display_service.h"
 #include "esp_log.h"
 #include "voice_cloud.h"
@@ -82,10 +83,15 @@ static cJSON *hv_apps_json(void)
     cJSON *o = cJSON_CreateObject();
     cJSON *arr = o ? cJSON_AddArrayToObject(o, "apps") : NULL;
     static const char *const groups[] = {"builtin", "official", "mine"};
+    char *jobs = malloc(8192);
 
     if (!arr) {
         cJSON_Delete(o);
+        free(jobs);
         return NULL;
+    }
+    if (jobs && cap_lua_list_jobs("running", jobs, 8192) != ESP_OK) {
+        jobs[0] = 0;
     }
     hv_catalog_refresh();
     for (size_t i = 0; i < hv_catalog_count(); i++) {
@@ -102,9 +108,21 @@ static cJSON *hv_apps_json(void)
         cJSON_AddBoolToObject(it, "removable", a->removable);
         cJSON_AddBoolToObject(it, "renamable", a->renamable);
         cJSON_AddBoolToObject(it, "in_dock", hv_layout_dock_has(hv_layout(), a->id));
-        cJSON_AddBoolToObject(it, "running", false);
+        bool running = false;
+        if (a->kind == HV_KIND_SYSTEM) {
+            running = (!strcmp(a->id, "sys:workbuddy") && s_ui.workbuddy_visible) ||
+                      (!strcmp(a->id, "sys:meeting") && s_ui.meeting_minutes_visible) ||
+                      (!strcmp(a->id, "sys:ir") && s_ui.infrared_remote_visible) ||
+                      (!strcmp(a->id, "sys:card") && s_ui.businesscard_visible);
+        } else if (jobs && jobs[0] && a->script[0]) {
+            char needle[SYSTEM_UI_PATH_MAX + 8];
+            snprintf(needle, sizeof(needle), "path=%s", a->script);
+            running = strstr(jobs, needle) != NULL;
+        }
+        cJSON_AddBoolToObject(it, "running", running);
         cJSON_AddItemToArray(arr, it);
     }
+    free(jobs);
     cJSON_AddNumberToObject(o, "count", (double)hv_catalog_count());
     return o;
 }
@@ -316,6 +334,17 @@ esp_err_t system_ui_home_handle_op(const char *op, const cJSON *req, bool uart, 
         } else if (app->kind == HV_KIND_SYSTEM && display_service_has_exclusive_session()) {
             err = ESP_ERR_INVALID_STATE;
             *out = hv_err_obj("背夹正在运行其他应用，请先退出");
+        } else if (hv_voice_state() == HV_VOICE_RECOGNIZING || hv_voice_state() == HV_VOICE_THINKING ||
+                   hv_voice_state() == HV_VOICE_REPLY) {
+            /* 语音这一轮还没让用户看清回复：先显示回复，约 1.8 s 后再打开应用 */
+            extern void hv_voice_defer_launch(const char *id);
+            hv_voice_defer_launch(app->id);
+            *out = cJSON_CreateObject();
+            if (*out) {
+                cJSON_AddBoolToObject(*out, "launched", true);
+                cJSON_AddBoolToObject(*out, "deferred", true);
+                cJSON_AddStringToObject(*out, "id", app->id);
+            }
         } else {
             hv_go_home();
             err = hv_catalog_launch(app->id, str_field(req, "args"));

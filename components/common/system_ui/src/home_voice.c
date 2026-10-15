@@ -49,9 +49,32 @@ static struct {
     char text[320];
 } V;
 
+static char s_deferred_launch[HV_APP_ID_LEN];
+static uint32_t s_deferred_since;
+
 void hv_voice_forget(void)
 {
     memset(&V, 0, sizeof(V));
+    s_deferred_launch[0] = 0;
+}
+
+/* 语音回复出现后再打开应用（来自手机的 app_launch 或底座工具）。 */
+void hv_voice_defer_launch(const char *id)
+{
+    strlcpy(s_deferred_launch, id, sizeof(s_deferred_launch));
+    s_deferred_since = lv_tick_get();
+}
+
+static void hv_voice_run_deferred(void)
+{
+    char id[HV_APP_ID_LEN];
+    if (!s_deferred_launch[0]) {
+        return;
+    }
+    strlcpy(id, s_deferred_launch, sizeof(id));
+    s_deferred_launch[0] = 0;
+    hv_voice_hide();
+    (void)hv_catalog_launch(id, NULL);
 }
 
 hv_voice_state_t hv_voice_state(void)
@@ -115,6 +138,10 @@ static void hv_voice_timer_cb(lv_timer_t *t)
         break;
     case HV_VOICE_RECOGNIZING:
     case HV_VOICE_THINKING:
+        if (s_deferred_launch[0] && lv_tick_elaps(s_deferred_since) > 6000) {
+            hv_voice_run_deferred();        /* 等了 6 s 还没回复：不再拦着应用 */
+            break;
+        }
         if (V.state_ms >= HV_VOICE_WAIT_MS) {
             hv_voice_show(HV_VOICE_ERROR, NULL,
                           V.route_kind == ROUTE_PHONE ? "手机没有回应：请确认手机 App 打开并已连接背夹"
@@ -122,7 +149,9 @@ static void hv_voice_timer_cb(lv_timer_t *t)
         }
         break;
     case HV_VOICE_REPLY:
-        if (V.state_ms >= HV_VOICE_REPLY_HIDE_MS) {
+        if (s_deferred_launch[0] && V.state_ms >= 1800) {
+            hv_voice_run_deferred();
+        } else if (V.state_ms >= HV_VOICE_REPLY_HIDE_MS) {
             hv_voice_hide();
         }
         break;

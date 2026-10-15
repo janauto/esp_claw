@@ -90,8 +90,20 @@ def subset(expect, actual):
     return expect == actual
 
 
+def speech_file(text, voice="Tingting"):
+    import subprocess, tempfile, hashlib as _h
+    cache = Path(tempfile.gettempdir()) / ("bc_say_" + _h.sha1((voice + text).encode()).hexdigest()[:12] + ".aiff")
+    if not cache.exists():
+        subprocess.run(["say", "-v", voice, "-o", str(cache), text], check=True, timeout=30)
+    return cache
+
+
 def run(dev, scenario, out):
     name = scenario.get("name", "scenario")
+    # 先把要“说”的话都合成好，避免合成耗时挤占按住说话的录音窗口
+    for st in scenario.get("steps", []):
+        if "play" in st:
+            speech_file(st["play"], st.get("voice", "Tingting"))
     sdir = out / name
     sdir.mkdir(parents=True, exist_ok=True)
     report = {"name": name, "steps": [], "passed": 0, "failed": 0}
@@ -115,12 +127,9 @@ def run(dev, scenario, out):
                 time.sleep(step["wait"] / 1000.0)
             elif "play" in step:
                 # 用电脑扬声器说一句话（macOS say 合成），模拟用户对背夹说话；不阻塞后续步骤
-                import subprocess, tempfile, hashlib as _h
+                import subprocess
                 text = step["play"]
-                voice = step.get("voice", "Tingting")
-                cache = Path(tempfile.gettempdir()) / ("bc_say_" + _h.sha1((voice + text).encode()).hexdigest()[:12] + ".aiff")
-                if not cache.exists():
-                    subprocess.run(["say", "-v", voice, "-o", str(cache), text], check=True, timeout=30)
+                cache = speech_file(text, step.get("voice", "Tingting"))
                 if step.get("delay_ms"):
                     time.sleep(step["delay_ms"] / 1000.0)
                 subprocess.Popen(["afplay", str(cache)])

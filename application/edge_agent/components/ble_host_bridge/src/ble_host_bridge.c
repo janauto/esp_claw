@@ -1139,6 +1139,11 @@ static void voice_send_event(const voice_item_t *item)
     cJSON_AddNumberToObject(root, "session", item->session);
     if (item->kind == VOICE_ITEM_STARTED) {
         cJSON_AddStringToObject(root, "source", item->tag);
+        /* 1.0：设备状态给手机对话用（天气可直接回答，不必打开应用） */
+        const char *ctx = system_ui_home_voice_context();
+        if (ctx && ctx[0]) {
+            cJSON_AddStringToObject(root, "context", ctx);
+        }
     } else {
         cJSON_AddStringToObject(root, "reason", item->tag);
         cJSON_AddNumberToObject(root, "frames", (double)item->frames);

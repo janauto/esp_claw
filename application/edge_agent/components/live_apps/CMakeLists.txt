@@ -6,5 +6,5 @@ idf_component_register(
     REQUIRES app_claw app_config cap_lua claw_core claw_skill
              lua_module_clip_ui display_service system_ui wifi_manager
              esp_board_manager console esp_timer cjson nvs_flash
-             esp_http_client esp_event esp_netif esp_wifi mbedtls ble_host_bridge)
+             esp_http_client esp_event esp_netif esp_wifi mbedtls ble_host_bridge esp_app_format)
 target_compile_options(${COMPONENT_LIB} PRIVATE -Os)

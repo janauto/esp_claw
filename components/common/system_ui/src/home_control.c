@@ -292,8 +292,9 @@ lv_obj_t *hv_control_build(lv_obj_t *scr)
     CC.route_l = hv_text(body, g_hvf.f16, HV_C_ACCENT, "");
     lv_obj_set_width(CC.route_l, w - 2 * HV_PAD);
     lv_label_set_long_mode(CC.route_l, LV_LABEL_LONG_MODE_WRAP);
+    lv_obj_set_style_text_line_space(CC.route_l, 4, 0);
     lv_obj_set_pos(CC.route_l, HV_PAD, y);
-    y += 50;
+    y += 58;
 
     /* 连接与开关 */
     hv_cc_tile(body, CC_WIFI, HV_PAD, y, col_w, 112, LV_SYMBOL_WIFI, "Wi-Fi", &CC.tile_value[0]);
@@ -387,11 +388,13 @@ void hv_control_refresh(void)
         lv_obj_set_style_text_color(CC.mode_icon[i], lv_color_hex(on ? HV_C_ACCENT_INK : HV_C_TEXT), 0);
     }
     if (dock) {
-        snprintf(buf, sizeof(buf), "语音：背夹经 Wi-Fi 直连云端识别与对话（%s）",
-                 !wifi ? "Wi-Fi 未连接" : ai ? "已就绪" : "未配置 AI 服务");
+        snprintf(buf, sizeof(buf), "语音线路：背夹直连云端（Wi-Fi）\n%s",
+                 !wifi ? "Wi-Fi 未连接，暂时用不了" : ai ? "已就绪，按住 M 说话" :
+                 phone ? "未配置 AI 服务，暂时改用手机" : "未配置 AI 服务：在手机 App 推送配置");
     } else {
-        snprintf(buf, sizeof(buf), "语音：经蓝牙交给手机识别与对话（%s）",
-                 phone ? "手机已连接" : (wifi && ai) ? "手机未连接，将改用底座直连" : "手机未连接");
+        snprintf(buf, sizeof(buf), "语音线路：交给手机识别（蓝牙）\n%s",
+                 phone ? "手机已连接，按住 M 说话" : (wifi && ai) ? "手机未连接，暂时改用背夹直连" :
+                 "手机未连接：打开手机 App 连接背夹");
     }
     lv_label_set_text(CC.route_l, buf);
     lv_label_set_text(CC.tile_value[0], wifi ? ssid : "未连接");
