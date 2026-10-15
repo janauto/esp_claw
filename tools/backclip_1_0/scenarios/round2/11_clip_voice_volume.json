@@ -60,6 +60,12 @@
    "shot": "clip_volume_reply"
   },
   {
+   "op": "home_state",
+   "expect": {
+    "volume": 20
+   }
+  },
+  {
    "phone_shot": "phone_voice_log"
   },
   {

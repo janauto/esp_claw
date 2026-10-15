@@ -80,6 +80,16 @@
    "shot": "fixture_focus_verify"
   },
   {
+   "op": "home_state",
+   "expect": {
+    "view": "overview"
+   },
+   "expect_contains": {
+    "ov_focus": "r2_device_demo"
+   },
+   "gate": true
+  },
+  {
    "note": "主会话确认焦点是新增R2Device才继续；源码按分组遍历，包预期最后。不是目标立即停止，禁止对既有小家操作。"
   },
   {
@@ -95,7 +105,11 @@
    "op": "home_state",
    "expect": {
     "view": "sheet"
-   }
+   },
+   "expect_contains": {
+    "target": "r2_device_demo"
+   },
+   "gate": true
   },
   {
    "shot": "fixture_menu"
@@ -122,7 +136,11 @@
    "op": "home_state",
    "expect": {
     "view": "rename"
-   }
+   },
+   "expect_contains": {
+    "target": "r2_device_demo"
+   },
+   "gate": true
   },
   {
    "shot": "device_keyboard_before"
@@ -173,7 +191,11 @@
    "op": "home_state",
    "expect": {
     "view": "sheet"
-   }
+   },
+   "expect_contains": {
+    "target": "r2_device_demo"
+   },
+   "gate": true
   },
   {
    "op": "ui_key",
@@ -202,7 +224,11 @@
    "op": "home_state",
    "expect": {
     "view": "confirm"
-   }
+   },
+   "expect_contains": {
+    "target": "r2_device_demo"
+   },
+   "gate": true
   },
   {
    "shot": "uninstall_confirmation"
@@ -257,7 +283,11 @@
    "op": "home_state",
    "expect": {
     "view": "confirm"
-   }
+   },
+   "expect_contains": {
+    "target": "r2_device_demo"
+   },
+   "gate": true
   },
   {
    "op": "ui_key",

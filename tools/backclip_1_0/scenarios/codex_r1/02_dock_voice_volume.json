@@ -1,99 +1,106 @@
 {
-  "name": "r2_02_dock_voice_volume",
-  "steps": [
-    {
-      "note": "目的：真实麦克风说完整音量请求，关闭 D01。前置：Wi-Fi 与底座 AI 已配置；不使用 voice_text。录音包含首次合成等待及完整播放。判定：识别含四十，工具参数40，控制中心音量40%，上一轮摘要不可混入本句。"
-    },
-    {
-      "op": "mode_set",
-      "mode": "dock"
-    },
-    {
-      "op": "mode_get",
-      "expect": {
-        "mode": "dock",
-        "voice_route": "wifi",
-        "ai_ready": true
-      }
-    },
-    {
-      "op": "ui_key",
-      "key": "MODE",
-      "action": "press"
-    },
-    {
-      "wait": 900
-    },
-    {
-      "play": "背夹，把音量调到百分之四十。",
-      "voice": "Tingting",
-      "delay_ms": 1100
-    },
-    {
-      "wait": 9000
-    },
-    {
-      "op": "ui_key",
-      "key": "MODE",
-      "action": "release"
-    },
-    {
-      "wait_state": {
-        "voice": "reply"
-      },
-      "timeout_ms": 45000
-    },
-    {
-      "op": "home_state",
-      "expect": {
-        "voice": "reply",
-        "voice_route": "底座直连",
-        "home_foreground": true
-      }
-    },
-    {
-      "shot": "volume_reply"
-    },
-    {
-      "note": "人工核对本句完整识别和回复，不接受追问为成功。主会话补本次 set_volume(percent=40) 的日志和设备值。"
-    },
-    {
-      "wait": 27000
-    },
-    {
-      "op": "ui_key",
-      "key": "SET",
-      "action": "long",
-      "ms": 900
-    },
-    {
-      "wait": 1000
-    },
-    {
-      "op": "home_state",
-      "expect": {
-        "view": "control"
-      }
-    },
-    {
-      "shot": "volume_40_readback"
-    },
-    {
-      "note": "人工判定控制中心必须40%；若不是，场景失败，即使 report 全通过。"
-    },
-    {
-      "op": "ui_key",
-      "key": "SET",
-      "action": "click"
-    },
-    {
-      "wait": 1000
-    },
-    {
-      "op": "home_state",
-      "expect": {
-        "view": "home"
-      }
-    }
-  ]
+ "name": "r2_02_dock_voice_volume",
+ "steps": [
+  {
+   "note": "目的：真实麦克风说完整音量请求，关闭 D01。前置：Wi-Fi 与底座 AI 已配置；不使用 voice_text。录音包含首次合成等待及完整播放。判定：识别含四十，工具参数40，控制中心音量40%，上一轮摘要不可混入本句。"
+  },
+  {
+   "op": "mode_set",
+   "mode": "dock"
+  },
+  {
+   "op": "mode_get",
+   "expect": {
+    "mode": "dock",
+    "voice_route": "wifi",
+    "ai_ready": true
+   }
+  },
+  {
+   "op": "ui_key",
+   "key": "MODE",
+   "action": "press"
+  },
+  {
+   "wait": 900
+  },
+  {
+   "play": "背夹，把音量调到百分之四十。",
+   "voice": "Tingting",
+   "delay_ms": 1100
+  },
+  {
+   "wait": 9000
+  },
+  {
+   "op": "ui_key",
+   "key": "MODE",
+   "action": "release"
+  },
+  {
+   "wait_state": {
+    "voice": "reply"
+   },
+   "timeout_ms": 45000
+  },
+  {
+   "op": "home_state",
+   "expect": {
+    "voice": "reply",
+    "voice_route": "底座直连",
+    "home_foreground": true
+   }
+  },
+  {
+   "shot": "volume_reply"
+  },
+  {
+   "op": "home_state",
+   "expect": {
+    "volume": 40
+   },
+   "note": "【执行补充】rc12 起 home_state 带 volume，直接核对设备音量值"
+  },
+  {
+   "note": "人工核对本句完整识别和回复，不接受追问为成功。主会话补本次 set_volume(percent=40) 的日志和设备值。"
+  },
+  {
+   "wait": 27000
+  },
+  {
+   "op": "ui_key",
+   "key": "SET",
+   "action": "long",
+   "ms": 900
+  },
+  {
+   "wait": 1000
+  },
+  {
+   "op": "home_state",
+   "expect": {
+    "view": "control"
+   }
+  },
+  {
+   "shot": "volume_40_readback"
+  },
+  {
+   "note": "人工判定控制中心必须40%；若不是，场景失败，即使 report 全通过。"
+  },
+  {
+   "op": "ui_key",
+   "key": "SET",
+   "action": "click"
+  },
+  {
+   "wait": 1000
+  },
+  {
+   "op": "home_state",
+   "expect": {
+    "view": "home"
+   }
+  }
+ ]
 }
