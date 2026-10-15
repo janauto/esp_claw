@@ -390,9 +390,24 @@ static const char *hv_weather_text(int code)
     return "天气";
 }
 
-/* 首页标题栏也要用天气摘要。 */
+/* 首页标题栏也要用天气摘要。天气数据半小时才更新一次：缓存 60 s，避免每 5 s 解析整份 JSON。 */
 bool hv_weather_summary(char *out, size_t size, int *temp_out)
 {
+    static uint32_t cached_at;
+    static bool cached_ok;
+    static int cached_temp;
+    static char cached_cond[24];
+    uint32_t now = lv_tick_get();
+
+    if (cached_at && now - cached_at < 60000) {
+        if (cached_ok) {
+            *temp_out = cached_temp;
+            strlcpy(out, cached_cond, size);
+        }
+        return cached_ok;
+    }
+    cached_at = now ? now : 1;
+    cached_ok = false;
     int64_t age = 0;
     char *text = hv_plat_feed_read("weather", &age);
     cJSON *json = text ? cJSON_Parse(text) : NULL;
@@ -405,6 +420,9 @@ bool hv_weather_summary(char *out, size_t size, int *temp_out)
     if (ok) {
         *temp_out = (int)lround(t->valuedouble);
         strlcpy(out, cJSON_IsNumber(code) ? hv_weather_text(code->valueint) : "", size);
+        cached_ok = true;
+        cached_temp = *temp_out;
+        strlcpy(cached_cond, out, sizeof(cached_cond));
     }
     cJSON_Delete(json);
     return ok;
