@@ -44,6 +44,11 @@ try:
   else:pixels=encoded
   assert len(pixels)==int(capture['width'])*int(capture['height'])*2
   png(out/(app+'.png'),int(capture['width']),int(capture['height']),pixels)
+  # A populated C state can coexist with an empty viewport. Check pixels below
+  # the fixed refresh header too, so a blank AIHOT page cannot pass on JSON alone.
+  body=pixels[int(capture['width'])*120*2:]
+  item['body_color_count']=len(set(struct.iter_unpack('<H',body)))
+  assert item['body_color_count']>32, app+' has an empty rendered viewport'
   d.rpc({'op':'screen_release'});item['stop']=d.rpc({'op':'app_stop'})
   print('APP_VERIFIED',app,json.dumps({k:v for k,v in item.items() if k in ['source_sha256','source_bytes','matches_before_source','ui']},ensure_ascii=False),flush=True)
  report['app_list_after']=d.rpc({'op':'app_list'});report['device_info_after']=d.rpc({'op':'device_info'})
