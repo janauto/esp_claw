@@ -35,7 +35,7 @@ def firmware(tmp_path_factory):
                     "-I" + str(cjson), str(component / "src/local_app_store.c"), str(component / "src/local_app_index.c"), str(cjson / "cJSON.c"),
                     str(component / "test_host/io_probe.c"), str(component / "test_host/bridge_probe.c"),
                     "-I" + str(ROOT / "application/edge_agent/components/ble_host_bridge/src"),
-                    str(ROOT / "application/edge_agent/components/ble_host_bridge/src/ble_host_apps.c"), 
+                    str(ROOT / "application/edge_agent/components/ble_host_bridge/src/ble_host_apps.c"),
                     "-lcrypto", "-o", str(library)], check=True)
     lib = ct.CDLL(str(library))
     lib.cJSON_Parse.argtypes = [ct.c_char_p]
