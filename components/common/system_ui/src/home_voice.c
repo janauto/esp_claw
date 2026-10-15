@@ -304,7 +304,9 @@ void hv_voice_show(hv_voice_state_t st, const char *heard, const char *text)
     V.state = st;
     V.state_ms = 0;
     if (st == HV_VOICE_REPLY) {
+        extern void hv_refresh_widget_kind(const char *wid);
         hv_widgets_note_voice(V.heard, V.text);
+        hv_refresh_widget_kind("voice");
     }
     hv_voice_render();
 }

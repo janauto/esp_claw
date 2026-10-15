@@ -33,12 +33,30 @@ static int s_mode = -1;
 static int s_volume = -1;
 static int s_vibration = -1;
 
+static void hv_refresh_after_providers(int arg, void *payload)
+{
+    (void)arg;
+    (void)payload;
+    if (system_ui_lock() == ESP_OK) {
+        hv_on_show();       /* 开机时小组件早于数据来源建好：来源就位后立刻重读一次 */
+        system_ui_unlock();
+    }
+}
+
 esp_err_t system_ui_home_set_providers(const system_ui_home_providers_t *providers)
 {
     if (providers) {
         s_prov = *providers;
     } else {
         memset(&s_prov, 0, sizeof(s_prov));
+    }
+    if (s_ui.started) {
+        system_ui_work_event_t event = {
+            .type = SYSTEM_UI_WORK_EVENT_HOME_CALL,
+            .generation = s_ui.generation,
+        };
+        event.home_call.fn = hv_refresh_after_providers;
+        (void)system_ui_post_work_event(&event, pdMS_TO_TICKS(100));
     }
     return ESP_OK;
 }

@@ -380,6 +380,20 @@ void hv_refresh_status(void)
     lv_obj_set_style_text_color(H.bt_l, lv_color_hex(hv_plat_ble_connected() ? 0x60A5FA : HV_C_TEXT), 0);
     lv_obj_set_style_text_opa(H.bt_l, hv_plat_ble_connected() ? LV_OPA_COVER : LV_OPA_50, 0);
     bool dock = hv_plat_mode_get() == HV_MODE_DOCK;
+    static int last_mode = -1;
+    if (last_mode != (int)dock) {
+        /* 模式变了：语音助手与设备状态小组件上的线路/模式文字跟着变 */
+        if (last_mode >= 0) {
+            for (int p = 0; p < H.layout.pages; p++) {
+                for (int i = 0; i < H.layout.n[p]; i++) {
+                    if (H.wroot[p][i] && (!strcmp(H.layout.it[p][i].w, "voice") || !strcmp(H.layout.it[p][i].w, "system"))) {
+                        hv_widget_refresh(H.wroot[p][i]);
+                    }
+                }
+            }
+        }
+        last_mode = dock;
+    }
     lv_label_set_text(H.mode_chip_l, dock ? "底座" : "背夹");
     lv_obj_set_style_bg_color(H.mode_chip, lv_color_hex(dock ? 0x10241A : 0x2A2410), 0);
     lv_obj_set_style_border_color(H.mode_chip, lv_color_hex(dock ? 0x1F6B43 : 0x6B5A1A), 0);
@@ -1241,6 +1255,17 @@ void hv_on_show(void)
     hv_widgets_rescan();
     hv_refresh_status();
     hv_refresh_widgets(true);
+}
+
+void hv_refresh_widget_kind(const char *wid)
+{
+    for (int p = 0; p < H.layout.pages; p++) {
+        for (int i = 0; i < H.layout.n[p]; i++) {
+            if (H.wroot[p][i] && !strcmp(H.layout.it[p][i].w, wid)) {
+                hv_widget_refresh(H.wroot[p][i]);
+            }
+        }
+    }
 }
 
 void hv_reload_apps(void)
