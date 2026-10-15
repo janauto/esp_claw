@@ -31,6 +31,7 @@
 #endif
 #include "app_config.h"
 #include "live_apps.h"
+#include "system_ui_home.h"
 
 #define APP_ENABLE_MEM_LOG        (0)
 
@@ -38,6 +39,17 @@ static const char *TAG = "app";
 
 static app_config_t *s_config;
 static app_claw_config_t *s_claw_config;
+
+/* 1.0 首页小组件读实时数据缓存（天气 / 股票 / 热榜） */
+static char *main_home_feed_read(const char *id, int64_t *age_ms)
+{
+    char *text = NULL;
+    if (live_apps_feed_read(id, &text, age_ms, NULL) != ESP_OK) {
+        free(text);
+        return NULL;
+    }
+    return text;
+}
 
 static esp_err_t app_allocate_runtime_state(void)
 {
@@ -423,6 +435,11 @@ void app_main(void)
         ESP_LOGW(TAG, "BLE host bridge start failed: %s", esp_err_to_name(ble_bridge_err));
     }
     ESP_ERROR_CHECK(live_apps_start());
+    (void)system_ui_home_set_providers(&(system_ui_home_providers_t) {
+        .phone_linked = ble_host_bridge_voice_linked,
+        .ble_connected = ble_host_bridge_connected,
+        .feed_read = main_home_feed_read,
+    });
 #if CONFIG_APP_CLAW_CAP_IM_LOCAL
     ESP_ERROR_CHECK(http_server_webim_bind_im());
 #endif

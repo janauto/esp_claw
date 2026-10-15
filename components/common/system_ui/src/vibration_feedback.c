@@ -34,6 +34,18 @@ static TimerHandle_t s_vibration_timer;
 static TickType_t s_last_pulse_tick;
 static const char *s_vibration_device_name;
 static gpio_num_t s_vibration_gpio = GPIO_NUM_NC;
+static bool s_vibration_user_enabled = true;
+
+/* 1.0 控制中心的“震动反馈”开关；没有震动马达的板子上它只是保存偏好。 */
+bool system_ui_vibration_available(void)
+{
+    return s_vibration_gpio != GPIO_NUM_NC;
+}
+
+void system_ui_vibration_set_user_enabled(bool on)
+{
+    s_vibration_user_enabled = on;
+}
 
 static TickType_t system_ui_vibration_ms_to_ticks(uint32_t ms)
 {
@@ -161,7 +173,7 @@ void system_ui_click_feedback(void)
     TickType_t now = xTaskGetTickCount();
     TickType_t min_interval = system_ui_vibration_ms_to_ticks(APP_CLAW_VIBRATION_MIN_INTERVAL_MS);
 
-    if (s_vibration_timer == NULL) {
+    if (s_vibration_timer == NULL || !s_vibration_user_enabled) {
         return;
     }
     if (s_last_pulse_tick != 0 && now - s_last_pulse_tick < min_interval) {

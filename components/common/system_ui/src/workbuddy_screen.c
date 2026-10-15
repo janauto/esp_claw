@@ -172,6 +172,13 @@ static SemaphoreHandle_t s_audio_playback_lock;
 static workbuddy_opus_bridge_t s_audio_playback_opus;
 static uint32_t s_audio_tx_seq;
 static system_ui_workbuddy_audio_state_cb_t s_audio_state_cb;
+/* 1.0 底座模式：首页按住说话时 Opus 交给本机 voice_cloud，不走蓝牙。 */
+static esp_err_t (*volatile s_audio_local_sink)(const uint8_t *, size_t);
+
+void system_ui_workbuddy_set_local_sink(esp_err_t (*sink)(const uint8_t *, size_t))
+{
+    s_audio_local_sink = sink;
+}
 static void *s_audio_state_user_ctx;
 static volatile bool s_audio_capturing;
 static volatile uint32_t s_audio_mic_gaps;
@@ -614,8 +621,12 @@ static void workbuddy_audio_bridge_task(void *arg)
                 continue;
             }
             if (err == ESP_OK) {
+                esp_err_t (*sink)(const uint8_t *, size_t) = s_audio_local_sink;
                 system_ui_workbuddy_audio_tx_cb_t cb = s_audio_tx_cb;
-                if (cb != NULL) {
+                if (sink != NULL) {
+                    ++s_audio_tx_seq;
+                    err = sink(opus.opus, encoded_size);
+                } else if (cb != NULL) {
                     err = cb(opus.opus, encoded_size, ++s_audio_tx_seq, s_audio_tx_user_ctx);
                 } else {
                     err = ESP_ERR_INVALID_STATE;

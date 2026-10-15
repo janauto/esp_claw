@@ -6,6 +6,8 @@
 #include "claw_version.h"
 #include "display_service.h"
 #include "esp_console.h"
+#include "system_ui_home.h"
+#include "ble_host_bridge.h"
 #include "esp_heap_caps.h"
 #include "lua_module_clip_ui.h"
 #include "mbedtls/base64.h"
@@ -55,7 +57,9 @@ static cJSON *command_reply(const cJSON *command) {
         err = ESP_ERR_INVALID_ARG;
     } else if (!strcmp(op, "hello") || !strcmp(op, "device_info")) {
         cJSON_AddStringToObject(reply, "protocol", "esp-claw-ble-live-apps");
-        cJSON_AddStringToObject(reply, "version", "ble-live-1");
+        cJSON_AddStringToObject(reply, "version", "backclip-" SYSTEM_UI_RELEASE);
+        cJSON_AddStringToObject(reply, "release", SYSTEM_UI_RELEASE);
+        cJSON_AddStringToObject(reply, "mode", system_ui_home_mode_name());
         cJSON_AddStringToObject(reply, "firmware", claw_get_git_version());
         cJSON_AddBoolToObject(reply, "ble_voice", true);
         cJSON_AddBoolToObject(reply, "live_actions", true);
@@ -214,6 +218,30 @@ static cJSON *command_reply(const cJSON *command) {
         h->screen_bytes = 0;
         err = ESP_OK;
 
+    } else {
+        /* 1.0 首页 / 模式 / 应用目录 / 模拟用户输入（ui_key、ui_touch、home_state、voice_text） */
+        cJSON *out = NULL;
+        err = system_ui_home_handle_op(op, command, true, &out);
+        if (err == ESP_ERR_NOT_SUPPORTED && !strncmp(op, "app_", 4)) {
+            /* 应用包协议：与手机 App 的 BLE 请求同一处理器 */
+            char *text = NULL;
+            err = ble_host_apps_handle(op, command, &text);
+            out = text ? cJSON_Parse(text) : NULL;
+            if (text && !out) {
+                out = cJSON_CreateObject();
+                if (out) cJSON_AddStringToObject(out, "data", text);
+            }
+            free(text);
+        }
+        if (out) {
+            cJSON *item = out->child;
+            while (item) {
+                cJSON *next = item->next;
+                cJSON_AddItemToObject(reply, item->string, cJSON_DetachItemViaPointer(out, item));
+                item = next;
+            }
+            cJSON_Delete(out);
+        }
     }
     cJSON_AddBoolToObject(reply, "ok", err == ESP_OK);
     if (err != ESP_OK) cJSON_AddStringToObject(reply, "error", esp_err_to_name(err));

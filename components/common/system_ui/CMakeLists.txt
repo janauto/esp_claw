@@ -6,7 +6,19 @@ idf_component_register(
         "src/businesscard_screen.c"
         "src/font_assets.c"
         "src/home_apps.c"
+        "src/home_catalog.c"
+        "src/home_control.c"
+        "src/home_edit.c"
+        "src/home_input.c"
         "src/home_key.c"
+        "src/home_layout.c"
+        "src/home_ops.c"
+        "src/home_overview.c"
+        "src/home_pet.c"
+        "src/home_platform.c"
+        "src/home_view.c"
+        "src/home_voice.c"
+        "src/home_widgets.c"
         "src/infrared_remote_commands.c"
         "src/home_screen.c"
         "src/infrared_remote_screen.c"
@@ -34,8 +46,17 @@ idf_component_register(
         lua_module_audio
         lvgl
         ui_squareline
+        cjson
     PRIV_REQUIRES
+        voice_cloud
+        wifi_manager
+        nvs_flash
+        esp_wifi
+        esp_codec_dev
         esp_driver_gpio
         georgik__lua
         cap_lua
 )
+
+# 1.0 首页里大量 snprintf 写入定长界面缓冲，截断是预期行为（再按 UTF-8 边界裁剪）。
+target_compile_options(${COMPONENT_LIB} PRIVATE -Os -Wno-format-truncation)

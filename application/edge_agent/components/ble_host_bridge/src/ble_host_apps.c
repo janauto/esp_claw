@@ -189,6 +189,10 @@ esp_err_t ble_host_apps_handle(const char *op, const cJSON *request, char **outp
         return err;
     }
     const char *id = field(request, "app_id");
+    /* 1.0 统一 ID：应用包可带 "app:" 前缀（apps_all 返回的就是这种） */
+    if (id && strncmp(id, "app:", 4) == 0) {
+        id += 4;
+    }
     cJSON *result = NULL;
     bool refresh = false;
     if (strcmp(op, "app_list") == 0) {

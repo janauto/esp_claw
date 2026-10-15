@@ -6,6 +6,7 @@
 #include "ble_host_bridge.h"
 #include "ble_host_apps.h"
 #include "voice_frame.h"
+#include "system_ui_home.h"
 
 #include <inttypes.h>
 #include <stdbool.h>
@@ -504,9 +505,10 @@ static void handle_put_lua(const char *id, const char *source)
 
 static void handle_hello(const char *id)
 {
-    char data[1024];
+    char data[1800];
     snprintf(data, sizeof(data),
-             "{\"protocol\":%d,\"device_name\":\"%s\",\"ops\":[\"hello\",\"device_info\",\"put_lua\","
+             "{\"protocol\":%d,\"release\":\"" SYSTEM_UI_RELEASE "\",\"mode\":\"%s\","
+             "\"device_name\":\"%s\",\"ops\":[%s,\"hello\",\"device_info\",\"put_lua\","
              "\"app_list\",\"app_info\",\"app_read\",\"app_begin\",\"app_write\",\"app_commit\",\"app_abort\",\"app_remove\",\"app_reload\",\"app_rename\","
              "\"run_lua\",\"job_status\",\"job_tail\",\"job_stop\",\"workbuddy_ui\","
              "\"workbuddy_audio_control\",\"workbuddy_audio_opus\",\"voice_start\",\"voice_stop\","
@@ -515,7 +517,8 @@ static void handle_hello(const char *id)
              "\"voice\":{\"version\":%d,\"char\":\"7b7d1005-0000-0000-0057-414c43505345\","
              "\"codec\":\"opus\",\"sample_rate\":%d,\"channels\":%d,\"frame_ms\":%d,"
              "\"bitrate\":%d,\"header\":%d}}",
-             BLE_HOST_BRIDGE_PROTOCOL_VERSION, s_bridge.device_name, VOICE_FRAME_VERSION,
+             BLE_HOST_BRIDGE_PROTOCOL_VERSION, system_ui_home_mode_name(), s_bridge.device_name,
+             system_ui_home_ops_json(), VOICE_FRAME_VERSION,
              BLE_HOST_BRIDGE_AUDIO_SAMPLE_RATE, BLE_HOST_BRIDGE_AUDIO_CHANNELS,
              BLE_HOST_BRIDGE_AUDIO_FRAME_MS, BLE_HOST_BRIDGE_AUDIO_BITRATE, VOICE_FRAME_HEADER_LEN);
     send_response(id, true, "hello", data);
@@ -858,6 +861,8 @@ static void handle_workbuddy_ui(const char *id, const cJSON *root)
     }
 
     esp_err_t err = system_ui_update_workbuddy(&update);
+    /* 0.6.0 App 用 workbuddy_ui 推“识别中 / 你说 / 回复”：同步到首页语音卡片 */
+    system_ui_home_note_workbuddy(update.workbuddy_status, update.reply_status, update.reply_text);
     send_response(id, err == ESP_OK, "workbuddy_ui", err == ESP_OK ? "ok" : esp_err_to_name(err));
 }
 
@@ -1171,6 +1176,10 @@ static void voice_stop_capture(const char *reason)
  * only record state and queue the event. */
 static void bridge_voice_state_cb(bool capturing, const char *tag, void *user_ctx)
 {
+    /* 1.0 底座模式：首页的录音交给本机 voice_cloud，不通知手机。 */
+    if (capturing && tag && strcmp(tag, "home-dock") == 0) {
+        return;
+    }
     voice_item_t *item = voice_item_new(capturing ? VOICE_ITEM_STARTED : VOICE_ITEM_STOPPED, tag);
     (void)user_ctx;
 
@@ -1485,7 +1494,19 @@ static void dispatch_request(const char *json_text)
     id = cJSON_IsString(id_item) ? id_item->valuestring : "";
     op = cJSON_IsString(op_item) ? op_item->valuestring : "";
 
-    if (strcmp(op, "hello") == 0) {
+    cJSON *home_out = NULL;
+    esp_err_t home_err = strcmp(op, "hello") == 0 ? ESP_ERR_NOT_SUPPORTED
+                                                  : system_ui_home_handle_op(op, root, false, &home_out);
+    if (home_err != ESP_ERR_NOT_SUPPORTED) {
+        /* 1.0 首页/模式/应用目录操作：data 为 JSON 字符串 */
+        char *text = home_out ? cJSON_PrintUnformatted(home_out) : NULL;
+        const cJSON *msg = home_out ? cJSON_GetObjectItemCaseSensitive(home_out, "error") : NULL;
+        send_response(id, home_err == ESP_OK, op,
+                      home_err == ESP_OK ? (text ? text : "{}")
+                                         : (cJSON_IsString(msg) ? msg->valuestring : esp_err_to_name(home_err)));
+        cJSON_free(text);
+        cJSON_Delete(home_out);
+    } else if (strcmp(op, "hello") == 0) {
         handle_hello(id);
     } else if (strncmp(op, "app_", 4) == 0) {
         char *output = NULL;
@@ -2173,4 +2194,15 @@ esp_err_t ble_host_bridge_stop(void)
     memset(&s_bridge, 0, sizeof(s_bridge));
     s_bridge.conn_handle = BLE_HS_CONN_HANDLE_NONE;
     return ESP_OK;
+}
+
+/* 1.0 首页状态来源：手机连着且订阅了语音特征时，背夹模式的语音可用。 */
+bool ble_host_bridge_voice_linked(void)
+{
+    return s_bridge.audio_subscribed && s_bridge.conn_handle != BLE_HS_CONN_HANDLE_NONE;
+}
+
+bool ble_host_bridge_connected(void)
+{
+    return s_bridge.conn_handle != BLE_HS_CONN_HANDLE_NONE;
 }

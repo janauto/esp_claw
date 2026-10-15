@@ -1,0 +1,54 @@
+{
+ "name": "s05_app_manage",
+ "steps": [
+  {
+   "op": "apps_all"
+  },
+  {
+   "op": "app_rename",
+   "app_id": "skill:official_jump",
+   "title": "跳跃小游戏",
+   "allow_error": true
+  },
+  {
+   "wait": 1500
+  },
+  {
+   "op": "apps_all",
+   "expect_contains": {
+    "apps": "跳跃小游戏"
+   }
+  },
+  {
+   "op": "app_rename",
+   "app_id": "skill:official_jump",
+   "title": "跳跃游戏",
+   "allow_error": true
+  },
+  {
+   "wait": 1500
+  },
+  {
+   "op": "app_launch",
+   "id": "sys:snake"
+  },
+  {
+   "wait": 3500
+  },
+  {
+   "shot": "snake"
+  },
+  {
+   "op": "app_stop"
+  },
+  {
+   "wait": 1500
+  },
+  {
+   "op": "home_state",
+   "expect": {
+    "view": "home"
+   }
+  }
+ ]
+}

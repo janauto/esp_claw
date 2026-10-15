@@ -1,0 +1,123 @@
+{
+ "name": "s02_touch_gestures",
+ "steps": [
+  {
+   "note": "手势：顶部下拉控制中心、底部上滑总览/收起"
+  },
+  {
+   "op": "home_state",
+   "expect": {
+    "view": "home"
+   }
+  },
+  {
+   "op": "ui_touch",
+   "type": "drag",
+   "x": 240,
+   "y": 20,
+   "x2": 240,
+   "y2": 300,
+   "ms": 450
+  },
+  {
+   "wait": 900
+  },
+  {
+   "op": "home_state",
+   "expect": {
+    "view": "control"
+   }
+  },
+  {
+   "shot": "pull_down_control"
+  },
+  {
+   "op": "ui_touch",
+   "type": "drag",
+   "x": 240,
+   "y": 760,
+   "x2": 240,
+   "y2": 560,
+   "ms": 400
+  },
+  {
+   "wait": 900
+  },
+  {
+   "op": "home_state",
+   "expect": {
+    "view": "home"
+   }
+  },
+  {
+   "op": "ui_touch",
+   "type": "drag",
+   "x": 240,
+   "y": 770,
+   "x2": 240,
+   "y2": 520,
+   "ms": 400
+  },
+  {
+   "wait": 900
+  },
+  {
+   "op": "home_state",
+   "expect": {
+    "view": "overview"
+   }
+  },
+  {
+   "shot": "swipe_up_overview"
+  },
+  {
+   "op": "ui_key",
+   "key": "SET",
+   "action": "click"
+  },
+  {
+   "wait": 800
+  },
+  {
+   "op": "home_state",
+   "expect": {
+    "view": "home"
+   }
+  },
+  {
+   "note": "点天气小组件打开天气应用，再用系统退出回到首页"
+  },
+  {
+   "op": "ui_touch",
+   "type": "tap",
+   "x": 128,
+   "y": 386,
+   "ms": 90
+  },
+  {
+   "wait": 4500
+  },
+  {
+   "op": "home_state",
+   "expect": {
+    "exclusive_app": true
+   }
+  },
+  {
+   "shot": "weather_app"
+  },
+  {
+   "op": "app_stop"
+  },
+  {
+   "wait": 1500
+  },
+  {
+   "op": "home_state",
+   "expect": {
+    "view": "home",
+    "home_foreground": true
+   }
+  }
+ ]
+}

@@ -39,6 +39,10 @@ dependencies:
   wifi_manager:
     path: ../../../components/common/wifi_manager
 
+  # 1.0 底座模式：背夹经 Wi-Fi 直连云端语音（system_ui 首页使用）
+  voice_cloud:
+    path: ../../../components/common/voice_cloud
+
   esp_video:
     path: ../../../components/common/esp_video
     matches:

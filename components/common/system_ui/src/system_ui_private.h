@@ -140,21 +140,33 @@ typedef enum {
     SYSTEM_UI_WORK_EVENT_HOME_KEY,
     SYSTEM_UI_WORK_EVENT_APP_UNINSTALL,
     SYSTEM_UI_WORK_EVENT_APP_RENAME,
+    SYSTEM_UI_WORK_EVENT_HOME_GESTURE,
+    SYSTEM_UI_WORK_EVENT_VOICE_FINISH,
 } system_ui_work_event_type_t;
 
-/* Physical key actions on the home carousel. These mirror the screen's own
- * "PREV" / "NEXT" / "M OPEN" hit targets. */
+/* Physical key actions on the 1.0 home; same order as hv_key_t (home_priv.h). */
 typedef enum {
     SYSTEM_UI_HOME_KEY_PREV = 0,
     SYSTEM_UI_HOME_KEY_NEXT,
-    SYSTEM_UI_HOME_KEY_SELECT,
+    SYSTEM_UI_HOME_KEY_SELECT,          /* MODE short */
+    SYSTEM_UI_HOME_KEY_M_LONG_START,
+    SYSTEM_UI_HOME_KEY_M_LONG_END,
+    SYSTEM_UI_HOME_KEY_SET,
+    SYSTEM_UI_HOME_KEY_SET_LONG,
 } system_ui_home_key_t;
 
 typedef enum {
     SYSTEM_UI_TOUCH_GESTURE_NONE = 0,
     SYSTEM_UI_TOUCH_GESTURE_SHOW_JOBS,
     SYSTEM_UI_TOUCH_GESTURE_EXIT_APP,
+    SYSTEM_UI_TOUCH_GESTURE_HOME_TOP,       /* 首页顶部下拉：控制中心 */
+    SYSTEM_UI_TOUCH_GESTURE_HOME_BOTTOM,    /* 首页底部上滑：应用总览 / 回首页 */
 } system_ui_touch_gesture_t;
+
+typedef enum {
+    SYSTEM_UI_HOME_GESTURE_PULL_DOWN_TOP = 1,
+    SYSTEM_UI_HOME_GESTURE_SWIPE_UP_BOTTOM,
+} system_ui_home_gesture_t;
 
 typedef struct {
     system_ui_work_event_type_t type;
@@ -174,9 +186,10 @@ typedef struct {
             char ap_ssid[64];
         } network_status;
         system_ui_home_key_t home_key;
+        system_ui_home_gesture_t home_gesture;
         struct {
             uint32_t page;                           /* carousel page it was on */
-            char app_id[SYSTEM_UI_LAUNCHER_TITLE_LEN];
+            char app_id[64];
             char title[96];
         } app_uninstall;
     };
@@ -386,6 +399,8 @@ bool system_ui_jobs_is_visible(void);
 #endif
 
 void system_ui_home_apps_process_reload(void);
+/* 测试注入：把一个触摸采样交给系统手势识别（与真实触摸同一路径）。 */
+void system_ui_touch_inject_sample(int32_t x, int32_t y, bool pressed);
 void system_ui_home_apps_request_rename(uint32_t page, const char *id, const char *title);
 void system_ui_home_apps_handle_rename(const system_ui_work_event_t *event);
 void system_ui_home_apps_close_locked(void);

@@ -1,0 +1,95 @@
+{
+ "name": "s03_modes",
+ "steps": [
+  {
+   "note": "控制中心切到底座模式再切回背夹模式"
+  },
+  {
+   "op": "mode_set",
+   "mode": "clip"
+  },
+  {
+   "wait": 300
+  },
+  {
+   "op": "ui_key",
+   "key": "SET",
+   "action": "long",
+   "ms": 900
+  },
+  {
+   "wait": 1300
+  },
+  {
+   "op": "home_state",
+   "expect": {
+    "view": "control",
+    "mode": "clip"
+   }
+  },
+  {
+   "op": "ui_key",
+   "key": "VOLUME_UP",
+   "action": "click"
+  },
+  {
+   "wait": 300
+  },
+  {
+   "op": "ui_key",
+   "key": "MODE",
+   "action": "click"
+  },
+  {
+   "wait": 800
+  },
+  {
+   "op": "mode_get",
+   "expect": {
+    "mode": "dock"
+   }
+  },
+  {
+   "shot": "control_dock"
+  },
+  {
+   "op": "ui_key",
+   "key": "VOLUME_DOWN",
+   "action": "click"
+  },
+  {
+   "wait": 300
+  },
+  {
+   "op": "ui_key",
+   "key": "MODE",
+   "action": "click"
+  },
+  {
+   "wait": 800
+  },
+  {
+   "op": "mode_get",
+   "expect": {
+    "mode": "clip"
+   }
+  },
+  {
+   "shot": "control_clip"
+  },
+  {
+   "op": "ui_key",
+   "key": "SET",
+   "action": "click"
+  },
+  {
+   "wait": 800
+  },
+  {
+   "op": "home_state",
+   "expect": {
+    "view": "home"
+   }
+  }
+ ]
+}

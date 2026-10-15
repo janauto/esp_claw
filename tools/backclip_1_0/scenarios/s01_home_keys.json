@@ -1,0 +1,170 @@
+{
+ "name": "s01_home_keys",
+ "steps": [
+  {
+   "note": "开机后在系统首页，用实体键浏览"
+  },
+  {
+   "op": "device_info",
+   "expect": {
+    "release": "1.0.0"
+   }
+  },
+  {
+   "op": "home_state",
+   "expect": {
+    "view": "home"
+   }
+  },
+  {
+   "shot": "home"
+  },
+  {
+   "op": "ui_key",
+   "key": "VOLUME_UP",
+   "action": "click"
+  },
+  {
+   "wait": 300
+  },
+  {
+   "op": "ui_key",
+   "key": "VOLUME_UP",
+   "action": "click"
+  },
+  {
+   "wait": 400
+  },
+  {
+   "op": "home_state",
+   "expect": {
+    "focus": 1
+   }
+  },
+  {
+   "shot": "focus_clock"
+  },
+  {
+   "op": "ui_key",
+   "key": "SET",
+   "action": "click"
+  },
+  {
+   "wait": 900
+  },
+  {
+   "op": "home_state",
+   "expect": {
+    "view": "overview"
+   }
+  },
+  {
+   "shot": "overview"
+  },
+  {
+   "op": "ui_key",
+   "key": "VOLUME_UP",
+   "action": "click"
+  },
+  {
+   "wait": 250
+  },
+  {
+   "op": "ui_key",
+   "key": "VOLUME_UP",
+   "action": "click"
+  },
+  {
+   "wait": 250
+  },
+  {
+   "op": "ui_key",
+   "key": "VOLUME_UP",
+   "action": "click"
+  },
+  {
+   "wait": 400
+  },
+  {
+   "shot": "overview_focus"
+  },
+  {
+   "op": "ui_key",
+   "key": "MODE",
+   "action": "long",
+   "ms": 900
+  },
+  {
+   "wait": 1200
+  },
+  {
+   "op": "home_state",
+   "expect": {
+    "view": "sheet"
+   }
+  },
+  {
+   "shot": "sheet"
+  },
+  {
+   "op": "ui_key",
+   "key": "SET",
+   "action": "click"
+  },
+  {
+   "wait": 600
+  },
+  {
+   "op": "home_state",
+   "expect": {
+    "view": "overview"
+   }
+  },
+  {
+   "op": "ui_key",
+   "key": "SET",
+   "action": "click"
+  },
+  {
+   "wait": 800
+  },
+  {
+   "op": "home_state",
+   "expect": {
+    "view": "home"
+   }
+  },
+  {
+   "op": "ui_key",
+   "key": "SET",
+   "action": "long",
+   "ms": 900
+  },
+  {
+   "wait": 1300
+  },
+  {
+   "op": "home_state",
+   "expect": {
+    "view": "control"
+   }
+  },
+  {
+   "shot": "control"
+  },
+  {
+   "op": "ui_key",
+   "key": "SET",
+   "action": "click"
+  },
+  {
+   "wait": 800
+  },
+  {
+   "op": "home_state",
+   "expect": {
+    "view": "home"
+   }
+  }
+ ]
+}

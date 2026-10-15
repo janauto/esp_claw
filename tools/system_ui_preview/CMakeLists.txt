@@ -7,6 +7,7 @@ set(APP "${REPO}/application/edge_agent")
 set(LVGL_DIR "${APP}/managed_components/lvgl__lvgl" CACHE PATH "LVGL source (fetched by idf.py build)")
 set(UI_SQ "${REPO}/components/common/ui_squareline")
 set(SYS_UI "${REPO}/components/common/system_ui")
+set(IDF_PATH_JSON "${APP}/managed_components/espressif__cjson" CACHE PATH "cJSON source" FORCE)
 
 set(LV_CONF_PATH "${CMAKE_CURRENT_SOURCE_DIR}/lv_conf.h" CACHE PATH "" FORCE)
 set(LV_CONF_BUILD_DISABLE_EXAMPLES ON CACHE BOOL "" FORCE)
@@ -42,8 +43,20 @@ add_executable(system_ui_preview
     "${SYS_UI}/src/meeting_minutes_screen.c"
     "${SYS_UI}/src/infrared_remote_screen.c"
     "${SYS_UI}/src/infrared_remote_commands.c"
-    "${SYS_UI}/src/workbuddy_screen.c")
+    "${SYS_UI}/src/workbuddy_screen.c"
+    "${SYS_UI}/src/home_view.c"
+    "${SYS_UI}/src/home_layout.c"
+    "${SYS_UI}/src/home_catalog.c"
+    "${SYS_UI}/src/home_widgets.c"
+    "${SYS_UI}/src/home_pet.c"
+    "${SYS_UI}/src/home_overview.c"
+    "${SYS_UI}/src/home_control.c"
+    "${SYS_UI}/src/home_edit.c"
+    "${SYS_UI}/src/home_voice.c"
+    hv_preview_platform.c
+    "${IDF_PATH_JSON}/cJSON/cJSON.c")
 target_include_directories(system_ui_preview PRIVATE
+    "${IDF_PATH_JSON}/cJSON"
     "${CMAKE_CURRENT_SOURCE_DIR}/stubs"
     "${LVGL_DIR}"
     "${UI_SQ}/include" "${UI_SQ}/src"

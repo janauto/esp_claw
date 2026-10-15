@@ -29,12 +29,19 @@ static int32_t s_touch_start_y;
 #define SYSTEM_UI_EVENT_TASK_STACK 6144
 #define SYSTEM_UI_EVENT_TASK_PRIO 4
 
-/* 底部上滑退出手势开关。宏存在（默认）时手势被禁用；
- * 注释掉此行则重新启用该手势。 */
-#define SYSTEM_UI_BOTTOM_SWIPE_EXIT_DISABLED
+/* 底部上滑退出手势开关。宏存在时手势被禁用。1.0 按首页设计启用：
+ * 底部上滑永远回首页（应用里 = 退出应用，首页 = 应用总览）。 */
+/* #define SYSTEM_UI_BOTTOM_SWIPE_EXIT_DISABLED */
+#include "home_priv.h"
+
+#define SYSTEM_UI_HOME_TOP_EDGE_PX 72
+#define SYSTEM_UI_HOME_BOTTOM_EDGE_PX 110
+#define SYSTEM_UI_HOME_SWIPE_TRIGGER_PX 60
 
 /* 开机动画开关。关闭此宏则直接进入主界面。 */
 #define SYSTEM_UI_BOOT_SPLASH_ENABLED
+
+static void system_ui_handle_home_gesture(const system_ui_work_event_t *event);
 
 static int32_t system_ui_abs_i32(int32_t value)
 {
@@ -221,6 +228,14 @@ static void system_ui_event_task(void *arg)
                 system_ui_home_apps_handle_uninstall(&event);
             }
             break;
+        case SYSTEM_UI_WORK_EVENT_HOME_GESTURE:
+            system_ui_handle_home_gesture(&event);
+            break;
+        case SYSTEM_UI_WORK_EVENT_VOICE_FINISH: {
+            extern void hv_plat_voice_finish_now(void);
+            hv_plat_voice_finish_now();
+            break;
+        }
         case SYSTEM_UI_WORK_EVENT_STOP:
         default:
             break;
@@ -302,9 +317,25 @@ static void system_ui_touch_observer_cb(const display_service_touch_sample_t *sa
                 s_ui.touch_gesture = SYSTEM_UI_TOUCH_GESTURE_EXIT_APP;
             } else
 #endif
-            if (!exclusive && system_ui_system_overlay_allowed() && s_touch_start_y <= SYSTEM_UI_JOBS_SWIPE_EDGE_PX) {
-                s_ui.touch_gesture = SYSTEM_UI_TOUCH_GESTURE_SHOW_JOBS;
+            if (!exclusive && !s_ui.jobs_visible && s_touch_start_y <= SYSTEM_UI_HOME_TOP_EDGE_PX) {
+                s_ui.touch_gesture = SYSTEM_UI_TOUCH_GESTURE_HOME_TOP;
+            } else if (!exclusive && s_touch_start_y >= (int32_t)s_ui.height - SYSTEM_UI_HOME_BOTTOM_EDGE_PX) {
+                s_ui.touch_gesture = SYSTEM_UI_TOUCH_GESTURE_HOME_BOTTOM;
             }
+        } else if ((s_ui.touch_gesture == SYSTEM_UI_TOUCH_GESTURE_HOME_TOP &&
+                    sample->y - s_touch_start_y >= SYSTEM_UI_HOME_SWIPE_TRIGGER_PX) ||
+                   (s_ui.touch_gesture == SYSTEM_UI_TOUCH_GESTURE_HOME_BOTTOM &&
+                    s_touch_start_y - sample->y >= SYSTEM_UI_HOME_SWIPE_TRIGGER_PX)) {
+            if (system_ui_abs_i32(sample->x - s_touch_start_x) <= SYSTEM_UI_BOTTOM_SWIPE_HORIZONTAL_TOL_PX) {
+                system_ui_work_event_t event = {
+                    .type = SYSTEM_UI_WORK_EVENT_HOME_GESTURE,
+                    .generation = s_ui.generation,
+                    .home_gesture = s_ui.touch_gesture == SYSTEM_UI_TOUCH_GESTURE_HOME_TOP ?
+                                    SYSTEM_UI_HOME_GESTURE_PULL_DOWN_TOP : SYSTEM_UI_HOME_GESTURE_SWIPE_UP_BOTTOM,
+                };
+                (void)system_ui_post_work_event(&event, 0);
+            }
+            s_ui.touch_gesture = SYSTEM_UI_TOUCH_GESTURE_NONE;
         } else if (s_ui.touch_gesture == SYSTEM_UI_TOUCH_GESTURE_SHOW_JOBS &&
                    !s_ui.jobs_visible &&
                    sample->y - s_touch_start_y >= SYSTEM_UI_JOBS_SWIPE_TRIGGER_PX &&
@@ -363,11 +394,58 @@ static void system_ui_state_observer_cb(display_service_state_event_t event, voi
          * out, and iot_button_unregister_cb() clears every callback for the
          * event - ours included. Re-subscribe now that the app is gone. */
         system_ui_home_key_rearm();
+        /* 回到首页：重读「我的」快照、实时数据与应用列表变化 */
+        hv_on_show();
         break;
     default:
         break;
     }
 
+    system_ui_unlock();
+}
+
+void system_ui_touch_inject_sample(int32_t x, int32_t y, bool pressed)
+{
+    display_service_touch_sample_t sample = {0};
+    sample.x = x;
+    sample.y = y;
+    sample.pressed = pressed;
+    system_ui_touch_observer_cb(&sample, NULL);
+}
+
+/* 首页手势：在 UI 事件任务里、持锁执行。 */
+static void system_ui_handle_home_gesture(const system_ui_work_event_t *event)
+{
+    if (system_ui_lock() != ESP_OK) {
+        return;
+    }
+    if (event->generation == s_ui.generation && !display_service_has_exclusive_session()) {
+        bool native = s_ui.workbuddy_visible || s_ui.meeting_minutes_visible ||
+                      s_ui.infrared_remote_visible || s_ui.businesscard_visible;
+        if (event->home_gesture == SYSTEM_UI_HOME_GESTURE_SWIPE_UP_BOTTOM) {
+            if (native) {
+                /* 原生页面：底部上滑回首页 */
+                if (s_ui.workbuddy_visible) (void)system_ui_hide_workbuddy();
+                if (s_ui.meeting_minutes_visible) (void)system_ui_hide_meeting_minutes();
+                if (s_ui.infrared_remote_visible) (void)system_ui_hide_infrared_remote();
+                if (s_ui.businesscard_visible) (void)system_ui_hide_businesscard();
+            } else if (hv_is_active()) {
+                if (hv_view() == HV_VIEW_HOME) {
+                    hv_open_overview();
+                } else if (hv_view() == HV_VIEW_CONTROL) {
+                    hv_close_control();
+                } else if (hv_view() == HV_VIEW_OVERVIEW) {
+                    hv_close_overview();
+                }
+            }
+        } else if (event->home_gesture == SYSTEM_UI_HOME_GESTURE_PULL_DOWN_TOP && !native && hv_is_active()) {
+            if (hv_view() == HV_VIEW_HOME) {
+                hv_open_control();
+            } else if (hv_view() == HV_VIEW_OVERVIEW) {
+                hv_close_overview();
+            }
+        }
+    }
     system_ui_unlock();
 }
 

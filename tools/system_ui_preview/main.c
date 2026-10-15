@@ -25,6 +25,8 @@
 
 #include "system_ui_private.h"
 #include "ui_squareline.h"
+#include "home_priv.h"
+#include "cJSON.h"
 
 #ifndef PREVIEW_FONT_PATH
 #define PREVIEW_FONT_PATH ""
@@ -99,6 +101,73 @@ static void tap(int32_t x, int32_t y, int hold_ms)
     run_for(hold_ms);
     s_touch_pressed = false;
     run_for(600);
+}
+
+static void drag(int32_t x, int32_t y, int32_t x2, int32_t y2, int ms)
+{
+    s_touch_point.x = x;
+    s_touch_point.y = y;
+    s_touch_pressed = true;
+    run_for(100);
+    for (int t = 0; t <= ms; t += 20) {
+        s_touch_point.x = x + (x2 - x) * t / (ms ? ms : 1);
+        s_touch_point.y = y + (y2 - y) * t / (ms ? ms : 1);
+        run_for(20);
+    }
+    s_touch_pressed = false;
+    run_for(600);
+}
+
+static int write_bmp(const char *path);
+static void render(void);
+
+/* 1.0 首页脚本：k:键 t:x,y[,ms] d:x,y,x2,y2[,ms] w:ms s:截图.bmp g:up|down v:状态|你说|回复 e:edit */
+static void hv_run_actions(int argc, char **argv, int first)
+{
+    for (int i = first; i < argc; i++) {
+        const char *a = argv[i];
+        int x, y, x2, y2, ms;
+        if (strncmp(a, "k:", 2) == 0) {
+            const char *k = a + 2;
+            hv_key_t key = !strcmp(k, "PREV") ? HV_KEY_PREV : !strcmp(k, "NEXT") ? HV_KEY_NEXT :
+                           !strcmp(k, "M") ? HV_KEY_M : !strcmp(k, "MLS") ? HV_KEY_M_LONG_START :
+                           !strcmp(k, "MLE") ? HV_KEY_M_LONG_END : !strcmp(k, "SET") ? HV_KEY_SET : HV_KEY_SET_LONG;
+            hv_key(key);
+            run_for(400);
+        } else if (strncmp(a, "t:", 2) == 0 && sscanf(a + 2, "%d,%d,%d", &x, &y, &ms) >= 2) {
+            int n = sscanf(a + 2, "%d,%d,%d", &x, &y, &ms);
+            tap(x, y, n == 3 ? ms : 100);
+        } else if (strncmp(a, "d:", 2) == 0 && sscanf(a + 2, "%d,%d,%d,%d,%d", &x, &y, &x2, &y2, &ms) >= 4) {
+            int n = sscanf(a + 2, "%d,%d,%d,%d,%d", &x, &y, &x2, &y2, &ms);
+            drag(x, y, x2, y2, n == 5 ? ms : 400);
+        } else if (strncmp(a, "w:", 2) == 0) {
+            run_for(atoi(a + 2));
+        } else if (strncmp(a, "s:", 2) == 0) {
+            render();
+            write_bmp(a + 2);
+            fprintf(stderr, "PREVIEW_SHOT %s view=%s\n", a + 2, hv_view_name(hv_view()));
+        } else if (strcmp(a, "g:up") == 0) {
+            hv_open_overview();
+            run_for(500);
+        } else if (strcmp(a, "g:down") == 0) {
+            hv_open_control();
+            run_for(500);
+        } else if (strcmp(a, "e:edit") == 0) {
+            hv_enter_edit();
+            run_for(300);
+        } else if (strncmp(a, "v:", 2) == 0) {
+            char buf[512];
+            strlcpy(buf, a + 2, sizeof(buf));
+            char *st = strtok(buf, "|");
+            char *heard = strtok(NULL, "|");
+            char *text = strtok(NULL, "|");
+            hv_voice_state_t vs = !strcmp(st, "listening") ? HV_VOICE_LISTENING : !strcmp(st, "recognizing") ? HV_VOICE_RECOGNIZING :
+                                  !strcmp(st, "thinking") ? HV_VOICE_THINKING : !strcmp(st, "reply") ? HV_VOICE_REPLY :
+                                  !strcmp(st, "error") ? HV_VOICE_ERROR : HV_VOICE_IDLE;
+            hv_voice_show(vs, heard && strcmp(heard, "-") ? heard : NULL, text);
+            run_for(300);
+        }
+    }
 }
 
 static void flush_cb(lv_display_t *disp, const lv_area_t *area, uint8_t *px)
@@ -202,7 +271,11 @@ int main(int argc, char **argv)
         s_ui.clock_font = lv_tiny_ttf_create_file("S:" PREVIEW_FONT_PATH, SYSTEM_UI_CLOCK_FONT_SIZE);
     }
 
-    if (strncmp(screen, "home", 4) == 0 && (screen[4] == '\0' || screen[4] == ':')) {
+    if (strcmp(screen, "hv") == 0) {
+        s_ui.font_data = NULL;
+        scr = hv_create_screen();
+        s_ui.home_screen = scr;
+    } else if (strncmp(screen, "home", 4) == 0 && (screen[4] == '\0' || screen[4] == ':')) {
         ui_squareline_set_img_base_path(PREVIEW_IMG_BASE);
         ui_squareline_set_menu_font(s_ui.font);
         add_preview_apps();
@@ -234,6 +307,14 @@ int main(int argc, char **argv)
     }
     lv_screen_load(scr);
     run_for(200);
+    if (strcmp(screen, "hv") == 0) {
+        hv_run_actions(argc, argv, 5);
+        render();
+        cJSON *st = hv_state_json();
+        char *txt = st ? cJSON_PrintUnformatted(st) : NULL;
+        fprintf(stderr, "PREVIEW_STATE %s\n", txt ? txt : "{}");
+        return write_bmp(argv[4]) == 0 ? 0 : 1;
+    }
     for (int i = 5; i < argc; i++) {
         int x, y, ms = 100;
         if (sscanf(argv[i], "%d,%d,%d", &x, &y, &ms) >= 2) {

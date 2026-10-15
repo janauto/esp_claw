@@ -1,0 +1,63 @@
+{
+ "name": "s04_edit_home",
+ "steps": [
+  {
+   "note": "长按时钟进入编辑，换尺寸、移出语音助手、添加回来"
+  },
+  {
+   "op": "home_get"
+  },
+  {
+   "op": "ui_touch",
+   "type": "long",
+   "x": 352,
+   "y": 182,
+   "ms": 900
+  },
+  {
+   "wait": 900
+  },
+  {
+   "op": "home_state",
+   "expect": {
+    "view": "edit"
+   }
+  },
+  {
+   "shot": "edit"
+  },
+  {
+   "op": "ui_touch",
+   "type": "tap",
+   "x": 412,
+   "y": 238,
+   "ms": 90
+  },
+  {
+   "wait": 800
+  },
+  {
+   "shot": "clock_resized"
+  },
+  {
+   "op": "ui_key",
+   "key": "SET",
+   "action": "click"
+  },
+  {
+   "wait": 900
+  },
+  {
+   "op": "home_state",
+   "expect": {
+    "view": "home"
+   }
+  },
+  {
+   "shot": "after_edit"
+  },
+  {
+   "op": "home_get"
+  }
+ ]
+}

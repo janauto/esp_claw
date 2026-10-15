@@ -3,27 +3,28 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  *
- * Board ADC keys -> home carousel.
+ * Board ADC keys -> 1.0 home.
  *
- * The carousel screen already offers PREV / NEXT / M OPEN as on-screen hit
- * targets. This file subscribes to the board's physical keys and drives the very
- * same ui_squareline_{prev,next,select}_page() entry points, so a key press and a
- * tap are indistinguishable: same slide animation, same settle timer, same select
- * dispatch.
+ * VOL- / VOL+ move the focus (press-down, so navigation feels immediate).
+ * MODE and SET are timed here from press-down / press-up instead of the board
+ * YAML long press (2 s is far too slow for push-to-talk): a hold of 0.6 s is a
+ * long press. MODE long = push-to-talk (release sends), SET long = control
+ * centre; short presses are "open" and "back / overview".
  *
  * The subscription path is the one lua_module_button uses, just from C:
  *   esp_board_manager_get_device_handle() -> dev_button_handles_t
- *   -> iot_button_register_cb(BUTTON_SINGLE_CLICK)
+ *   -> iot_button_register_cb(...)
  * Key identity comes from the YAML button_labels entry, same as the Lua module's
- * evt.label, so the mapping below reads like the one in meeting_presenter.lua.
+ * evt.label.
  */
 #include "system_ui_private.h"
+#include "home_priv.h"
 
 #include <string.h>
 
 #include "display_service.h"
 #include "esp_check.h"
-#include "ui_squareline.h"
+#include "esp_timer.h"
 
 #ifdef CONFIG_ESP_BOARD_DEV_BUTTON_SUPPORT
 #include "dev_button.h"
@@ -31,76 +32,164 @@
 #endif /* CONFIG_ESP_BOARD_DEV_BUTTON_SUPPORT */
 
 #define SYSTEM_UI_HOME_KEY_DEVICE_NAME "adc_button_group"
+#define SYSTEM_UI_HOME_KEY_LONG_US     600000
+
+typedef enum { HK_VOL_DOWN = 0, HK_VOL_UP, HK_MODE, HK_SET } hk_id_t;
+
+/* ---------------------------------------------- 投递（实体键 / UART 共用） */
+
+void system_ui_home_key_post(hv_key_t key)
+{
+    system_ui_work_event_t event = {
+        .type = SYSTEM_UI_WORK_EVENT_HOME_KEY,
+        .generation = s_ui.generation,
+        .home_key = (system_ui_home_key_t)key,
+    };
+    if (s_ui.started) {
+        (void)system_ui_post_work_event(&event, 0);
+    }
+}
+
+static void hk_delayed_cb(void *arg)
+{
+    system_ui_home_key_post((hv_key_t)(intptr_t)arg);
+}
+
+void system_ui_home_key_post_delayed(hv_key_t key, uint32_t ms)
+{
+    esp_timer_handle_t t = NULL;
+    const esp_timer_create_args_t args = {
+        .callback = hk_delayed_cb,
+        .arg = (void *)(intptr_t)key,
+        .name = "hk_delay",
+    };
+    if (esp_timer_create(&args, &t) == ESP_OK) {
+        /* 一次性：触发后不再使用，句柄泄漏量可以忽略（仅测试注入用） */
+        (void)esp_timer_start_once(t, (uint64_t)ms * 1000);
+    }
+}
 
 #ifdef CONFIG_ESP_BOARD_DEV_BUTTON_SUPPORT
 
-/* One entry per physical key we care about. The board may expose more (SET on
- * this hardware); keys with no mapping are simply left unsubscribed. */
 typedef struct {
-    button_handle_t      handle;
-    system_ui_home_key_t action;
+    button_handle_t handle;
+    hk_id_t id;
 } system_ui_home_key_binding_t;
 
 static system_ui_home_key_binding_t s_bindings[CONFIG_ADC_BUTTON_MAX_BUTTON_PER_CHANNEL];
-static int  s_binding_count;
-static bool s_armed;
+static int s_binding_count;
+static esp_timer_handle_t s_long_timer[2];      /* MODE, SET */
+static volatile bool s_long_fired[2];
+static volatile bool s_down[2];
 
-/* VOL- goes back, VOL+ goes forward, MODE opens the selected app. This is the
- * mapping the physical labels imply, and it matches meeting_presenter.lua so the
- * keys mean the same thing on the home screen and inside the app. */
-static bool system_ui_home_key_action_from_label(const char *label, system_ui_home_key_t *out)
+static bool system_ui_home_key_id_from_label(const char *label, hk_id_t *out)
 {
     if (label == NULL) {
         return false;
     }
     if (strcmp(label, "VOLUME_DOWN") == 0) {
-        *out = SYSTEM_UI_HOME_KEY_PREV;
+        *out = HK_VOL_DOWN;
         return true;
     }
     if (strcmp(label, "VOLUME_UP") == 0) {
-        *out = SYSTEM_UI_HOME_KEY_NEXT;
+        *out = HK_VOL_UP;
         return true;
     }
     if (strcmp(label, "MODE") == 0) {
-        *out = SYSTEM_UI_HOME_KEY_SELECT;
+        *out = HK_MODE;
+        return true;
+    }
+    if (strcmp(label, "SET") == 0) {
+        *out = HK_SET;
         return true;
     }
     return false;
 }
 
-/* Runs in the iot_button esp_timer task, so it must not touch LVGL: post the
- * action and let the UI event task apply it under the display lock. */
-static void system_ui_home_key_event_cb(void *button_handle, void *user_data)
+static void hk_long_cb(void *arg)
 {
-    system_ui_work_event_t event = {
-        .type = SYSTEM_UI_WORK_EVENT_HOME_KEY,
-    };
-
-    (void)user_data;
-
-    if (!s_ui.started) {
+    int which = (int)(intptr_t)arg;          /* 0 = MODE, 1 = SET */
+    if (!s_down[which]) {
         return;
     }
+    s_long_fired[which] = true;
+    system_ui_home_key_post(which == 0 ? HV_KEY_M_LONG_START : HV_KEY_SET_LONG);
+}
+
+static int hk_find(void *button_handle)
+{
     for (int i = 0; i < s_binding_count; i++) {
-        if (s_bindings[i].handle != (button_handle_t)button_handle) {
-            continue;
+        if (s_bindings[i].handle == (button_handle_t)button_handle) {
+            return i;
         }
-        event.generation = s_ui.generation;
-        event.home_key = s_bindings[i].action;
-        (void)system_ui_post_work_event(&event, 0);
+    }
+    return -1;
+}
+
+/* Runs in the iot_button esp_timer task, so it must not touch LVGL. */
+static void system_ui_home_key_down_cb(void *button_handle, void *user_data)
+{
+    int i = hk_find(button_handle);
+    (void)user_data;
+    if (i < 0 || !s_ui.started) {
         return;
+    }
+    switch (s_bindings[i].id) {
+    case HK_VOL_DOWN:
+        system_ui_home_key_post(HV_KEY_PREV);
+        break;
+    case HK_VOL_UP:
+        system_ui_home_key_post(HV_KEY_NEXT);
+        break;
+    case HK_MODE:
+    case HK_SET: {
+        int which = s_bindings[i].id == HK_MODE ? 0 : 1;
+        s_down[which] = true;
+        s_long_fired[which] = false;
+        if (s_long_timer[which]) {
+            (void)esp_timer_stop(s_long_timer[which]);
+            (void)esp_timer_start_once(s_long_timer[which], SYSTEM_UI_HOME_KEY_LONG_US);
+        }
+        break;
+    }
+    }
+}
+
+static void system_ui_home_key_up_cb(void *button_handle, void *user_data)
+{
+    int i = hk_find(button_handle);
+    (void)user_data;
+    if (i < 0 || !s_ui.started) {
+        return;
+    }
+    if (s_bindings[i].id == HK_MODE || s_bindings[i].id == HK_SET) {
+        int which = s_bindings[i].id == HK_MODE ? 0 : 1;
+        if (!s_down[which]) {
+            return;
+        }
+        s_down[which] = false;
+        if (s_long_timer[which]) {
+            (void)esp_timer_stop(s_long_timer[which]);
+        }
+        if (s_long_fired[which]) {
+            if (which == 0) {
+                system_ui_home_key_post(HV_KEY_M_LONG_END);
+            }
+        } else {
+            system_ui_home_key_post(which == 0 ? HV_KEY_M : HV_KEY_SET);
+        }
     }
 }
 
 /* iot_button_unregister_cb() drops every callback registered for the event, not
- * just ours, so this is only safe while no other subscriber is active. Callers
- * below make sure of that. */
+ * just ours, so this is only safe while no other subscriber is active. */
 static void system_ui_home_key_disarm(void)
 {
     for (int i = 0; i < s_binding_count; i++) {
+        (void)iot_button_unregister_cb(s_bindings[i].handle, BUTTON_PRESS_DOWN, NULL);
+        (void)iot_button_unregister_cb(s_bindings[i].handle, BUTTON_PRESS_UP, NULL);
         (void)iot_button_unregister_cb(s_bindings[i].handle, BUTTON_SINGLE_CLICK, NULL);
     }
-    s_armed = false;
 }
 
 static esp_err_t system_ui_home_key_arm(void)
@@ -108,20 +197,20 @@ static esp_err_t system_ui_home_key_arm(void)
     esp_err_t ret = ESP_OK;
 
     for (int i = 0; i < s_binding_count; i++) {
-        esp_err_t err = iot_button_register_cb(s_bindings[i].handle, BUTTON_SINGLE_CLICK,
-                                              NULL, system_ui_home_key_event_cb, NULL);
+        esp_err_t err = iot_button_register_cb(s_bindings[i].handle, BUTTON_PRESS_DOWN, NULL,
+                                              system_ui_home_key_down_cb, NULL);
+        if (err == ESP_OK && (s_bindings[i].id == HK_MODE || s_bindings[i].id == HK_SET)) {
+            err = iot_button_register_cb(s_bindings[i].handle, BUTTON_PRESS_UP, NULL,
+                                         system_ui_home_key_up_cb, NULL);
+        }
         if (err != ESP_OK) {
             ESP_LOGW(SYSTEM_UI_TAG, "subscribe home key %d failed: %s", i, esp_err_to_name(err));
             ret = err;
         }
     }
-    s_armed = true;
     return ret;
 }
 
-/* single_click rather than press_down: the carousel slide takes a full second, so
- * a debounced click is what we want, and it keeps the behaviour identical to the
- * Lua scripts driving the same keys. */
 esp_err_t system_ui_home_key_init(void)
 {
     void *raw_handle = NULL;
@@ -132,6 +221,16 @@ esp_err_t system_ui_home_key_init(void)
 
     if (s_binding_count > 0) {
         return ESP_OK;
+    }
+    for (int w = 0; w < 2; w++) {
+        if (!s_long_timer[w]) {
+            const esp_timer_create_args_t args = {
+                .callback = hk_long_cb,
+                .arg = (void *)(intptr_t)w,
+                .name = w == 0 ? "hk_mode" : "hk_set",
+            };
+            (void)esp_timer_create(&args, &s_long_timer[w]);
+        }
     }
     if (!esp_board_manager_check_name(SYSTEM_UI_HOME_KEY_DEVICE_NAME)) {
         ESP_LOGI(SYSTEM_UI_TAG, "board device '%s' not found, home keys disabled",
@@ -170,18 +269,18 @@ esp_err_t system_ui_home_key_init(void)
     for (int i = 0; i < dev_handles->num_buttons &&
             i < CONFIG_ADC_BUTTON_MAX_BUTTON_PER_CHANNEL; i++) {
         const char *label = dev_cfg->sub_cfg.adc.multi.button_labels[i];
-        system_ui_home_key_t action;
+        hk_id_t id;
 
         if (dev_handles->button_handles[i] == NULL) {
             continue;
         }
-        if (!system_ui_home_key_action_from_label(label, &action)) {
+        if (!system_ui_home_key_id_from_label(label, &id)) {
             continue;
         }
         s_bindings[s_binding_count].handle = dev_handles->button_handles[i];
-        s_bindings[s_binding_count].action = action;
+        s_bindings[s_binding_count].id = id;
         s_binding_count++;
-        ESP_LOGI(SYSTEM_UI_TAG, "home key '%s' -> action %d", label, (int)action);
+        ESP_LOGI(SYSTEM_UI_TAG, "home key '%s' -> %d", label, (int)id);
     }
 
     if (s_binding_count == 0) {
@@ -204,94 +303,17 @@ void system_ui_home_key_deinit(void)
 
 /* A Lua app that subscribed to the same keys drops every callback for the event
  * when it exits (button.off -> iot_button_unregister_cb clears the whole event),
- * which takes ours with it. The script's cleanup runs before it releases the
- * display, so re-arming when the exclusive session ends restores the home keys.
- * Disarm first so a script that left its own subscription behind cannot make one
- * press fire twice. */
+ * which takes ours with it. Re-arm when the exclusive session ends; disarm first
+ * so a script that left its own subscription behind cannot make one press fire
+ * twice. */
 void system_ui_home_key_rearm(void)
 {
     if (s_binding_count == 0) {
         return;
     }
     system_ui_home_key_disarm();
+    s_down[0] = s_down[1] = false;
     (void)system_ui_home_key_arm();
-}
-
-void system_ui_home_key_apply_locked(system_ui_home_key_t key)
-{
-    /* An app owning the display gets the keys to itself; the carousel behind it
-     * must not slide, or exiting the app would land on a different page. */
-    if (!s_ui.started || s_ui.home_screen == NULL || display_service_has_exclusive_session()) {
-        return;
-    }
-    /* The task panel sits on top of the carousel and has its own controls. */
-    if (s_ui.jobs_visible) {
-        return;
-    }
-
-    /* The workbuddy screen is a plain page rather than an app, so MODE backs out
-     * of it the same way it opens it. PREV/NEXT are swallowed: there is no
-     * carousel behind the screen to slide, and letting them through would move
-     * the page the user returns to. */
-    if (s_ui.workbuddy_visible) {
-        if (key == SYSTEM_UI_HOME_KEY_SELECT) {
-            (void)system_ui_hide_workbuddy();
-            system_ui_click_feedback();
-        }
-        return;
-    }
-
-    if (s_ui.meeting_minutes_visible) {
-        if (key == SYSTEM_UI_HOME_KEY_SELECT) {
-            (void)system_ui_hide_meeting_minutes();
-            system_ui_click_feedback();
-        }
-        return;
-    }
-
-    if (s_ui.infrared_remote_visible) {
-        if (key == SYSTEM_UI_HOME_KEY_SELECT) {
-            (void)system_ui_hide_infrared_remote();
-            system_ui_click_feedback();
-        }
-        return;
-    }
-
-    /* Business card screen: VOL- / VOL+ cycle through cards; MODE goes back. */
-    if (s_ui.businesscard_visible) {
-        switch (key) {
-        case SYSTEM_UI_HOME_KEY_PREV:
-            system_ui_businesscard_prev_locked();
-            system_ui_click_feedback();
-            break;
-        case SYSTEM_UI_HOME_KEY_NEXT:
-            system_ui_businesscard_next_locked();
-            system_ui_click_feedback();
-            break;
-        case SYSTEM_UI_HOME_KEY_SELECT:
-            (void)system_ui_hide_businesscard();
-            system_ui_click_feedback();
-            break;
-        default:
-            break;
-        }
-        return;
-    }
-
-    switch (key) {
-    case SYSTEM_UI_HOME_KEY_PREV:
-        ui_squareline_prev_page();
-        break;
-    case SYSTEM_UI_HOME_KEY_NEXT:
-        ui_squareline_next_page();
-        break;
-    case SYSTEM_UI_HOME_KEY_SELECT:
-        ui_squareline_select_page();
-        break;
-    default:
-        return;
-    }
-    system_ui_click_feedback();
 }
 
 #else /* !CONFIG_ESP_BOARD_DEV_BUTTON_SUPPORT */
@@ -305,9 +327,85 @@ esp_err_t system_ui_home_key_init(void)
 void system_ui_home_key_deinit(void) {}
 void system_ui_home_key_rearm(void) {}
 
-void system_ui_home_key_apply_locked(system_ui_home_key_t key)
+#endif /* CONFIG_ESP_BOARD_DEV_BUTTON_SUPPORT */
+
+/* ------------------------------------------------------------ 分发 */
+
+/* 原生页面（WorkBuddy、名片、会议纪要、红外）盖在首页上：M / SET 都是返回。 */
+static bool system_ui_home_key_native_screens(hv_key_t key)
 {
-    (void)key;
+    bool back = key == HV_KEY_M || key == HV_KEY_SET || key == HV_KEY_SET_LONG;
+
+    if (s_ui.workbuddy_visible) {
+        if (back) {
+            (void)system_ui_hide_workbuddy();
+            system_ui_click_feedback();
+        }
+        return true;
+    }
+    if (s_ui.meeting_minutes_visible) {
+        if (back) {
+            (void)system_ui_hide_meeting_minutes();
+            system_ui_click_feedback();
+        }
+        return true;
+    }
+    if (s_ui.infrared_remote_visible) {
+        if (back) {
+            (void)system_ui_hide_infrared_remote();
+            system_ui_click_feedback();
+        }
+        return true;
+    }
+    if (s_ui.businesscard_visible) {
+        if (key == HV_KEY_PREV) {
+            system_ui_businesscard_prev_locked();
+            system_ui_click_feedback();
+        } else if (key == HV_KEY_NEXT) {
+            system_ui_businesscard_next_locked();
+            system_ui_click_feedback();
+        } else if (back) {
+            (void)system_ui_hide_businesscard();
+            system_ui_click_feedback();
+        }
+        return true;
+    }
+    return false;
 }
 
-#endif /* CONFIG_ESP_BOARD_DEV_BUTTON_SUPPORT */
+void system_ui_home_key_apply_locked(system_ui_home_key_t key)
+{
+    hv_key_t k = (hv_key_t)key;
+
+    if (!s_ui.started || s_ui.home_screen == NULL) {
+        return;
+    }
+    /* An app owning the display gets the keys to itself, except the system
+     * escape hatch: holding SET for 0.6 s always leaves the app. */
+    if (display_service_has_exclusive_session()) {
+        if (k == HV_KEY_SET_LONG) {
+            system_ui_work_event_t event = {
+                .type = SYSTEM_UI_WORK_EVENT_APP_EXIT_SWIPE,
+                .generation = s_ui.generation,
+            };
+            (void)system_ui_post_work_event(&event, 0);
+            ESP_LOGI(SYSTEM_UI_TAG, "HV_KEY set-long: leaving the foreground app");
+        }
+        return;
+    }
+    /* The task panel sits on top of the home: M / SET close it. */
+    if (s_ui.jobs_visible) {
+        if (k == HV_KEY_SET || k == HV_KEY_M || k == HV_KEY_SET_LONG) {
+            system_ui_jobs_set_visible_locked(false);
+        }
+        return;
+    }
+    if (system_ui_home_key_native_screens(k)) {
+        return;
+    }
+    if (k != HV_KEY_M_LONG_END && k != HV_KEY_M_LONG_START) {
+        system_ui_click_feedback();
+    }
+    ESP_LOGI(SYSTEM_UI_TAG, "HV_KEY %d view=%s", (int)k, hv_view_name(hv_view()));
+    hv_key(k);
+}
