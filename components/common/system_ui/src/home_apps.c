@@ -541,13 +541,10 @@ esp_err_t hv_plat_rename(const hv_app_t *app, const char *title)
 
 /* ------------------------------------------------------- work events */
 
-static void home_apps_after_change(const char *toast)
+/* 底栏里引用的应用若已卸载，顺手移出（调用方持有 system_ui 锁）。背夹上卸载和手机经 BLE
+ * 卸载都要走这里——以前只有背夹上卸载会清，手机卸载后底栏留一个“已移除”的空位。 */
+static void home_apps_prune_dock_locked(void)
 {
-    if (system_ui_lock() != ESP_OK) {
-        return;
-    }
-    system_ui_home_apps_register_locked();
-    /* 底栏里引用的应用若已卸载，顺手移出 */
     const hv_layout_t *cur = hv_layout();
     hv_layout_t l = *cur;
     int k = 0;
@@ -558,9 +555,19 @@ static void home_apps_after_change(const char *toast)
         }
     }
     if (k != l.dock_n) {
+        ESP_LOGI(SYSTEM_UI_TAG, "HV_DOCK pruned %d removed app(s)", l.dock_n - k);
         l.dock_n = (uint8_t)k;
         (void)hv_apply_layout(&l, true);
     }
+}
+
+static void home_apps_after_change(const char *toast)
+{
+    if (system_ui_lock() != ESP_OK) {
+        return;
+    }
+    system_ui_home_apps_register_locked();
+    home_apps_prune_dock_locked();
     hv_reload_apps();
     if (toast) {
         hv_toast(toast);
@@ -624,6 +631,7 @@ void system_ui_home_apps_process_reload(void)
     if (s_reload_requested && !display_service_has_exclusive_session()) {
         s_reload_requested = false;
         system_ui_home_apps_register_locked();
+        home_apps_prune_dock_locked();
         hv_reload_apps();
         ESP_LOGI(SYSTEM_UI_TAG, "home apps reloaded (%u)", (unsigned)hv_catalog_count());
     }
