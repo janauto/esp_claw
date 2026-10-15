@@ -55,6 +55,7 @@ BLE：沿用 RX `7b7d1002` JSON 请求、TX `7b7d1003` 响应（`{"id","ok","dat
 | `home_get` | — | `{"layout":{…},"widgets":[{"w","name","sizes":["S","M","L"],"app"}],"dock_max":4}` |
 | `home_set` | `{"layout":{…}}` | `{"layout":{…}}`（校验后生效并持久化） |
 | `assistant_show` | `{"state":"listening|recognizing|thinking|reply|error|hide","heard":"…","text":"…"}` | `{}` |
+| `voice_intent` | `{"text":"识别文字"}` | `{"handled":bool,"reply":"确认语"}`；背夹认得的设备指令（调音量/亮度、切换模式、打开应用）当场执行，`handled=false` 时手机照常问对话模型（2026-10-16 rc11 起） |
 
 ID 命名空间：`sys:<id>` 系统原生/固件内置（不可卸载/改名）；`skill:<dir>` 旧 SKILL.md 应用（DATA/skills）；`app:<id>` 应用包（DATA/apps）；`garden` 我的花园。`kind` ∈ `system|builtin_lua|skill|package|garden`；`group` ∈ `builtin|official|mine`（总览分组：内置应用/官方应用/我的创作）；`ai`=EPP（Lua 应用，显示 AI 角标）。
 
@@ -77,7 +78,7 @@ ID 命名空间：`sys:<id>` 系统原生/固件内置（不可卸载/改名）�
 | --- | --- | --- |
 | `ui_key` | `{"key":"MODE|SET|VOLUME_UP|VOLUME_DOWN","action":"click|long|press|release","ms":…}` | 走与实体键相同的路径 |
 | `ui_touch` | `{"type":"tap|long|drag","x","y","x2","y2","ms"}` | 注入触摸（坐标为 480×800 竖屏） |
-| `home_state` | — | 当前界面（home/overview/control/edit/voice/app）、页码、焦点、布局、语音状态 |
+| `home_state` | — | 当前界面（home/overview/control/edit/voice/app）、页码、焦点、布局、语音状态；rc12 起另有 `volume`、`brightness`，总览时 `ov_focus`（焦点应用），菜单/弹窗时 `target`（针对的应用） |
 | `voice_text` | `{"text":"…"}` | 跳过录音/ASR，直接以文字走当前模式的对话链路（底座=设备直连；背夹=要求手机） |
 
 ## 3. 底座模式语音（`voice_cloud` 组件）
@@ -91,3 +92,13 @@ ID 命名空间：`sys:<id>` 系统原生/固件内置（不可卸载/改名）�
 
 - 只写应用分区 `0x20000` 与 SYSTEM 分区（刷前整片/分区备份）；不改分区表、不动 NVS/storage/SD 卡原有应用。
 - 每个模块：宿主测试 →（UI）宿主预览截图 → 目标板构建 → 上机。需求、源码、仿真、构建、实机分别标注。
+
+## 5. 语音本地指令（2026-10-16 补充）
+
+实测对话模型（deepseek-flash）会只回“音量已经调到 40% 了”却不调用 `set_volume`。1.0 在两条语音线路上都先做本地指令：
+`components/common/system_ui/src/home_intent.c` 纯文本解析（宿主测试 `test_host/test_home_intent.c`），`home_platform.c` 的 `hv_intent_run` 执行。
+
+- 底座·Wi-Fi：`voice_cloud_set_intent()` 回调在识别之后、请求对话模型之前调用；认得就不再请求模型，问答照常进历史。
+- 背夹·手机：手机识别后发 `voice_intent`；`handled=true` 时手机直接把 `reply` 用 `assistant_show` 推回，不问模型。
+- 认的范围：音量/亮度的目标值（阿拉伯数字、中文数字、“百分之N”）与“大一点/小一点/静音/最大”；切换模式须有切换动作（问句不算）；“打开/启动/进入/玩 + 应用名”且能在应用目录里找到。其余（问句、没给数值、目录里没有的名称）仍交给模型。
+- 打开应用沿用“先显示回复、约 1.8 秒后再打开”。
