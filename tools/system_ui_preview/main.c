@@ -152,6 +152,10 @@ static void hv_run_actions(int argc, char **argv, int first)
         } else if (strcmp(a, "g:down") == 0) {
             hv_open_control();
             run_for(500);
+        } else if (strcmp(a, "r:reload") == 0) {
+            /* 模拟应用目录刷新（改名、卸载、安装后） */
+            hv_reload_apps();
+            run_for(300);
         } else if (strcmp(a, "e:edit") == 0) {
             hv_enter_edit();
             run_for(300);

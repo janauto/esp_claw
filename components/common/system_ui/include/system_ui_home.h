@@ -54,6 +54,11 @@ const char *system_ui_home_voice_context(void);
 /* 当前模式："clip" / "dock" */
 const char *system_ui_home_mode_name(void);
 
+/* 模式变了（背夹控制中心、语音指令或手机切换）时回调，参数为 "clip" / "dock"。
+ * BLE 桥用它主动告诉手机，手机上的模式卡不再显示旧状态。在调用切换的任务里回调。 */
+typedef void (*system_ui_home_mode_listener_t)(const char *mode);
+void system_ui_home_set_mode_listener(system_ui_home_mode_listener_t cb);
+
 #ifdef __cplusplus
 }
 #endif

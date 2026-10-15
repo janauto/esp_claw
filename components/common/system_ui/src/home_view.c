@@ -690,6 +690,9 @@ static void hv_build_pages(void)
     int32_t w = (int32_t)s_ui.width;
     int32_t page_h = (int32_t)s_ui.height - HV_SOFTKEY_H - HV_PAGER_Y - 24;
 
+    /* 重建时保持原来的层级：以前新建的分页容器总是排到最上层，改名/卸载后目录刷新时
+     * 首页小组件和底栏会盖在应用总览、确认框上面（Codex 第 2 轮 N01） */
+    int32_t pager_idx = H.pager ? (int32_t)lv_obj_get_index(H.pager) : -1;
     if (H.pager) {
         lv_obj_delete(H.pager);
         H.pager = NULL;
@@ -701,6 +704,9 @@ static void hv_build_pages(void)
     memset(H.dock_slot, 0, sizeof(H.dock_slot));
 
     H.pager = lv_obj_create(H.scr);
+    if (pager_idx >= 0) {
+        lv_obj_move_to_index(H.pager, pager_idx);
+    }
     hv_plain(H.pager);
     lv_obj_set_pos(H.pager, 0, HV_PAGER_Y);
     lv_obj_set_size(H.pager, w, page_h);
@@ -767,11 +773,15 @@ static void hv_build_pages(void)
         }
     }
 
-    /* 分页点 */
+    /* 分页点（同样保持原层级） */
+    int32_t dots_idx = H.dots ? (int32_t)lv_obj_get_index(H.dots) : -1;
     if (H.dots) {
         lv_obj_delete(H.dots);
     }
     H.dots = hv_box(H.scr, 0, HV_DOTS_Y, w, 24, 0, 0);
+    if (dots_idx >= 0) {
+        lv_obj_move_to_index(H.dots, dots_idx);
+    }
     lv_obj_set_style_bg_opa(H.dots, LV_OPA_TRANSP, 0);
     for (int p = 0; p < H.layout.pages; p++) {
         H.dot[p] = hv_box(H.dots, 0, 0, 10, 10, 0x4B5160, 5);

@@ -1154,6 +1154,21 @@ static void voice_status_json(char *out, size_t out_size)
     bridge_unlock();
 }
 
+/* 1.0：背夹上切了模式就主动推一帧给手机（{"type":"mode_event","mode":…}），手机据此刷新模式卡 */
+static void bridge_mode_changed(const char *mode)
+{
+    char text[112];
+
+    if (!mode || !s_bridge.subscribed || s_bridge.conn_handle == BLE_HS_CONN_HANDLE_NONE) {
+        return;
+    }
+    snprintf(text, sizeof(text), "{\"id\":\"mode-event\",\"ok\":true,\"type\":\"mode_event\",\"mode\":\"%s\"}",
+             mode);
+    if (notify_response_text("mode-event", text) != ESP_OK) {
+        ESP_LOGW(TAG, "mode event not delivered");
+    }
+}
+
 static void voice_send_event(const voice_item_t *item)
 {
     cJSON *root = cJSON_CreateObject();
@@ -2199,6 +2214,7 @@ esp_err_t ble_host_bridge_start(const ble_host_bridge_config_t *config)
     }
     (void)system_ui_workbuddy_set_audio_tx_callback(ble_host_bridge_send_workbuddy_audio, NULL);
     (void)system_ui_workbuddy_set_audio_state_callback(bridge_voice_state_cb, NULL);
+    system_ui_home_set_mode_listener(bridge_mode_changed);
 
     s_bridge.started = true;
     ESP_LOGI(TAG, "started name=%s storage=%s", s_bridge.device_name, s_bridge.storage_base_path);

@@ -97,12 +97,23 @@ hv_mode_t hv_plat_mode_get(void)
     return (hv_mode_t)s_mode;
 }
 
+static system_ui_home_mode_listener_t s_mode_listener;
+
+void system_ui_home_set_mode_listener(system_ui_home_mode_listener_t cb)
+{
+    s_mode_listener = cb;
+}
+
 esp_err_t hv_plat_mode_set(hv_mode_t mode)
 {
     esp_err_t err = hv_nvs_set_i32("mode", (int)mode);
     if (err == ESP_OK) {
+        bool changed = s_mode != (int)mode;
         s_mode = (int)mode;
         ESP_LOGI(SYSTEM_UI_TAG, "HV_MODE %s", mode == HV_MODE_DOCK ? "dock" : "clip");
+        if (changed && s_mode_listener) {
+            s_mode_listener(mode == HV_MODE_DOCK ? "dock" : "clip");
+        }
     }
     return err;
 }

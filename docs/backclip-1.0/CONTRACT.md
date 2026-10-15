@@ -55,6 +55,9 @@ BLE：沿用 RX `7b7d1002` JSON 请求、TX `7b7d1003` 响应（`{"id","ok","dat
 | `home_get` | — | `{"layout":{…},"widgets":[{"w","name","sizes":["S","M","L"],"app"}],"dock_max":4}` |
 | `home_set` | `{"layout":{…}}` | `{"layout":{…}}`（校验后生效并持久化） |
 | `assistant_show` | `{"state":"listening|recognizing|thinking|reply|error|hide","heard":"…","text":"…"}` | `{}` |
+| `garden_put` | `{"kind":"plant"|"theme","id":"小写字母开头，[a-z0-9_]≤32","source":"Lua 源码 ≤16KB"}` | `{"kind","id","saved":true}`；写入 `<DATA>/garden/plants|themes/<id>.lua`，花园几秒内热重载（2026-10-16 rc18 起） |
+| `garden_list` | — | `{"plants":[id…],"themes":[id…]}` |
+| `garden_remove` | `{"kind","id"}` | `{}` |
 | `voice_intent` | `{"text":"识别文字"}` | `{"handled":bool,"reply":"确认语"}`；背夹认得的设备指令（调音量/亮度、切换模式、打开应用）当场执行，`handled=false` 时手机照常问对话模型（2026-10-16 rc11 起） |
 
 ID 命名空间：`sys:<id>` 系统原生/固件内置（不可卸载/改名）；`skill:<dir>` 旧 SKILL.md 应用（DATA/skills）；`app:<id>` 应用包（DATA/apps）；`garden` 我的花园。`kind` ∈ `system|builtin_lua|skill|package|garden`；`group` ∈ `builtin|official|mine`（总览分组：内置应用/官方应用/我的创作）；`ai`=EPP（Lua 应用，显示 AI 角标）。
@@ -102,3 +105,7 @@ ID 命名空间：`sys:<id>` 系统原生/固件内置（不可卸载/改名）�
 - 背夹·手机：手机识别后发 `voice_intent`；`handled=true` 时手机直接把 `reply` 用 `assistant_show` 推回，不问模型。
 - 认的范围：音量/亮度的目标值（阿拉伯数字、中文数字、“百分之N”）与“大一点/小一点/静音/最大”；切换模式须有切换动作（问句不算）；“打开/启动/进入/玩 + 应用名”且能在应用目录里找到。其余（问句、没给数值、目录里没有的名称）仍交给模型。
 - 打开应用沿用“先显示回复、约 1.8 秒后再打开”。
+
+## 6. 设备主动推送（2026-10-16 补充）
+
+- `{"id":"mode-event","ok":true,"type":"mode_event","mode":"clip"|"dock"}`：背夹上切了模式（控制中心、语音指令或手机 `mode_set`）时推送；手机据此刷新模式卡。旧 App 忽略即可。

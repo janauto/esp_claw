@@ -15,6 +15,11 @@
 #include <string.h>
 
 #include "cap_lua.h"
+#include "claw_paths.h"
+#include <dirent.h>
+#include <errno.h>
+#include <sys/stat.h>
+#include <unistd.h>
 #include "display_service.h"
 #include "esp_log.h"
 #include "voice_cloud.h"
@@ -70,7 +75,8 @@ void system_ui_home_key_post_delayed(hv_key_t key, uint32_t ms);
 
 static const char *s_ops_json =
     "\"mode_get\",\"mode_set\",\"ai_config_get\",\"ai_config_set\",\"apps_all\",\"app_launch\","
-    "\"home_get\",\"home_set\",\"assistant_show\",\"voice_intent\"";
+    "\"home_get\",\"home_set\",\"assistant_show\",\"voice_intent\",\"garden_put\",\"garden_list\","
+    "\"garden_remove\"";
 
 const char *system_ui_home_ops_json(void)
 {
@@ -81,6 +87,115 @@ static const char *str_field(const cJSON *o, const char *k)
 {
     const cJSON *v = cJSON_GetObjectItemCaseSensitive(o, k);
     return cJSON_IsString(v) ? v->valuestring : NULL;
+}
+
+/* ---------------------------------------------- 「我的」花园：用户 / AI 植物与主题
+ * 文件放进 <DATA>/garden/plants|themes/<id>.lua，花园每 3 秒看一眼、几秒内热重载（PLANT_API.md）。
+ * 这里只做文件层面的检查（名字、大小、不是预编译字节码），接口是否写对由花园的沙箱判断，
+ * 载入失败会在花园「一句话生成」页列出原因，不影响别的植物。 */
+#define HV_GARDEN_SRC_MAX (16 * 1024)
+
+static bool hv_garden_id_ok(const char *id)
+{
+    if (!id || !(id[0] >= 'a' && id[0] <= 'z') || strlen(id) > 32) {
+        return false;
+    }
+    for (const char *p = id; *p; p++) {
+        if (!((*p >= 'a' && *p <= 'z') || (*p >= '0' && *p <= '9') || *p == '_')) {
+            return false;
+        }
+    }
+    return true;
+}
+
+static const char *hv_garden_subdir(const char *kind)
+{
+    return kind && !strcmp(kind, "theme") ? "themes" : (!kind || !strcmp(kind, "plant")) ? "plants" : NULL;
+}
+
+static esp_err_t hv_garden_path(const char *kind, const char *id, char *out, size_t size)
+{
+    const char *sub = hv_garden_subdir(kind);
+    if (!sub || !hv_garden_id_ok(id)) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    int n = snprintf(out, size, "%s/garden/%s/%s.lua", claw_paths_get(CLAW_PATH_DATA), sub, id);
+    return n > 0 && (size_t)n < size ? ESP_OK : ESP_ERR_INVALID_SIZE;
+}
+
+static esp_err_t hv_garden_put(const char *kind, const char *id, const char *src, char *why, size_t why_size)
+{
+    char path[160], tmp[168], dir[128];
+    size_t len = src ? strlen(src) : 0;
+
+    if (hv_garden_path(kind, id, path, sizeof(path)) != ESP_OK) {
+        snprintf(why, why_size, "名字只能用小写字母开头，后面是小写字母、数字或下划线（最多 32 个）");
+        return ESP_ERR_INVALID_ARG;
+    }
+    if (!len || len > HV_GARDEN_SRC_MAX) {
+        snprintf(why, why_size, "源码为空或超过 16 KB");
+        return ESP_ERR_INVALID_SIZE;
+    }
+    if ((unsigned char)src[0] == 0x1B) {
+        snprintf(why, why_size, "只能装 Lua 源码，不能是预编译字节码");
+        return ESP_ERR_INVALID_ARG;
+    }
+    snprintf(dir, sizeof(dir), "%s/garden", claw_paths_get(CLAW_PATH_DATA));
+    (void)mkdir(dir, 0775);
+    snprintf(dir, sizeof(dir), "%s/garden/%s", claw_paths_get(CLAW_PATH_DATA), hv_garden_subdir(kind));
+    (void)mkdir(dir, 0775);
+    /* 先写 .tmp，再删旧文件、改名（FAT 不能覆盖式改名）；花园扫描只认 .lua */
+    snprintf(tmp, sizeof(tmp), "%s.tmp", path);
+    FILE *f = fopen(tmp, "wb");
+    if (!f) {
+        snprintf(why, why_size, "写不进背夹存储（%d）", errno);
+        return ESP_FAIL;
+    }
+    bool ok = fwrite(src, 1, len, f) == len;
+    if (fclose(f) != 0) {
+        ok = false;
+    }
+    if (!ok) {
+        (void)unlink(tmp);
+        snprintf(why, why_size, "写入不完整（%d）", errno);
+        return ESP_FAIL;
+    }
+    (void)unlink(path);
+    if (rename(tmp, path) != 0) {
+        (void)unlink(tmp);
+        snprintf(why, why_size, "改名失败（%d）", errno);
+        return ESP_FAIL;
+    }
+    ESP_LOGI(SYSTEM_UI_TAG, "HV_GARDEN put %s %s (%u bytes)", hv_garden_subdir(kind), id, (unsigned)len);
+    return ESP_OK;
+}
+
+static cJSON *hv_garden_list_json(void)
+{
+    static const char *const kinds[2] = {"plant", "theme"};
+    cJSON *o = cJSON_CreateObject();
+    if (!o) {
+        return NULL;
+    }
+    for (int k = 0; k < 2; k++) {
+        char dir[128];
+        cJSON *arr = cJSON_AddArrayToObject(o, k ? "themes" : "plants");
+        snprintf(dir, sizeof(dir), "%s/garden/%s", claw_paths_get(CLAW_PATH_DATA), hv_garden_subdir(kinds[k]));
+        DIR *d = opendir(dir);
+        struct dirent *de;
+        while (d && arr && (de = readdir(d))) {
+            size_t n = strlen(de->d_name);
+            if (n > 4 && !strcmp(de->d_name + n - 4, ".lua")) {
+                char id[40];
+                snprintf(id, sizeof(id), "%.*s", (int)(n - 4), de->d_name);
+                cJSON_AddItemToArray(arr, cJSON_CreateString(id));
+            }
+        }
+        if (d) {
+            closedir(d);
+        }
+    }
+    return o;
 }
 
 static cJSON *hv_err_obj(const char *msg)
@@ -457,6 +572,36 @@ esp_err_t system_ui_home_handle_op(const char *op, const cJSON *req, bool uart, 
             cJSON_Delete(*out);
             *out = hv_err_obj("state 无效");
         }
+        return err;
+    }
+    if (!strcmp(op, "garden_put")) {
+        /* 手机「种到花园」：把一份植物 / 主题 Lua 放进花园，几秒内出现在种子库或主题卡里 */
+        char why[96] = "";
+        err = hv_garden_put(str_field(req, "kind"), str_field(req, "id"), str_field(req, "source"), why, sizeof(why));
+        if (err != ESP_OK) {
+            *out = hv_err_obj(why[0] ? why : "放不进花园");
+            return err;
+        }
+        *out = cJSON_CreateObject();
+        if (*out) {
+            cJSON_AddStringToObject(*out, "kind", str_field(req, "kind") ? str_field(req, "kind") : "plant");
+            cJSON_AddStringToObject(*out, "id", str_field(req, "id"));
+            cJSON_AddBoolToObject(*out, "saved", true);
+        }
+        return *out ? ESP_OK : ESP_ERR_NO_MEM;
+    }
+    if (!strcmp(op, "garden_list")) {
+        *out = hv_garden_list_json();
+        return *out ? ESP_OK : ESP_ERR_NO_MEM;
+    }
+    if (!strcmp(op, "garden_remove")) {
+        char path[160];
+        if (hv_garden_path(str_field(req, "kind"), str_field(req, "id"), path, sizeof(path)) != ESP_OK) {
+            *out = hv_err_obj("名字无效");
+            return ESP_ERR_INVALID_ARG;
+        }
+        err = unlink(path) == 0 ? ESP_OK : ESP_ERR_NOT_FOUND;
+        *out = err == ESP_OK ? cJSON_CreateObject() : hv_err_obj("花园里没有这个文件");
         return err;
     }
     if (!strcmp(op, "voice_intent")) {
