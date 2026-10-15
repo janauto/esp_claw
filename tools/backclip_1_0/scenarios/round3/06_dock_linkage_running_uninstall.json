@@ -1,0 +1,382 @@
+{
+ "name": "r3s_06_dock_linkage_and_running_uninstall",
+ "steps": [
+  {
+   "note": "【第 3 轮后主会话补测，未经 Codex 复核】Codex 第 3 轮 G01 缺口：底栏加入/打开/移出/卸载清理，以及前台运行中直接卸载。用户输入：总览焦点 + 按住 M 出菜单 + 第 2 项（加入/移出底部应用栏）；首页点底栏图标打开；手机应用页确认卸载。"
+  },
+  {
+   "op": "home_set",
+   "layout": {
+    "v": 1,
+    "pages": [
+     [
+      {
+       "w": "mine",
+       "s": "S"
+      },
+      {
+       "w": "clock",
+       "s": "S"
+      },
+      {
+       "w": "weather",
+       "s": "S"
+      },
+      {
+       "w": "voice",
+       "s": "S"
+      }
+     ],
+     [
+      {
+       "w": "stocks",
+       "s": "S"
+      },
+      {
+       "w": "system",
+       "s": "S"
+      },
+      {
+       "w": "aihot",
+       "s": "M"
+      }
+     ]
+    ],
+    "dock": [
+     "sys:meeting",
+     "sys:ir",
+     "sys:card",
+     "sys:workbuddy"
+    ]
+   },
+   "gate": true
+  },
+  {
+   "shell": "python3 phone_ui.py connect",
+   "gate": true,
+   "timeout_ms": 90000
+  },
+  {
+   "op": "apps_all",
+   "expect_not_contains": {
+    "apps": "r3_dock_demo"
+   },
+   "gate": true
+  },
+  {
+   "shell": "python3 phone_ui.py install r3_dock_demo R3Dock",
+   "timeout_ms": 120000,
+   "gate": true
+  },
+  {
+   "wait_app": "r3_dock_demo",
+   "timeout_ms": 90000,
+   "gate": true
+  },
+  {
+   "note": "底栏已满 4 个：先把 WorkBuddy 移出底栏腾位置"
+  },
+  {
+   "op": "ui_key",
+   "key": "SET",
+   "action": "click"
+  },
+  {
+   "wait": 900
+  },
+  {
+   "op": "home_state",
+   "expect": {
+    "view": "overview"
+   },
+   "gate": true
+  },
+  {
+   "overview_focus": "sys:workbuddy",
+   "gate": true
+  },
+  {
+   "op": "home_state",
+   "expect_contains": {
+    "ov_focus": "sys:workbuddy"
+   },
+   "gate": true
+  },
+  {
+   "op": "ui_key",
+   "key": "MODE",
+   "action": "long",
+   "ms": 900
+  },
+  {
+   "wait": 900
+  },
+  {
+   "op": "home_state",
+   "expect": {
+    "view": "sheet"
+   },
+   "expect_contains": {
+    "target": "sys:workbuddy"
+   },
+   "gate": true
+  },
+  {
+   "op": "ui_key",
+   "key": "VOLUME_UP",
+   "action": "click"
+  },
+  {
+   "wait": 300
+  },
+  {
+   "op": "ui_key",
+   "key": "MODE",
+   "action": "click"
+  },
+  {
+   "wait": 1200
+  },
+  {
+   "op": "home_get",
+   "expect": {
+    "layout": {
+     "dock": [
+      "sys:meeting",
+      "sys:ir",
+      "sys:card"
+     ]
+    }
+   },
+   "gate": true
+  },
+  {
+   "note": "把测试应用加入底栏"
+  },
+  {
+   "op": "ui_key",
+   "key": "SET",
+   "action": "click"
+  },
+  {
+   "wait": 800
+  },
+  {
+   "op": "ui_key",
+   "key": "SET",
+   "action": "click"
+  },
+  {
+   "wait": 900
+  },
+  {
+   "op": "home_state",
+   "expect": {
+    "view": "overview"
+   },
+   "gate": true
+  },
+  {
+   "overview_focus": "r3_dock_demo",
+   "gate": true
+  },
+  {
+   "op": "home_state",
+   "expect_contains": {
+    "ov_focus": "r3_dock_demo"
+   },
+   "gate": true
+  },
+  {
+   "op": "ui_key",
+   "key": "MODE",
+   "action": "long",
+   "ms": 900
+  },
+  {
+   "wait": 900
+  },
+  {
+   "op": "home_state",
+   "expect": {
+    "view": "sheet"
+   },
+   "expect_contains": {
+    "target": "r3_dock_demo"
+   },
+   "gate": true
+  },
+  {
+   "shot": "sheet_add_to_dock"
+  },
+  {
+   "op": "ui_key",
+   "key": "VOLUME_UP",
+   "action": "click"
+  },
+  {
+   "wait": 300
+  },
+  {
+   "op": "ui_key",
+   "key": "MODE",
+   "action": "click"
+  },
+  {
+   "wait": 1200
+  },
+  {
+   "op": "home_get",
+   "expect_contains": {
+    "layout": "app:r3_dock_demo"
+   },
+   "gate": true
+  },
+  {
+   "op": "ui_key",
+   "key": "SET",
+   "action": "click"
+  },
+  {
+   "wait": 1200
+  },
+  {
+   "op": "home_state",
+   "expect": {
+    "view": "home"
+   },
+   "gate": true
+  },
+  {
+   "shot": "home_dock_with_test_app"
+  },
+  {
+   "note": "从底栏打开测试应用（第 4 个图标）"
+  },
+  {
+   "op": "ui_touch",
+   "type": "tap",
+   "x": 411,
+   "y": 582,
+   "ms": 90
+  },
+  {
+   "wait": 4000
+  },
+  {
+   "op": "home_state",
+   "expect": {
+    "exclusive_app": true
+   },
+   "gate": true
+  },
+  {
+   "op": "apps_all"
+  },
+  {
+   "shot": "test_app_running"
+  },
+  {
+   "note": "前台运行中，直接在手机上卸载它"
+  },
+  {
+   "shell": "python3 phone_ui.py appact r3_dock_demo 卸载",
+   "timeout_ms": 120000,
+   "gate": true
+  },
+  {
+   "phone_shot": "phone_uninstall_confirm_running"
+  },
+  {
+   "shell": "python3 phone_ui.py tapexact 卸载",
+   "gate": true
+  },
+  {
+   "wait_app": "r3_dock_demo",
+   "absent": true,
+   "timeout_ms": 60000,
+   "gate": true
+  },
+  {
+   "wait": 1500
+  },
+  {
+   "op": "home_state",
+   "expect": {
+    "exclusive_app": false
+   }
+  },
+  {
+   "op": "home_get"
+  },
+  {
+   "note": "判定：home_get 的底栏不再含 app:r3_dock_demo（卸载后自动清理），首页底栏只剩 3 个"
+  },
+  {
+   "shot": "home_after_running_uninstall"
+  },
+  {
+   "shell": "python3 phone_ui.py top && python3 phone_ui.py tapexact 刷新列表",
+   "timeout_ms": 60000
+  },
+  {
+   "shell": "for i in 1 2 3 4 5 6 7 8; do python3 phone_ui.py swipe 560 2000 560 900 300; sleep 0.5; done",
+   "timeout_ms": 90000
+  },
+  {
+   "phone_shot": "phone_mine_section_after_uninstall"
+  },
+  {
+   "note": "收尾：恢复默认底栏（WorkBuddy 回到第 4 个）"
+  },
+  {
+   "op": "home_set",
+   "layout": {
+    "v": 1,
+    "pages": [
+     [
+      {
+       "w": "mine",
+       "s": "S"
+      },
+      {
+       "w": "clock",
+       "s": "S"
+      },
+      {
+       "w": "weather",
+       "s": "S"
+      },
+      {
+       "w": "voice",
+       "s": "S"
+      }
+     ],
+     [
+      {
+       "w": "stocks",
+       "s": "S"
+      },
+      {
+       "w": "system",
+       "s": "S"
+      },
+      {
+       "w": "aihot",
+       "s": "M"
+      }
+     ]
+    ],
+    "dock": [
+     "sys:meeting",
+     "sys:ir",
+     "sys:card",
+     "sys:workbuddy"
+    ]
+   }
+  },
+  {
+   "shell": "python3 phone_ui.py tab 设备"
+  }
+ ]
+}
