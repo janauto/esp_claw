@@ -33,6 +33,7 @@
 #include <string.h>
 #include <strings.h>
 #include <time.h>
+#include <sys/stat.h>
 
 #include "esp_check.h"
 #include "esp_codec_dev.h"
@@ -97,6 +98,10 @@ extern esp_err_t cap_lua_run_script_async(const char *path,
 #define AUDIO_CONTROL_FILE  "/ramfs/workbuddy_audio_control"
 #define AUDIO_RUNNING_FLAG  "/ramfs/workbuddy_audio_running"
 #define AUDIO_SCRIPT_PATH   "skills/audio_loopback_test/scripts/audio_loopback_headless.lua"
+/* Units flashed app-only keep an older SYSTEM image that may lack the script
+ * above; a host can install the same script here over BLE (put_lua id
+ * "voice_mic"). */
+#define AUDIO_SCRIPT_DATA_FALLBACK "scripts/host/voice_mic.lua"
 
 /* Forward declaration of ui_squareline_launch_app */
 extern void ui_squareline_launch_app(const char *script_rel_path);
@@ -733,6 +738,22 @@ esp_err_t system_ui_workbuddy_start_audio_session_from(bool capture_mic, const c
     return ESP_OK;
 }
 
+static esp_err_t workbuddy_resolve_mic_script(char *path, size_t path_size)
+{
+    struct stat st;
+
+    if (claw_paths_join(CLAW_PATH_SYSTEM, AUDIO_SCRIPT_PATH, path, path_size) == ESP_OK &&
+            stat(path, &st) == 0) {
+        return ESP_OK;
+    }
+    if (claw_paths_join(CLAW_PATH_DATA, AUDIO_SCRIPT_DATA_FALLBACK, path, path_size) == ESP_OK &&
+            stat(path, &st) == 0) {
+        return ESP_OK;
+    }
+    ESP_LOGW(SYSTEM_UI_TAG, "mic script missing in SYSTEM and DATA (%s)", AUDIO_SCRIPT_DATA_FALLBACK);
+    return ESP_ERR_NOT_FOUND;
+}
+
 esp_err_t system_ui_workbuddy_start_capture_background(const char *source)
 {
     char path[256];
@@ -742,8 +763,10 @@ esp_err_t system_ui_workbuddy_start_capture_background(const char *source)
     if (s_audio_capturing) {
         return ESP_OK;
     }
-    ESP_RETURN_ON_ERROR(claw_paths_join(CLAW_PATH_SYSTEM, AUDIO_SCRIPT_PATH, path, sizeof(path)),
-                        SYSTEM_UI_TAG, "resolve audio script failed");
+    err = workbuddy_resolve_mic_script(path, sizeof(path));
+    if (err != ESP_OK) {
+        return err;
+    }
     workbuddy_audio_session_begin(true);
     if (!workbuddy_audio_bridge_start()) {
         return ESP_FAIL;
@@ -873,6 +896,24 @@ esp_err_t system_ui_update_workbuddy(const system_ui_workbuddy_update_t *update)
     return ESP_OK;
 }
 
+/* Starting the mic script can wait for a previous instance to stop, so the
+ * record button hands it to a short-lived task instead of blocking LVGL. */
+static void workbuddy_button_capture_task(void *arg)
+{
+    (void)arg;
+    esp_err_t err = system_ui_workbuddy_start_capture_background("button");
+
+    if (err != ESP_OK) {
+        (void)system_ui_update_workbuddy(&(system_ui_workbuddy_update_t) {
+            .record = "0",
+            .workbuddy_status = err == ESP_ERR_NOT_FOUND ? "缺少录音脚本" : "录音启动失败",
+        });
+    } else {
+        ESP_LOGI(SYSTEM_UI_TAG, "WorkBuddy BLE audio uplink triggered");
+    }
+    vTaskDelete(NULL);
+}
+
 /* Toggle the recorder state and trigger/stop headless Lua audio script */
 static void workbuddy_record_cb(lv_event_t *e)
 {
@@ -885,12 +926,10 @@ static void workbuddy_record_cb(lv_event_t *e)
     lv_label_set_text(s_wb.status, s_wb.recording ? "录音中" : "等待中");
 
     if (s_wb.recording) {
-        if (system_ui_workbuddy_start_audio_session_from(true, "button") != ESP_OK) {
+        if (xTaskCreate(workbuddy_button_capture_task, "wb_rec_start", 4096, NULL, 4, NULL) != pdPASS) {
             workbuddy_set_record_visual_locked(false);
             lv_label_set_text(s_wb.status, "等待中");
-            return;
         }
-        ESP_LOGI(SYSTEM_UI_TAG, "WorkBuddy BLE audio uplink triggered");
     } else {
         (void)system_ui_workbuddy_stop_audio_session_from("button");
     }

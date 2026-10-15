@@ -1325,7 +1325,9 @@ static void handle_voice_start(const char *id, const cJSON *root)
         bridge_lock();
         s_bridge.voice.next_max_ms = 0;
         bridge_unlock();
-        send_response(id, false, "voice_start", esp_err_to_name(err));
+        /* The phone app reacts to this by installing the mic script over BLE. */
+        send_response(id, false, "voice_start",
+                      err == ESP_ERR_NOT_FOUND ? "mic_script_missing" : esp_err_to_name(err));
         return;
     }
     voice_status_json(data, sizeof(data));
