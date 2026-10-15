@@ -1,0 +1,133 @@
+{
+ "name": "r2s_14_clip_voice_open_app",
+ "steps": [
+  {
+   "note": "补测（主会话新增）：背夹·手机模式真人说“打开天气应用”。手机识别 → voice_intent → 背夹先显示回复“好的，正在打开天气。”，约 1.8 秒后打开天气；再从底边上滑退出。"
+  },
+  {
+   "op": "home_set",
+   "layout": {
+    "v": 1,
+    "pages": [
+     [
+      {
+       "w": "mine",
+       "s": "S"
+      },
+      {
+       "w": "clock",
+       "s": "S"
+      },
+      {
+       "w": "weather",
+       "s": "S"
+      },
+      {
+       "w": "voice",
+       "s": "S"
+      }
+     ],
+     [
+      {
+       "w": "stocks",
+       "s": "S"
+      },
+      {
+       "w": "system",
+       "s": "S"
+      },
+      {
+       "w": "aihot",
+       "s": "M"
+      }
+     ]
+    ],
+    "dock": [
+     "sys:meeting",
+     "sys:ir",
+     "sys:card",
+     "sys:workbuddy"
+    ]
+   }
+  },
+  {
+   "shell": "python3 phone_ui.py connect",
+   "gate": true,
+   "timeout_ms": 90000
+  },
+  {
+   "op": "mode_set",
+   "mode": "clip"
+  },
+  {
+   "op": "mode_get",
+   "expect": {
+    "mode": "clip",
+    "phone_linked": true,
+    "voice_route": "ble"
+   },
+   "gate": true
+  },
+  {
+   "op": "ui_key",
+   "key": "MODE",
+   "action": "press"
+  },
+  {
+   "wait": 900
+  },
+  {
+   "play": "背夹，打开天气应用。",
+   "voice": "Tingting",
+   "delay_ms": 1100
+  },
+  {
+   "wait": 6500
+  },
+  {
+   "op": "ui_key",
+   "key": "MODE",
+   "action": "release"
+  },
+  {
+   "wait_state": {
+    "voice": "reply"
+   },
+   "timeout_ms": 45000
+  },
+  {
+   "shot": "reply_before_open"
+  },
+  {
+   "wait_state": {
+    "exclusive_app": true
+   },
+   "timeout_ms": 20000
+  },
+  {
+   "op": "apps_all"
+  },
+  {
+   "shot": "weather_opened"
+  },
+  {
+   "op": "ui_touch",
+   "type": "drag",
+   "x": 240,
+   "y": 790,
+   "x2": 240,
+   "y2": 600,
+   "ms": 350
+  },
+  {
+   "wait": 2500
+  },
+  {
+   "op": "home_state",
+   "expect": {
+    "view": "home",
+    "exclusive_app": false
+   }
+  }
+ ]
+}
