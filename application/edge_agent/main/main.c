@@ -32,6 +32,7 @@
 #include "app_config.h"
 #include "live_apps.h"
 #include "system_ui_home.h"
+#include "esp_netif_sntp.h"
 
 #define APP_ENABLE_MEM_LOG        (0)
 
@@ -89,9 +90,33 @@ static void log_wifi_startup_config(const app_config_t *config)
              config->ap_behavior[0] ? config->ap_behavior : "keep");
 }
 
+/* 1.0：首页时钟、日期和问候都依赖系统时间。联网后自动对时一次（之后由 SNTP 每小时更新），
+ * 不再只等智能体按需调用 cap_system 的对时能力。 */
+static void main_start_sntp_once(void)
+{
+    static bool started;
+    if (started) {
+        return;
+    }
+    esp_sntp_config_t config = ESP_NETIF_SNTP_DEFAULT_CONFIG_MULTIPLE(
+        2, ESP_SNTP_SERVER_LIST("ntp.aliyun.com", "cn.pool.ntp.org"));
+    config.start = true;
+    config.wait_for_sync = false;
+    esp_err_t err = esp_netif_sntp_init(&config);
+    if (err == ESP_OK || err == ESP_ERR_INVALID_STATE) {
+        started = true;
+        ESP_LOGI(TAG, "SNTP started (ntp.aliyun.com, cn.pool.ntp.org)");
+    } else {
+        ESP_LOGW(TAG, "SNTP start failed: %s", esp_err_to_name(err));
+    }
+}
+
 static void on_wifi_state_changed(bool connected, void *user_ctx)
 {
     (void)user_ctx;
+    if (connected) {
+        main_start_sntp_once();
+    }
 
     wifi_manager_status_t status = {0};
     wifi_manager_get_status(&status);

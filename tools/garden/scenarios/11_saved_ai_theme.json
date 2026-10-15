@@ -1,0 +1,42 @@
+{
+ "desc": "上次选的是 AI 主题（DATA/garden/themes/radio.lua）：重启后先扫描自定义主题再套用，直接以复古电台启动，小家也用它的样式",
+ "page": "mine",
+ "data": "fixtures/data_saved_ai",
+ "keys": [
+  {
+   "t": 3300,
+   "mark": "s01_restored_ai_theme"
+  },
+  {
+   "t": 3600,
+   "key": "next"
+  },
+  {
+   "t": 3900,
+   "key": "ok"
+  },
+  {
+   "t": 5400,
+   "mark": "s02_ai_theme_house"
+  },
+  {
+   "t": 5700,
+   "key": "back"
+  },
+  {
+   "t": 6000,
+   "key": "back"
+  }
+ ],
+ "checks": [
+  {
+   "log": "GD_START page=mine theme=radio"
+  },
+  {
+   "log": "GD_SNAPSHOT .*\"theme\":\"radio\""
+  },
+  {
+   "log": "GD_PAGE house"
+  }
+ ]
+}

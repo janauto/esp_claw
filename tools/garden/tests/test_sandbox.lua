@@ -1,0 +1,86 @@
+-- 沙箱：白名单环境、指令预算、pcall 逃逸、协程逃逸、内存暴涨、字节码、错误摘要、植物之间互相隔离
+local H = dofile("helper.lua")
+local SB = require("core.sandbox")
+
+local function run(src, budget)
+  local mod, err = SB.load(src, "plants/t.lua", SB.env(), budget or 200000)
+  return mod, err
+end
+
+H.case("系统能力全都不存在：io / require / load / dofile / debug / package / os.execute", function()
+  local m = run([[
+    local P = { name = "x" }
+    P.seen = { io = io == nil, require = require == nil, load = load == nil, dofile = dofile == nil, debug = debug == nil,
+      package = package == nil, exec = os.execute == nil, remove = os.remove == nil, getenv = os.getenv == nil, cg = collectgarbage == nil }
+    return P ]])
+  for k, v in pairs(m.seen) do H.ok(v, k .. " 应该不存在") end
+end)
+H.case("os 里只有读时间的函数", function()
+  local m = run([[ return { name = "x", t = os.time(), d = os.date("%Y") } ]])
+  H.ok(m.t > 0); H.eq(#m.d, 4)
+end)
+H.case("拿不到字符串的共享元表，改不了宿主的 string 方法", function()
+  local m = run([[ return { name = "x", mt = getmetatable(""), ok = pcall(setmetatable, "", {}) } ]])
+  H.eq(m.mt, nil); H.eq(m.ok, false)
+  H.eq(("abc"):upper(), "ABC")
+end)
+H.case("死循环被指令预算打断，并给出中文摘要", function()
+  local P = run([[ local P = { name = "x" } function P.card() while true do end end return P ]])
+  local ok, err = SB.guard(P.card, 100000)
+  H.eq(ok, false); H.ok(err:find("指令预算"), err)
+end)
+H.case("装载阶段的死循环同样被打断", function()
+  local m, err = run("while true do end", 50000)
+  H.eq(m, nil); H.ok(err:find("指令预算"), tostring(err))
+end)
+H.case("沙箱里的 pcall 吞不掉“预算用尽”", function()
+  local P = run([[ local P = { name = "x" }
+    function P.card() while true do pcall(function() for i = 1, 1e9 do end end) end end
+    return P ]])
+  local ok, err = SB.guard(P.card, 100000)
+  H.eq(ok, false); H.ok(err:find("指令预算"), err)
+end)
+H.case("植物自己开的协程也挂预算（不能靠不断开新协程逃逸）", function()
+  local P = run([[ local P = { name = "x" }
+    function P.card() while true do local co = coroutine.create(function() for i = 1, 1e9 do end end); coroutine.resume(co) end end
+    return P ]])
+  local ok, err = SB.guard(P.card, 200000)
+  H.eq(ok, false); H.ok(err:find("指令预算"), err)
+end)
+H.case("正常的协程用法照常工作", function()
+  local P = run([[ local P = { name = "x" }
+    function P.card() local gen = coroutine.wrap(function() for i = 1, 3 do coroutine.yield(i) end end); return gen() + gen() + gen() end
+    return P ]])
+  local ok, v = SB.guard(P.card, 100000)
+  H.eq(ok, true); H.eq(v, 6)
+end)
+H.case("单次调用内存暴涨判为失败", function()
+  local P = run([[ local P = { name = "x" } function P.card() local t = {} for i = 1, 200 do t[i] = string.rep("x", 8192) .. i end return #t end return P ]])
+  local ok, err = SB.guard(P.card, 5000000)
+  H.eq(ok, false); H.ok(err:find("内存"), tostring(err))
+end)
+H.case("拒绝预编译字节码", function()
+  local bc = string.dump(function() return { name = "x" } end)
+  local m, err = run(bc)
+  H.eq(m, nil); H.ok(err:find("字节码"), err)
+end)
+H.case("错误摘要：行号本地化，只留一行", function()
+  local _, err = run("local P = { name = 'x' }\nlocal y = nil\nreturn y.z")
+  H.eq(err, "第 3 行：attempt to index a nil value (local 'y')")
+  local _, err2 = run("local P = {")
+  H.ok(err2:find("^第 1 行"), err2)
+end)
+H.case("每株植物的全局变量互不可见", function()
+  local a = run([[ shared = "A"; return { name = "a", get = function() return shared end } ]])
+  local b = run([[ return { name = "b", get = function() return shared end } ]])
+  H.eq(a.get(), "A"); H.eq(b.get(), nil); H.eq(rawget(_G, "shared"), nil)
+end)
+H.case("回调顶层 yield 视为错误（不留下挂起的协程）", function()
+  local ok, err = SB.guard(function() coroutine.yield(1) end, 10000)
+  H.eq(ok, false); H.ok(err:find("yield"), err)
+end)
+H.case("guard 可重入：嵌套调用各自计预算，结束后恢复外层", function()
+  local ok, v = SB.guard(function() local ok2 = SB.guard(function() while true do end end, 20000); for i = 1, 1000 do end; return ok2 end, 200000)
+  H.eq(ok, true); H.eq(v, false)
+end)
+H.finish("沙箱")

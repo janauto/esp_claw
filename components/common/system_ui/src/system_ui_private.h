@@ -142,6 +142,8 @@ typedef enum {
     SYSTEM_UI_WORK_EVENT_APP_RENAME,
     SYSTEM_UI_WORK_EVENT_HOME_GESTURE,
     SYSTEM_UI_WORK_EVENT_VOICE_FINISH,
+    SYSTEM_UI_WORK_EVENT_VOICE_EVENT,       /* 底座语音结果：payload 由事件任务释放 */
+    SYSTEM_UI_WORK_EVENT_HOME_CALL,         /* 在事件任务里执行（NVS 写入等） */
 } system_ui_work_event_type_t;
 
 /* Physical key actions on the 1.0 home; same order as hv_key_t (home_priv.h). */
@@ -187,6 +189,11 @@ typedef struct {
         } network_status;
         system_ui_home_key_t home_key;
         system_ui_home_gesture_t home_gesture;
+        struct {
+            void (*fn)(int arg, void *payload);
+            int arg;
+            void *payload;
+        } home_call;
         struct {
             uint32_t page;                           /* carousel page it was on */
             char app_id[64];

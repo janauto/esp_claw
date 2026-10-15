@@ -1,0 +1,26 @@
+{
+ "desc": "garden.json 损坏：另存 .bad、用默认值重建、照常启动；快照照常写出",
+ "page": "mine",
+ "data": "fixtures/data_corrupt",
+ "keys": [
+  {
+   "t": 2800,
+   "mark": "c01_corrupt_reset"
+  },
+  {
+   "t": 3100,
+   "key": "back"
+  }
+ ],
+ "checks": [
+  {
+   "log": "GD_WARN garden.json 损坏"
+  },
+  {
+   "log": "status=reset"
+  },
+  {
+   "log": "GD_SNAPSHOT"
+  }
+ ]
+}

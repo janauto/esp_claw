@@ -274,47 +274,91 @@ static void hv_pending_launch_cb(lv_timer_t *t)
     }
 }
 
-/* voice_cloud 的回调在它自己的工作任务里：拿锁后更新卡片。 */
+/* 在 system_ui 事件任务里执行（内部 RAM 栈）：voice_cloud 工作任务的栈在 PSRAM，
+ * 它只负责 HTTP/JSON，界面更新与 NVS 写入都投递到这里。 */
+static esp_err_t hv_post_call(void (*fn)(int, void *), int arg, void *payload)
+{
+    system_ui_work_event_t event = {
+        .type = SYSTEM_UI_WORK_EVENT_HOME_CALL,
+        .generation = s_ui.generation,
+    };
+    event.home_call.fn = fn;
+    event.home_call.arg = arg;
+    event.home_call.payload = payload;
+    return system_ui_post_work_event(&event, pdMS_TO_TICKS(500));
+}
+
+typedef struct {
+    char *text;
+} hv_voice_msg_t;
+
+static void hv_voice_apply(int evt, void *payload)
+{
+    hv_voice_msg_t *m = payload;
+    const char *text = m ? m->text : NULL;
+
+    if (system_ui_lock() == ESP_OK) {
+        switch ((voice_cloud_event_t)evt) {
+        case VOICE_CLOUD_EVT_RECOGNIZING:
+            hv_voice_show(HV_VOICE_RECOGNIZING, NULL, NULL);
+            break;
+        case VOICE_CLOUD_EVT_HEARD:
+            hv_voice_show(HV_VOICE_THINKING, text, NULL);
+            break;
+        case VOICE_CLOUD_EVT_THINKING:
+            if (hv_voice_state() != HV_VOICE_THINKING) {
+                hv_voice_show(HV_VOICE_THINKING, NULL, NULL);
+            }
+            break;
+        case VOICE_CLOUD_EVT_TOOL:
+            ESP_LOGI(SYSTEM_UI_TAG, "HV_TOOL %s", text ? text : "");
+            break;
+        case VOICE_CLOUD_EVT_REPLY:
+            hv_voice_show(HV_VOICE_REPLY, NULL, text);
+            if (s_pending_launch[0]) {
+                lv_timer_t *t = lv_timer_create(hv_pending_launch_cb, 1800, NULL);
+                lv_timer_set_repeat_count(t, 1);
+            }
+            break;
+        case VOICE_CLOUD_EVT_ERROR:
+            s_pending_launch[0] = 0;
+            hv_voice_show(HV_VOICE_ERROR, NULL, text ? text : "出错了，请再试一次");
+            break;
+        }
+        system_ui_unlock();
+    } else {
+        ESP_LOGW(SYSTEM_UI_TAG, "HV_VOICE event %d dropped: UI lock busy", evt);
+    }
+    if (m) {
+        free(m->text);
+        free(m);
+    }
+}
+
 static void hv_cloud_event_cb(voice_cloud_event_t evt, const char *text, const char *detail, void *ctx)
 {
+    hv_voice_msg_t *m = calloc(1, sizeof(*m));
     (void)ctx;
     (void)detail;
-    /* 终态（回复/错误）不能丢：拿不到锁就多等几次 */
-    int tries = (evt == VOICE_CLOUD_EVT_REPLY || evt == VOICE_CLOUD_EVT_ERROR) ? 5 : 1;
-    esp_err_t locked = ESP_FAIL;
-    while (tries-- > 0 && (locked = system_ui_lock()) != ESP_OK) {
+    if (m && text) {
+        m->text = strdup(text);
     }
-    if (locked != ESP_OK) {
-        ESP_LOGW(SYSTEM_UI_TAG, "HV_VOICE event %d dropped: UI lock busy", (int)evt);
-        return;
-    }
-    switch (evt) {
-    case VOICE_CLOUD_EVT_RECOGNIZING:
-        hv_voice_show(HV_VOICE_RECOGNIZING, NULL, NULL);
-        break;
-    case VOICE_CLOUD_EVT_HEARD:
-        hv_voice_show(HV_VOICE_THINKING, text, NULL);
-        break;
-    case VOICE_CLOUD_EVT_THINKING:
-        if (hv_voice_state() != HV_VOICE_THINKING) {
-            hv_voice_show(HV_VOICE_THINKING, NULL, NULL);
+    system_ui_work_event_t event = {
+        .type = SYSTEM_UI_WORK_EVENT_VOICE_EVENT,
+        .generation = s_ui.generation,
+    };
+    event.home_call.fn = hv_voice_apply;
+    event.home_call.arg = (int)evt;
+    event.home_call.payload = m;
+    /* 终态（回复/错误）不能丢：队列满时多等一会儿 */
+    TickType_t wait = (evt == VOICE_CLOUD_EVT_REPLY || evt == VOICE_CLOUD_EVT_ERROR) ? pdMS_TO_TICKS(3000) : 0;
+    if (system_ui_post_work_event(&event, wait) != ESP_OK) {
+        ESP_LOGW(SYSTEM_UI_TAG, "HV_VOICE event %d not queued", (int)evt);
+        if (m) {
+            free(m->text);
+            free(m);
         }
-        break;
-    case VOICE_CLOUD_EVT_TOOL:
-        ESP_LOGI(SYSTEM_UI_TAG, "HV_TOOL %s", text ? text : "");
-        break;
-    case VOICE_CLOUD_EVT_REPLY:
-        hv_voice_show(HV_VOICE_REPLY, NULL, text);
-        if (s_pending_launch[0]) {
-            lv_timer_t *t = lv_timer_create(hv_pending_launch_cb, 1800, NULL);
-            lv_timer_set_repeat_count(t, 1);
-        }
-        break;
-    case VOICE_CLOUD_EVT_ERROR:
-        hv_voice_show(HV_VOICE_ERROR, NULL, text ? text : "出错了，请再试一次");
-        break;
     }
-    system_ui_unlock();
 }
 
 void system_ui_workbuddy_set_local_sink(esp_err_t (*sink)(const uint8_t *, size_t));
@@ -412,6 +456,37 @@ typedef struct {
 
 void hv_control_set_brightness(int percent);
 
+/* 工具的实际动作：在 system_ui 事件任务里执行（会写 NVS）。 */
+static void hv_tool_volume(int v, void *payload)
+{
+    (void)payload;
+    (void)hv_plat_volume_set(v);
+    if (system_ui_lock() == ESP_OK) {
+        hv_control_refresh();
+        system_ui_unlock();
+    }
+}
+
+static void hv_tool_brightness(int v, void *payload)
+{
+    (void)payload;
+    if (system_ui_lock() == ESP_OK) {
+        hv_control_set_brightness(v < 10 ? 10 : v);
+        system_ui_unlock();
+    }
+}
+
+static void hv_tool_mode(int dock, void *payload)
+{
+    (void)payload;
+    (void)hv_plat_mode_set(dock ? HV_MODE_DOCK : HV_MODE_CLIP);
+    if (system_ui_lock() == ESP_OK) {
+        hv_refresh_status();
+        hv_control_refresh();
+        system_ui_unlock();
+    }
+}
+
 /* 工具在 UI 事件任务外执行：这里只做必须拿锁的界面动作。 */
 static esp_err_t hv_tool_cb(const char *name, const cJSON *args, char *out, size_t out_size, void *ctx)
 {
@@ -465,27 +540,18 @@ static esp_err_t hv_tool_cb(const char *name, const cJSON *args, char *out, size
             snprintf(out, out_size, "{\"ok\":false,\"error\":\"百分比需在 0-100\"}");
             return ESP_OK;
         }
-        if (system_ui_lock() != ESP_OK) {
+        if (hv_post_call(name[4] == 'v' ? hv_tool_volume : hv_tool_brightness, v, NULL) != ESP_OK) {
             return ESP_ERR_TIMEOUT;
         }
-        if (name[4] == 'v') {
-            (void)hv_plat_volume_set(v);
-        } else {
-            hv_control_set_brightness(v < 10 ? 10 : v);
-        }
-        system_ui_unlock();
         snprintf(out, out_size, "{\"ok\":true,\"percent\":%d}", v);
         return ESP_OK;
     }
     if (strcmp(name, "set_mode") == 0) {
         const cJSON *m = cJSON_GetObjectItemCaseSensitive(args, "mode");
         bool dock = cJSON_IsString(m) && strcmp(m->valuestring, "dock") == 0;
-        if (system_ui_lock() != ESP_OK) {
+        if (hv_post_call(hv_tool_mode, dock ? 1 : 0, NULL) != ESP_OK) {
             return ESP_ERR_TIMEOUT;
         }
-        (void)hv_plat_mode_set(dock ? HV_MODE_DOCK : HV_MODE_CLIP);
-        hv_refresh_status();
-        system_ui_unlock();
         snprintf(out, out_size, "{\"ok\":true,\"mode\":\"%s\"}", dock ? "dock" : "clip");
         return ESP_OK;
     }

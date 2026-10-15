@@ -1,0 +1,89 @@
+{
+ "desc": "个性化：换名字（磁磁）、换强调色（番茄）；「我的」页头、标签颜色和快照 pet_name 跟着变",
+ "page": "mine",
+ "keys": [
+  {
+   "t": 2750,
+   "key": "next"
+  },
+  {
+   "t": 3000,
+   "key": "next"
+  },
+  {
+   "t": 3250,
+   "key": "next"
+  },
+  {
+   "t": 3500,
+   "key": "next"
+  },
+  {
+   "t": 3750,
+   "key": "next"
+  },
+  {
+   "t": 4000,
+   "key": "next"
+  },
+  {
+   "t": 4500,
+   "mark": "u01_custom_card"
+  },
+  {
+   "t": 4800,
+   "key": "ok"
+  },
+  {
+   "t": 6100,
+   "mark": "u02_custom_page"
+  },
+  {
+   "t": 6400,
+   "key": "ok"
+  },
+  {
+   "t": 7400,
+   "mark": "u03_name_changed"
+  },
+  {
+   "t": 7700,
+   "key": "next"
+  },
+  {
+   "t": 8000,
+   "key": "ok"
+  },
+  {
+   "t": 8300,
+   "key": "ok"
+  },
+  {
+   "t": 9300,
+   "mark": "u04_color_changed"
+  },
+  {
+   "t": 9600,
+   "key": "back"
+  },
+  {
+   "t": 10900,
+   "mark": "u05_mine_custom"
+  },
+  {
+   "t": 11200,
+   "key": "back"
+  }
+ ],
+ "checks": [
+  {
+   "log": "GD_TOAST 名字：磁磁"
+  },
+  {
+   "log": "GD_TOAST 配色：番茄"
+  },
+  {
+   "log": "GD_SNAPSHOT .*\"pet_name\":\"磁磁\""
+  }
+ ]
+}

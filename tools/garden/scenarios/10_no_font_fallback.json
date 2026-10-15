@@ -1,0 +1,91 @@
+{
+ "desc": "args.no_font_copy：不复制字体、不建 tileview，分页降级为普通容器，按键 / 点页码照常翻页，界面文字照常显示",
+ "page": "garden",
+ "data": "fixtures/data_full",
+ "args": {
+  "no_font_copy": true
+ },
+ "keys": [
+  {
+   "t": 3100,
+   "mark": "n01_no_font_page1"
+  },
+  {
+   "t": 3350,
+   "key": "next"
+  },
+  {
+   "t": 3600,
+   "key": "next"
+  },
+  {
+   "t": 3850,
+   "key": "next"
+  },
+  {
+   "t": 4100,
+   "key": "next"
+  },
+  {
+   "t": 4350,
+   "key": "next"
+  },
+  {
+   "t": 4600,
+   "key": "next"
+  },
+  {
+   "t": 5500,
+   "mark": "n02_no_font_page2_by_key"
+  },
+  {
+   "t": 5750,
+   "key": "prev"
+  },
+  {
+   "t": 6000,
+   "key": "prev"
+  },
+  {
+   "t": 6250,
+   "key": "prev"
+  },
+  {
+   "t": 6500,
+   "key": "prev"
+  },
+  {
+   "t": 6750,
+   "key": "prev"
+  },
+  {
+   "t": 7000,
+   "key": "prev"
+  },
+  {
+   "t": 7900,
+   "mark": "n03_no_font_back_page1"
+  },
+  {
+   "t": 8200,
+   "key": "back"
+  },
+  {
+   "t": 8500,
+   "key": "back"
+  }
+ ],
+ "checks": [
+  {
+   "log": "GD_FONT",
+   "max": 0
+  },
+  {
+   "log": "\"focus\":7",
+   "min": 1
+  },
+  {
+   "log": "GD_QUIT back"
+  }
+ ]
+}

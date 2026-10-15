@@ -1,0 +1,431 @@
+{
+ "desc": "AI 植物与自定义主题：死循环（指令预算）、越权（沙箱里没有 io/require）、语法错误（种子库标出行号）都只让自己枯萎；正常的 AI 植物照常运行；植物页长按 M 的更多面板；一句话生成页列出失败原因；主题外壳 v1 接口的 AI 主题（复古电台）装进主题卡并画出自己的小家",
+ "page": "garden",
+ "data": "fixtures/data_ai",
+ "keys": [
+  {
+   "t": 2800,
+   "mark": "a01_garden"
+  },
+  {
+   "t": 3100,
+   "key": "next"
+  },
+  {
+   "t": 3400,
+   "key": "next"
+  },
+  {
+   "t": 3700,
+   "key": "next"
+  },
+  {
+   "t": 4000,
+   "key": "next"
+  },
+  {
+   "t": 4300,
+   "key": "ok"
+  },
+  {
+   "t": 5700,
+   "mark": "a02_seeds_ai"
+  },
+  {
+   "t": 5900,
+   "key": "next"
+  },
+  {
+   "t": 6100,
+   "key": "next"
+  },
+  {
+   "t": 6300,
+   "key": "next"
+  },
+  {
+   "t": 6500,
+   "key": "next"
+  },
+  {
+   "t": 6700,
+   "key": "next"
+  },
+  {
+   "t": 6900,
+   "key": "next"
+  },
+  {
+   "t": 7100,
+   "key": "next"
+  },
+  {
+   "t": 7300,
+   "key": "next"
+  },
+  {
+   "t": 7500,
+   "key": "next"
+  },
+  {
+   "t": 7700,
+   "key": "next"
+  },
+  {
+   "t": 8000,
+   "key": "ok"
+  },
+  {
+   "t": 9500,
+   "mark": "a03_loop_withered"
+  },
+  {
+   "t": 9800,
+   "key": "next"
+  },
+  {
+   "t": 10100,
+   "key": "ok"
+  },
+  {
+   "t": 10300,
+   "key": "next"
+  },
+  {
+   "t": 10500,
+   "key": "next"
+  },
+  {
+   "t": 10700,
+   "key": "next"
+  },
+  {
+   "t": 10900,
+   "key": "next"
+  },
+  {
+   "t": 11100,
+   "key": "next"
+  },
+  {
+   "t": 11300,
+   "key": "next"
+  },
+  {
+   "t": 11500,
+   "key": "next"
+  },
+  {
+   "t": 11700,
+   "key": "next"
+  },
+  {
+   "t": 11900,
+   "key": "next"
+  },
+  {
+   "t": 12200,
+   "key": "ok"
+  },
+  {
+   "t": 13700,
+   "mark": "a04_escape_withered"
+  },
+  {
+   "t": 14000,
+   "key": "next"
+  },
+  {
+   "t": 14300,
+   "key": "ok"
+  },
+  {
+   "t": 14500,
+   "key": "next"
+  },
+  {
+   "t": 14700,
+   "key": "next"
+  },
+  {
+   "t": 14900,
+   "key": "next"
+  },
+  {
+   "t": 15100,
+   "key": "next"
+  },
+  {
+   "t": 15300,
+   "key": "next"
+  },
+  {
+   "t": 15500,
+   "key": "next"
+  },
+  {
+   "t": 15700,
+   "key": "next"
+  },
+  {
+   "t": 15900,
+   "key": "next"
+  },
+  {
+   "t": 16100,
+   "key": "next"
+  },
+  {
+   "t": 16300,
+   "key": "next"
+  },
+  {
+   "t": 16500,
+   "key": "next"
+  },
+  {
+   "t": 16800,
+   "key": "ok"
+  },
+  {
+   "t": 18300,
+   "mark": "a05_standup_ok"
+  },
+  {
+   "t": 18600,
+   "key": "next"
+  },
+  {
+   "t": 18900,
+   "key": "ok"
+  },
+  {
+   "t": 19100,
+   "key": "next"
+  },
+  {
+   "t": 19300,
+   "key": "next"
+  },
+  {
+   "t": 19500,
+   "key": "next"
+  },
+  {
+   "t": 19700,
+   "key": "next"
+  },
+  {
+   "t": 19900,
+   "key": "next"
+  },
+  {
+   "t": 20100,
+   "key": "next"
+  },
+  {
+   "t": 20300,
+   "key": "next"
+  },
+  {
+   "t": 20500,
+   "key": "next"
+  },
+  {
+   "t": 20700,
+   "key": "next"
+  },
+  {
+   "t": 20900,
+   "key": "next"
+  },
+  {
+   "t": 21100,
+   "key": "next"
+  },
+  {
+   "t": 21300,
+   "key": "next"
+  },
+  {
+   "t": 22000,
+   "mark": "a06_syntax_seed"
+  },
+  {
+   "t": 22300,
+   "key": "ok"
+  },
+  {
+   "t": 23000,
+   "mark": "a07_syntax_reason"
+  },
+  {
+   "t": 23300,
+   "key": "back"
+  },
+  {
+   "t": 23600,
+   "key": "back"
+  },
+  {
+   "t": 23850,
+   "key": "prev"
+  },
+  {
+   "t": 24100,
+   "key": "prev"
+  },
+  {
+   "t": 24350,
+   "key": "prev"
+  },
+  {
+   "t": 24650,
+   "key": "ok"
+  },
+  {
+   "t": 26050,
+   "mark": "a08_loop_page"
+  },
+  {
+   "t": 26350,
+   "key": "ok",
+   "kind": "long"
+  },
+  {
+   "t": 27050,
+   "mark": "a09_more_sheet"
+  },
+  {
+   "t": 27350,
+   "key": "back"
+  },
+  {
+   "t": 27650,
+   "key": "back"
+  },
+  {
+   "t": 27950,
+   "key": "back"
+  },
+  {
+   "t": 28150,
+   "key": "next"
+  },
+  {
+   "t": 28350,
+   "key": "next"
+  },
+  {
+   "t": 28550,
+   "key": "next"
+  },
+  {
+   "t": 28750,
+   "key": "next"
+  },
+  {
+   "t": 28950,
+   "key": "next"
+  },
+  {
+   "t": 29150,
+   "key": "next"
+  },
+  {
+   "t": 29350,
+   "key": "next"
+  },
+  {
+   "t": 29550,
+   "key": "next"
+  },
+  {
+   "t": 30150,
+   "mark": "a10_vibe_card"
+  },
+  {
+   "t": 30450,
+   "key": "ok"
+  },
+  {
+   "t": 31850,
+   "mark": "a11_vibe_page"
+  },
+  {
+   "t": 32150,
+   "key": "back"
+  },
+  {
+   "t": 32350,
+   "key": "prev"
+  },
+  {
+   "t": 32550,
+   "key": "prev"
+  },
+  {
+   "t": 32850,
+   "key": "ok"
+  },
+  {
+   "t": 34250,
+   "mark": "a12_radio_mine"
+  },
+  {
+   "t": 34450,
+   "key": "prev"
+  },
+  {
+   "t": 34650,
+   "key": "prev"
+  },
+  {
+   "t": 34850,
+   "key": "prev"
+  },
+  {
+   "t": 35050,
+   "key": "prev"
+  },
+  {
+   "t": 35250,
+   "key": "prev"
+  },
+  {
+   "t": 35550,
+   "key": "ok"
+  },
+  {
+   "t": 37050,
+   "mark": "a13_radio_house"
+  },
+  {
+   "t": 37350,
+   "key": "back"
+  }
+ ],
+ "checks": [
+  {
+   "log": "GD_WITHER loop#\\d+ 运行超时"
+  },
+  {
+   "log": "GD_WITHER escape#\\d+ .*global 'io'"
+  },
+  {
+   "log": "GD_PLANT_FAIL user/syntax 第 3 行"
+  },
+  {
+   "log": "GD_THEME_ADD radio"
+  },
+  {
+   "log": "GD_TOAST 已换上：复古电台"
+  },
+  {
+   "log": "GD_PAGE vibe"
+  },
+  {
+   "log": "GD_ADD user/standup"
+  }
+ ]
+}

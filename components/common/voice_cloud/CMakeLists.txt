@@ -17,3 +17,6 @@ idf_component_register(
 )
 # 与 live_apps 一致：新组件按体积优化（5 MiB 应用分区余量很小）
 target_compile_options(${COMPONENT_LIB} PRIVATE -Os)
+# 1.0 样机内部 RAM 只剩约 13 KB：工作任务栈放 PSRAM。工作任务只做 HTTP/JSON，
+# 界面更新与 NVS 写入都投递给 system_ui 的事件任务（内部栈），不在 PSRAM 栈上碰 Flash。
+target_compile_definitions(${COMPONENT_LIB} PRIVATE VOICE_CLOUD_TASK_STACK_PSRAM=1)

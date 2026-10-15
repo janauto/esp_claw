@@ -1,0 +1,11 @@
+-- 小家的房间（沿用主题外壳 apps/，样机已验证）。顺序即焦点顺序，与设计稿 04 屏一致：
+--   WorkBuddy · 客厅空调 · 番茄钟 · 贪吃蛇 · 喝水提醒 · 时钟
+-- 房间契约（所有主题共用，房间不感知主题）：
+--   id, name, kind = "live" | "static" | "play"
+--   init(s)                     初始化自己的状态表 s（存在 garden.json 的 rooms 里，换主题不丢）
+--   tick(s, dt_ms, ctx)          状态推进，约 2 Hz（便宜、无绘制）
+--   summary(s, ctx) -> value, label   房间里的一眼概述（label 约 6 个字，过长以 ... 截断）
+--   preview(ctx, box, w, h, s) -> h   焦点房间的实时预览（可选）；play 房间的 h.key 在房间里游玩时接收按键
+--   open(ctx, body, w, h, s) -> h     全屏页：h.update(), h.key(k) -> 是否已处理, h.labels() -> {prev, ok, next}
+-- 与主题外壳的差别：按键改成四键（prev / ok / next，SET 由核心负责返回）；喝水、番茄钟、贪吃蛇会影响小磁的心情（ctx.pet）。
+return { "workbuddy", "ac", "pomodoro", "snake", "water", "clock" }

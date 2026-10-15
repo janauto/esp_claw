@@ -1,0 +1,36 @@
+{
+ "desc": "args.page=house 直达小家；SET 先回「我的」，再按 SET 退出（顶层退出）",
+ "page": "house",
+ "keys": [
+  {
+   "t": 2800,
+   "mark": "p01_args_house"
+  },
+  {
+   "t": 3100,
+   "key": "back"
+  },
+  {
+   "t": 4300,
+   "mark": "p02_set_to_mine"
+  },
+  {
+   "t": 4600,
+   "key": "back"
+  }
+ ],
+ "checks": [
+  {
+   "log": "GD_START page=house"
+  },
+  {
+   "log": "\"stack\":\"mine>house\""
+  },
+  {
+   "log": "GD_QUIT back"
+  },
+  {
+   "log": "GD_EXIT"
+  }
+ ]
+}

@@ -1,0 +1,131 @@
+-- 花园模型：默认种子、增删、换位置（键盘逐格与触摸直达）、上限、浇水与小磁、枯萎隔离、热重载复活、内置种子全部可画
+local H = dofile("helper.lua")
+local root = H.tmpdir()
+local env = H.env(root)
+local app = H.app(env)
+local G = require("core.garden")
+local g = G.new(app, true)
+app.garden = g
+app.page = function() return nil end
+
+H.case("8 颗内置种子都能装载", function()
+  local n = 0
+  for _, s in ipairs(g.seed_list()) do if s.src == "sys" then H.eq(s.err, nil, s.id); n = n + 1 end end
+  H.eq(n, 8)
+end)
+H.case("新花园先种好 4 株，并落盘", function()
+  H.eq(g.count(), #G.DEFAULT)
+  H.eq(g.plots()[1].seed, "sunflower")
+  H.ok(app.saves > 0)
+end)
+H.case("每颗内置种子的卡片和全屏页都能在预算内画出来", function()
+  for _, s in ipairs(g.seed_list()) do
+    local idx = assert(g.add(s.key))
+    local plot = g.plots()[idx]
+    local card, e1 = g.mount(plot, H.lvgl.object(), 186, 124, "card")
+    H.ok(card, s.id .. " 卡片：" .. tostring(e1))
+    local page, e2 = g.mount(plot, H.lvgl.object(), 414, 540, "open")
+    H.ok(page, s.id .. " 全屏页：" .. tostring(e2))
+    if page.key then for _, k in ipairs({ "prev", "ok", "next" }) do H.ok(g.view_call(plot, page, "key", 80000, k) ~= nil) end end
+    if page.labels then local ok, l = g.view_call(plot, page, "labels", 20000); H.ok(ok and type(l) == "table", s.id .. " labels") end
+    H.eq(g.status(plot), "ok", s.id .. " 不应枯萎：" .. tostring(g.withered[plot.uid]))
+    g.remove(idx)
+  end
+end)
+H.case("像素画板：图案太花时卡片降级成文字，不超预算、不枯萎", function()
+  local idx = assert(g.add("sys/pixel"))
+  local plot = g.plots()[idx]
+  plot.state.px = string.rep("abc", 22):sub(1, 64) -- 每格颜色都和左边不同：64 个色块
+  local o0 = app.ui.count
+  local v, err = g.mount(plot, H.lvgl.object(), 186, 124, "card")
+  H.ok(v, "卡片应该画出来：" .. tostring(err))
+  H.ok(app.ui.count - o0 <= G.CARD_BUDGET, "对象数 " .. (app.ui.count - o0))
+  H.eq(g.status(plot), "ok")
+  plot.state.px = string.rep(".", 64)
+  H.ok(g.view_call(plot, v, "update", 60000, 0) ~= false)
+  g.remove(idx)
+end)
+H.case("种满 11 株后拒绝再种", function()
+  while g.count() < G.MAX do assert(g.add("sys/counter")) end
+  local idx, err = g.add("sys/counter")
+  H.eq(idx, nil); H.ok(err:find("满了"), err)
+  while g.count() > 4 do g.remove(g.count()) end
+end)
+H.case("键盘逐格换位置：越界不动", function()
+  local first = g.plots()[1].uid
+  H.eq(g.move(1, -1), 1)
+  H.eq(g.move(1, 1), 2); H.eq(g.plots()[2].uid, first)
+  H.eq(g.move(2, -1), 1); H.eq(g.plots()[1].uid, first)
+end)
+H.case("触摸直达：拿起第 1 株放到第 3 格，其余依次前移", function()
+  local ids = {}
+  for i, p in ipairs(g.plots()) do ids[i] = p.uid end
+  H.eq(g.move_to(1, 3), 3)
+  H.eq(g.plots()[3].uid, ids[1]); H.eq(g.plots()[1].uid, ids[2]); H.eq(g.plots()[2].uid, ids[3])
+  g.move_to(3, 1)
+end)
+H.case("浇水：口渴才浇，一天一次，小磁记一次照料", function()
+  local p = g.plots()[1]
+  H.ok(g.thirsty(p))
+  local cares = app.pet.today().cares
+  H.eq(g.water(p), true)
+  H.eq(g.water(p), false)
+  H.eq(app.pet.today().cares, cares + 1)
+  H.eq(g.thirsty(p), false)
+end)
+H.case("向日葵浇水长一阶（on_water 回调在沙箱里执行）", function()
+  local idx = g.index_of(g.plots()[1].uid)
+  H.eq(g.plots()[idx].seed, "sunflower")
+  H.eq(g.plots()[idx].state.stage, 1)
+end)
+H.case("坏植物只让自己枯萎，别的地块照常；修好文件后热重载复活且状态保留", function()
+  store = app.store
+  store.ensure_dirs()
+  env.storage.write_file(store.paths.plants .. "/bad.lua", [[local P = { name = "坏" } function P.card(ui, s) return s.cfg.limit end return P]])
+  H.ok(g.scan(false))
+  local idx = assert(g.add("user/bad"))
+  local plot = g.plots()[idx]
+  plot.state.keep = 42
+  local v = g.mount(plot, H.lvgl.object(), 186, 124, "card")
+  H.eq(v, nil)
+  H.eq(g.status(plot), "dead")
+  H.ok(g.withered[plot.uid]:find("第 1 行"), g.withered[plot.uid])
+  H.ok(g.mount(g.plots()[1], H.lvgl.object(), 186, 124, "card"), "别的地块照常")
+  env.storage.write_file(store.paths.plants .. "/bad.lua", [[local P = { name = "好了" } function P.card(ui, s) ui.text(0, 0, "ok") return {} end return P]])
+  H.ok(g.scan(false), "改了文件应该被发现")
+  H.ok(H.has_log(env, "GD_RELOAD user/bad"))
+  H.eq(g.status(plot), "ok")
+  H.ok(g.mount(plot, H.lvgl.object(), 186, 124, "card"))
+  H.eq(plot.state.keep, 42, "状态保留")
+  H.eq(g.seed_of(plot).name, "好了")
+end)
+H.case("文件删除：已种的地块显示枯萎（数据保留），放回来就复活", function()
+  local idx = g.index_of(g.plots()[#g.plots()].uid)
+  local plot = g.plots()[idx]
+  os.remove(app.store.paths.plants .. "/bad.lua")
+  H.ok(g.scan(false))
+  local st, err = g.status(plot)
+  H.eq(st, "dead"); H.ok(err:find("删除"), err)
+  env.storage.write_file(app.store.paths.plants .. "/bad.lua", [[return { name = "回来了", summary = function() return "1" end }]])
+  g.scan(false)
+  H.eq(g.status(plot), "ok")
+end)
+H.case("植物不能用 ctx 做越权的事：cheer 只接受白名单", function()
+  local idx = g.index_of(g.plots()[1].uid)
+  local ctx = g.ctx(g.plots()[idx])
+  H.eq(pcall(ctx.pet.cheer, "care"), false)
+  H.eq(pcall(ctx.pet.cheer, "water"), true)
+  H.eq(pcall(function() ctx.C.accent = "#000000" end), false, "颜色表只读")
+end)
+H.case("绘图句柄锁住元表，越预算报错", function()
+  local plantui = require("core.plantui")
+  local ui = plantui.new(app, H.lvgl.object(), 100, 100, 3, function() end)
+  local h = ui.box(0, 0, 10, 10, "accent")
+  H.eq(getmetatable(h), "locked")
+  H.eq(pcall(function() h.x = 1 end), false)
+  ui.text(0, 0, "a"); ui.text(0, 0, "b")
+  H.eq(pcall(ui.text, 0, 0, "c"), false)
+  H.eq(pcall(ui.box, 0, 0, 1, 1, "not-a-color"), false)
+end)
+os.execute("rm -rf '" .. root .. "'")
+H.finish("花园模型")

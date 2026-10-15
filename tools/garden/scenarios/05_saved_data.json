@@ -1,0 +1,46 @@
+{
+ "desc": "读回 garden.json：名字（豆豆）、主题（极简）、自定义强调色、地块顺序与植物状态、陪伴天数都恢复",
+ "page": "mine",
+ "data": "fixtures/data_saved",
+ "keys": [
+  {
+   "t": 2800,
+   "mark": "d01_saved_mine"
+  },
+  {
+   "t": 3100,
+   "key": "next"
+  },
+  {
+   "t": 3400,
+   "key": "next"
+  },
+  {
+   "t": 3700,
+   "key": "ok"
+  },
+  {
+   "t": 5200,
+   "mark": "d02_saved_garden"
+  },
+  {
+   "t": 5500,
+   "key": "back"
+  },
+  {
+   "t": 5800,
+   "key": "back"
+  }
+ ],
+ "checks": [
+  {
+   "log": "status=ok"
+  },
+  {
+   "log": "GD_START .*theme=minimal"
+  },
+  {
+   "log": "GD_SNAPSHOT .*\"pet_name\":\"豆豆\""
+  }
+ ]
+}

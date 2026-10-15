@@ -5,6 +5,7 @@ set(main_requires
     captive_dns
     cmd_wifi
     esp_app_format
+    esp_netif
 )
 
 idf_component_register(

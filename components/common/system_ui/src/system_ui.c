@@ -236,6 +236,12 @@ static void system_ui_event_task(void *arg)
             hv_plat_voice_finish_now();
             break;
         }
+        case SYSTEM_UI_WORK_EVENT_VOICE_EVENT:
+        case SYSTEM_UI_WORK_EVENT_HOME_CALL:
+            if (event.home_call.fn) {
+                event.home_call.fn(event.home_call.arg, event.home_call.payload);
+            }
+            break;
         case SYSTEM_UI_WORK_EVENT_STOP:
         default:
             break;

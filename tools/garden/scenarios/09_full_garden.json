@@ -1,0 +1,115 @@
+{
+ "desc": "满园 11 株（两页、没有“种植物”格）：GD_PAGE 对象数在 600 预算内；第 2 页的像素画板（复杂图案按 ui.left() 降级成文字）；静置 10 秒的主循环开销",
+ "page": "garden",
+ "data": "fixtures/data_full",
+ "keys": [
+  {
+   "t": 3100,
+   "mark": "f01_full_page1"
+  },
+  {
+   "t": 3350,
+   "key": "next"
+  },
+  {
+   "t": 3600,
+   "key": "next"
+  },
+  {
+   "t": 3850,
+   "key": "next"
+  },
+  {
+   "t": 4100,
+   "key": "next"
+  },
+  {
+   "t": 4350,
+   "key": "next"
+  },
+  {
+   "t": 4600,
+   "key": "next"
+  },
+  {
+   "t": 5500,
+   "mark": "f02_full_page2"
+  },
+  {
+   "t": 5750,
+   "key": "next"
+  },
+  {
+   "t": 6000,
+   "key": "next"
+  },
+  {
+   "t": 6250,
+   "key": "next"
+  },
+  {
+   "t": 6500,
+   "key": "next"
+  },
+  {
+   "t": 7100,
+   "mark": "f03_full_last"
+  },
+  {
+   "t": 7400,
+   "key": "ok"
+  },
+  {
+   "t": 8800,
+   "mark": "f04_pixel_page"
+  },
+  {
+   "t": 9100,
+   "key": "ok"
+  },
+  {
+   "t": 9400,
+   "key": "next"
+  },
+  {
+   "t": 9700,
+   "key": "ok"
+  },
+  {
+   "t": 10600,
+   "mark": "f05_pixel_painted"
+  },
+  {
+   "t": 10900,
+   "key": "back"
+  },
+  {
+   "t": 21900,
+   "mark": "f06_idle_10s"
+  },
+  {
+   "t": 22200,
+   "key": "back"
+  },
+  {
+   "t": 22500,
+   "key": "back"
+  }
+ ],
+ "checks": [
+  {
+   "log": "GD_PAGE garden objs=\\d+"
+  },
+  {
+   "log": "GD_PAGE plant"
+  },
+  {
+   "log": "GD_PERF page=garden",
+   "min": 1
+  },
+  {
+   "log": "GD_WITHER",
+   "max": 0
+  }
+ ]
+}
