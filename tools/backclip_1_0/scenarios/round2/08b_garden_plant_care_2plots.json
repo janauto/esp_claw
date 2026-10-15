@@ -1,0 +1,275 @@
+{
+ "name": "r2_08b_garden_plant_care_2plots",
+ "steps": [
+  {
+   "note": "【执行适配】rc16 起花园保存生效，现存数据是 2 株（向日葵、喝水），此前每次进入都会补默认的 4 株、从不落盘。“种植物”地块因此在第二行左格 (125,389)，不是第 1 轮按 4 株量的 (125,584)。其余步骤与判定同 08：种下后 3 株，浇水后重进仍是 3 株且向日葵有浇水记录。"
+  },
+  {
+   "note": "目的：实机普通种植、照料、退出重进保留。前置：花园维持本轮4株初始布局，未满11株，名字主题与既有植物不得清空。进入后先核对截图；不是4株则主会话按当前种植物位置调整，不能点到既有植物后把M误当种下。"
+  },
+  {
+   "op": "home_set",
+   "layout": {
+    "v": 1,
+    "pages": [
+     [
+      {
+       "w": "mine",
+       "s": "S"
+      },
+      {
+       "w": "clock",
+       "s": "S"
+      },
+      {
+       "w": "weather",
+       "s": "S"
+      },
+      {
+       "w": "voice",
+       "s": "S"
+      }
+     ],
+     [
+      {
+       "w": "stocks",
+       "s": "S"
+      },
+      {
+       "w": "system",
+       "s": "S"
+      },
+      {
+       "w": "aihot",
+       "s": "M"
+      }
+     ]
+    ],
+    "dock": [
+     "sys:meeting",
+     "sys:ir",
+     "sys:card",
+     "sys:workbuddy"
+    ]
+   },
+   "expect": {
+    "layout": {
+     "v": 1,
+     "pages": [
+      [
+       {
+        "w": "mine",
+        "s": "S"
+       },
+       {
+        "w": "clock",
+        "s": "S"
+       },
+       {
+        "w": "weather",
+        "s": "S"
+       },
+       {
+        "w": "voice",
+        "s": "S"
+       }
+      ],
+      [
+       {
+        "w": "stocks",
+        "s": "S"
+       },
+       {
+        "w": "system",
+        "s": "S"
+       },
+       {
+        "w": "aihot",
+        "s": "M"
+       }
+      ]
+     ],
+     "dock": [
+      "sys:meeting",
+      "sys:ir",
+      "sys:card",
+      "sys:workbuddy"
+     ]
+    }
+   }
+  },
+  {
+   "op": "fs_list",
+   "path": "garden",
+   "note": "【执行补充】读回 DATA/garden：garden.json 大小与 .tmp（rc16 前保存失败会留下 0 字节的 .tmp）"
+  },
+  {
+   "op": "ui_touch",
+   "type": "tap",
+   "x": 128,
+   "y": 182,
+   "ms": 90
+  },
+  {
+   "wait": 7000
+  },
+  {
+   "op": "home_state",
+   "expect": {
+    "exclusive_app": true
+   }
+  },
+  {
+   "op": "ui_touch",
+   "type": "tap",
+   "x": 353,
+   "y": 508,
+   "ms": 90
+  },
+  {
+   "wait": 2500
+  },
+  {
+   "shot": "garden_before"
+  },
+  {
+   "note": "已见花园4株时种植物在第三行左格，两段式点击：先焦点再打开；坐标来自已查看08_garden_page.png，不是系统首页网格。"
+  },
+  {
+   "op": "ui_touch",
+   "type": "tap",
+   "x": 125,
+   "y": 389,
+   "ms": 90
+  },
+  {
+   "wait": 300
+  },
+  {
+   "op": "ui_touch",
+   "type": "tap",
+   "x": 125,
+   "y": 389,
+   "ms": 90
+  },
+  {
+   "wait": 1500
+  },
+  {
+   "shot": "seed_library"
+  },
+  {
+   "op": "ui_key",
+   "key": "MODE",
+   "action": "click"
+  },
+  {
+   "wait": 2500
+  },
+  {
+   "shot": "new_plant_selected"
+  },
+  {
+   "note": "种子库默认焦点种下一株合法内置种子；不限制种类，截图须证明数量4→5。点击全部浇水并核对植物卡片与计数。"
+  },
+  {
+   "op": "ui_touch",
+   "type": "tap",
+   "x": 380,
+   "y": 72,
+   "ms": 90
+  },
+  {
+   "wait": 2500
+  },
+  {
+   "shot": "after_care"
+  },
+  {
+   "op": "ui_key",
+   "key": "SET",
+   "action": "click"
+  },
+  {
+   "wait": 1800
+  },
+  {
+   "shot": "mine_after_care"
+  },
+  {
+   "op": "ui_key",
+   "key": "SET",
+   "action": "click"
+  },
+  {
+   "wait": 2000
+  },
+  {
+   "op": "home_state",
+   "expect": {
+    "view": "home",
+    "exclusive_app": false
+   }
+  },
+  {
+   "op": "fs_list",
+   "path": "garden"
+  },
+  {
+   "shot": "home_after_care"
+  },
+  {
+   "op": "ui_touch",
+   "type": "tap",
+   "x": 128,
+   "y": 182,
+   "ms": 90
+  },
+  {
+   "wait": 5000
+  },
+  {
+   "op": "ui_touch",
+   "type": "tap",
+   "x": 353,
+   "y": 508,
+   "ms": 90
+  },
+  {
+   "wait": 2000
+  },
+  {
+   "shot": "garden_reopened"
+  },
+  {
+   "note": "人工判定：5株、新增种子名称、浇水后的状态在退出重进后保持；已当天浇过的旧株不能重复算照料。保留新增验收株以供下一轮重启检查，不删除既有植物。"
+  },
+  {
+   "op": "ui_key",
+   "key": "SET",
+   "action": "click"
+  },
+  {
+   "wait": 1000
+  },
+  {
+   "op": "ui_key",
+   "key": "SET",
+   "action": "click"
+  },
+  {
+   "wait": 2000
+  },
+  {
+   "op": "home_state",
+   "expect": {
+    "view": "home",
+    "exclusive_app": false
+   }
+  },
+  {
+   "op": "fs_list",
+   "path": "garden"
+  }
+ ]
+}
