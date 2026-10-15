@@ -203,9 +203,20 @@ def main():
     elif cmd == "connect":
         # 已连上就不动；否则扫描 → 点背夹那一行的“连接” → 等到出现“断开”
         open_tab("设备")
-        if find("断开"):
+        # 必须是“断开”按钮本身：子串匹配会把“已断开”之类的状态文字误当成已连接
+        if any(n[0] == "断开" for n in dump()):
             print("ALREADY_CONNECTED")
             return
+        again = [n for n in dump() if n[0] == "重新连接"]
+        if again:
+            # App 记得上次的背夹：直接点“重新连接”
+            adb("shell", "input", "tap", str(again[0][1]), str(again[0][2]))
+            end = time.time() + 25
+            while time.time() < end:
+                time.sleep(1.5)
+                if any(n[0] == "断开" for n in dump()):
+                    print("CONNECTED（重新连接）")
+                    return
         hit = find("扫描设备")
         if not hit:
             print("NO_SCAN_BUTTON（请先回到设备页）")
@@ -219,7 +230,7 @@ def main():
             if any(n[0] == "断开" for n in nodes):
                 print("CONNECTED（App 已自动重连）")
                 return
-            rows = [n for n in nodes if "esp-claw-host" in n[0]]
+            rows = [n for n in nodes if "esp-claw-host" in n[0] and "RSSI" in n[0]]
             if rows:
                 ry = rows[0][2]
                 btns = [n for n in nodes if n[0] == "连接" and abs(n[2] - ry) < 200]
@@ -231,7 +242,7 @@ def main():
         end = time.time() + 20
         while time.time() < end:
             time.sleep(1.5)
-            if find("断开"):
+            if any(n[0] == "断开" for n in dump()):
                 print("CONNECTED")
                 return
         print("CONNECT_TIMEOUT")
