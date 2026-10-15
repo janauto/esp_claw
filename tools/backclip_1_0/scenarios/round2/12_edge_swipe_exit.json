@@ -1,0 +1,103 @@
+{
+ "name": "r2s_12_edge_swipe_exit",
+ "steps": [
+  {
+   "note": "补测（主会话新增）：01/10 的退出手势起点 y=724 不在应用内的底边退出区（应用里是最底下 40 px，y≥760；首页的底部上滑区才是 y≥690）——这是第 1 轮简报给错的数。本场景按真实边缘上滑（从 y=790 起）退出天气。"
+  },
+  {
+   "op": "home_set",
+   "layout": {
+    "v": 1,
+    "pages": [
+     [
+      {
+       "w": "mine",
+       "s": "S"
+      },
+      {
+       "w": "clock",
+       "s": "S"
+      },
+      {
+       "w": "weather",
+       "s": "S"
+      },
+      {
+       "w": "voice",
+       "s": "S"
+      }
+     ],
+     [
+      {
+       "w": "stocks",
+       "s": "S"
+      },
+      {
+       "w": "system",
+       "s": "S"
+      },
+      {
+       "w": "aihot",
+       "s": "M"
+      }
+     ]
+    ],
+    "dock": [
+     "sys:meeting",
+     "sys:ir",
+     "sys:card",
+     "sys:workbuddy"
+    ]
+   }
+  },
+  {
+   "op": "ui_touch",
+   "type": "tap",
+   "x": 128,
+   "y": 386,
+   "ms": 90
+  },
+  {
+   "wait": 4500
+  },
+  {
+   "op": "home_state",
+   "expect": {
+    "exclusive_app": true,
+    "home_foreground": false
+   }
+  },
+  {
+   "shot": "weather_open"
+  },
+  {
+   "op": "ui_touch",
+   "type": "drag",
+   "x": 240,
+   "y": 790,
+   "x2": 240,
+   "y2": 600,
+   "ms": 350
+  },
+  {
+   "wait": 2500
+  },
+  {
+   "op": "home_state",
+   "expect": {
+    "view": "home",
+    "exclusive_app": false,
+    "home_foreground": true
+   }
+  },
+  {
+   "shot": "home_after_edge_swipe"
+  },
+  {
+   "op": "apps_all"
+  },
+  {
+   "note": "skill:live_weather 的 running 应为 false。"
+  }
+ ]
+}

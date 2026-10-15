@@ -1,0 +1,103 @@
+{
+ "name": "r2s_11_clip_voice_volume",
+ "steps": [
+  {
+   "note": "补测（主会话新增）：背夹·手机模式下真人说话调音量。手机识别后先发 voice_intent，背夹本地执行并回确认语；判定：回复卡显示“音量已调到20%”，控制中心读回 20%。"
+  },
+  {
+   "shell": "python3 phone_ui.py connect",
+   "gate": true,
+   "timeout_ms": 90000
+  },
+  {
+   "op": "mode_set",
+   "mode": "clip"
+  },
+  {
+   "op": "mode_get",
+   "expect": {
+    "mode": "clip",
+    "phone_linked": true,
+    "voice_route": "ble"
+   },
+   "gate": true
+  },
+  {
+   "op": "ui_key",
+   "key": "MODE",
+   "action": "press"
+  },
+  {
+   "wait": 900
+  },
+  {
+   "play": "背夹，把音量调到百分之二十。",
+   "voice": "Tingting",
+   "delay_ms": 1100
+  },
+  {
+   "wait": 7000
+  },
+  {
+   "op": "ui_key",
+   "key": "MODE",
+   "action": "release"
+  },
+  {
+   "wait_state": {
+    "voice": "reply"
+   },
+   "timeout_ms": 45000
+  },
+  {
+   "op": "home_state",
+   "expect": {
+    "voice": "reply",
+    "voice_route": "经手机"
+   }
+  },
+  {
+   "shot": "clip_volume_reply"
+  },
+  {
+   "phone_shot": "phone_voice_log"
+  },
+  {
+   "op": "ui_key",
+   "key": "SET",
+   "action": "click"
+  },
+  {
+   "wait": 800
+  },
+  {
+   "op": "ui_key",
+   "key": "SET",
+   "action": "long",
+   "ms": 900
+  },
+  {
+   "wait": 1200
+  },
+  {
+   "op": "home_state",
+   "expect": {
+    "view": "control"
+   }
+  },
+  {
+   "shot": "clip_volume_readback"
+  },
+  {
+   "note": "人工判定控制中心音量为 20%。"
+  },
+  {
+   "op": "ui_key",
+   "key": "SET",
+   "action": "click"
+  },
+  {
+   "wait": 800
+  }
+ ]
+}
