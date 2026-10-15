@@ -162,6 +162,25 @@ def run(dev, scenario, out):
                 report["passed" if ok else "failed"] += 1
                 if not ok:
                     print(f"  [FAIL] step {i}: wait_state {want} -> {json.dumps(last, ensure_ascii=False)[:300]}", flush=True)
+            elif "wait_app" in step:
+                # 等应用出现在 apps_all（或 absent=true 时等它消失）：手机经 BLE 装包要十几秒，固定等待不可靠
+                want = step["wait_app"]
+                absent = bool(step.get("absent"))
+                deadline = time.time() + step.get("timeout_ms", 90000) / 1000.0
+                t0 = time.time()
+                ok = False
+                while time.time() < deadline:
+                    apps = dev.rpc({"op": "apps_all"}).get("apps", [])
+                    present = any(want in a.get("id", "") for a in apps)
+                    if present != absent:
+                        ok = True
+                        break
+                    time.sleep(2)
+                rec["ok"] = ok
+                rec["elapsed_s"] = round(time.time() - t0, 1)
+                report["passed" if ok else "failed"] += 1
+                if not ok:
+                    print(f"  [FAIL] step {i}: wait_app {want} absent={absent} 超时", flush=True)
             elif "overview_focus" in step:
                 # 像用户一样在应用总览里按 ▶ 把焦点移到目标应用：总览按 内置/官方/我的创作 分组排列，
                 # 组内顺序与 apps_all 一致；第一下 ▶ 只是显示焦点（停在第 0 个）

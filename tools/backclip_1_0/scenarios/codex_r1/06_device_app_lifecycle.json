@@ -44,7 +44,10 @@
    "gate": true
   },
   {
-   "wait": 12000
+   "wait_app": "r2_device_demo",
+   "timeout_ms": 90000,
+   "gate": true,
+   "note": "【执行适配】手机经 BLE 装包约 15 s（8.7 KB），改为等到 apps_all 出现该应用"
   },
   {
    "op": "apps_all",
