@@ -390,6 +390,21 @@ static esp_err_t notify_packet(const char *text)
     return ESP_FAIL;
 }
 
+/* 按 UTF-8 字符边界切片：手机逐片解码，中文被拆成两半会显示成乱码（如“跳��游戏”） */
+static size_t utf8_chunk_len(const char *text, size_t off, size_t len, size_t max)
+{
+    size_t n = len - off;
+
+    if (n <= max) {
+        return n;
+    }
+    n = max;
+    while (n > 0 && ((unsigned char)text[off + n] & 0xC0) == 0x80) {
+        n--;
+    }
+    return n ? n : max;
+}
+
 static esp_err_t notify_response_text(const char *id, const char *text)
 {
     size_t len;
@@ -403,13 +418,13 @@ static esp_err_t notify_response_text(const char *id, const char *text)
         return notify_packet(text);
     }
 
-    size_t total = (len + chunk_size - 1) / chunk_size;
+    size_t total = 0;
+    for (size_t pos = 0; pos < len; pos += utf8_chunk_len(text, pos, len, chunk_size)) {
+        total++;
+    }
+    size_t off = 0;
     for (size_t seq = 0; seq < total; seq++) {
-        size_t off = seq * chunk_size;
-        size_t chunk = len - off;
-        if (chunk > chunk_size) {
-            chunk = chunk_size;
-        }
+        size_t chunk = utf8_chunk_len(text, off, len, chunk_size);
         char *part = calloc(1, chunk + 1);
         cJSON *frame = cJSON_CreateObject();
         char *frame_text = NULL;
@@ -438,6 +453,7 @@ static esp_err_t notify_response_text(const char *id, const char *text)
         if (err != ESP_OK) {
             return err;
         }
+        off += chunk;
         if (seq + 1 < total) {
             vTaskDelay(pdMS_TO_TICKS(8));
         }

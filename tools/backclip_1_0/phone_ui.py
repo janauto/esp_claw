@@ -7,6 +7,8 @@
   phone_ui.py swipe <x1> <y1> <x2> <y2> [ms]
   phone_ui.py shot <png>           截主屏（这台手机有背屏，需指定主屏 ID）
   phone_ui.py wait <文字> [秒]     等某段文字出现
+  phone_ui.py connect              设备页：已连就跳过，否则扫描并连接背夹
+  phone_ui.py tab <名称>           切到顶部标签页（设备/创作/Lua/预览/应用/日志…）
 """
 import re
 import subprocess
@@ -17,6 +19,9 @@ PKG = "com.pisen.aiclip"
 
 
 def adb(*args, **kw):
+    # 这台手机有背屏（display 1），不指定时注入的点击偶尔落到背屏上被吞掉：一律打到主屏 0
+    if args[:2] == ("shell", "input") and "-d" not in args:
+        args = ("shell", "input", "-d", "0") + tuple(args[2:])
     return subprocess.run(["adb", *args], capture_output=True, text=kw.get("text", True), timeout=kw.get("timeout", 60))
 
 
@@ -49,6 +54,24 @@ def find(text):
     return None
 
 
+def open_tab(name):
+    """切到顶部某个标签页；标签条可横向滚动，看不到就先往对应方向拖。"""
+    order = ["设备", "创作", "Lua", "预览", "应用", "日志", "商城", "取景与对话"]
+    for _ in range(4):
+        hit = find(name + " | Tab")
+        if hit:
+            adb("shell", "input", "tap", str(hit[0]), str(hit[1]))
+            time.sleep(1.5)
+            return True
+        left = order.index(name) < 4 if name in order else True
+        if left:
+            adb("shell", "input", "swipe", "200", "380", "1000", "380", "250")
+        else:
+            adb("shell", "input", "swipe", "1000", "380", "200", "380", "250")
+        time.sleep(1)
+    return False
+
+
 def main():
     cmd = sys.argv[1] if len(sys.argv) > 1 else "dump"
     if cmd == "dump":
@@ -72,6 +95,44 @@ def main():
         data = subprocess.run(["adb", *args], capture_output=True, timeout=60).stdout
         open(sys.argv[2], "wb").write(data)
         print("SHOT", sys.argv[2], len(data))
+    elif cmd == "tab":
+        if not open_tab(sys.argv[2]):
+            print("TAB_NOT_FOUND", sys.argv[2])
+            sys.exit(2)
+        print("TAB", sys.argv[2])
+    elif cmd == "connect":
+        # 已连上就不动；否则扫描 → 点背夹那一行的“连接” → 等到出现“断开”
+        open_tab("设备")
+        if find("断开"):
+            print("ALREADY_CONNECTED")
+            return
+        hit = find("扫描设备")
+        if not hit:
+            print("NO_SCAN_BUTTON（请先回到设备页）")
+            sys.exit(2)
+        adb("shell", "input", "tap", str(hit[0]), str(hit[1]))
+        end = time.time() + 25
+        row = None
+        while time.time() < end and not row:
+            time.sleep(2)
+            nodes = dump()
+            rows = [n for n in nodes if "esp-claw-host" in n[0]]
+            if rows:
+                ry = rows[0][2]
+                btns = [n for n in nodes if n[0] == "连接" and abs(n[2] - ry) < 200]
+                row = btns[0] if btns else None
+        if not row:
+            print("DEVICE_NOT_FOUND")
+            sys.exit(3)
+        adb("shell", "input", "tap", str(row[1]), str(row[2]))
+        end = time.time() + 20
+        while time.time() < end:
+            time.sleep(1.5)
+            if find("断开"):
+                print("CONNECTED")
+                return
+        print("CONNECT_TIMEOUT")
+        sys.exit(4)
     elif cmd == "wait":
         limit = float(sys.argv[3]) if len(sys.argv) > 3 else 20
         end = time.time() + limit

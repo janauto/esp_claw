@@ -5,7 +5,9 @@ class Device:
  def __init__(self,port=None):
   self.decoder=codecs.getincrementaldecoder('utf-8')(errors='replace')
   self.serial=serial.Serial(port=None,baudrate=115200,timeout=.1)
-  self.serial.dtr=False;self.serial.rts=False;self.serial.port=port or os.environ.get('CLIP_SERIAL_PORT','/dev/cu.usbserial-10');self.serial.open()
+  # CLIP_SERIAL_KEEP_RUNNING=1：DTR/RTS 同时拉有效打开串口，自动复位电路不触发，背夹不重启（手机 BLE 不断）
+  keep=os.environ.get('CLIP_SERIAL_KEEP_RUNNING')=='1'
+  self.serial.dtr=keep;self.serial.rts=keep;self.serial.port=port or os.environ.get('CLIP_SERIAL_PORT','/dev/cu.usbserial-10');self.serial.open()
   self.log=[]
   boot=self.drain(.3);self.serial.write(b'\r\n')
   end=time.monotonic()+55

@@ -198,9 +198,13 @@ def main():
     ap.add_argument("scenarios", nargs="+", type=Path)
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--port", default="/dev/cu.usbserial-10")
+    ap.add_argument("--reset", action="store_true", help="打开串口时复位背夹（默认不复位，手机 BLE 不断）")
     args = ap.parse_args()
     mod = load_device_module()
     args.out.mkdir(parents=True, exist_ok=True)
+    import os
+    if not args.reset:
+        os.environ.setdefault("CLIP_SERIAL_KEEP_RUNNING", "1")
     dev = mod.Device(args.port)
     summary = []
     try:

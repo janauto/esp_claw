@@ -1,198 +1,189 @@
 {
-  "name": "r2_04_switch_voice_routes",
-  "steps": [
-    {
-      "note": "目的：同一连接会话里由用户在控制中心切两模式，分别说一句；以两轮唯一口令和路由日志区分结果。Wi-Fi在线且手机保持BLE连接。"
-    },
-    {
-      "note": "前置：小米 M610BB 手机 App 在设备页、无弹窗；扫描按钮可见。仅重连测试背夹，保持现有正常 AI 配置。串口复位后必须在本场景内重连；失败立即停止本场景。"
-    },
-    {
-      "shell": "python3 phone_ui.py tap 扫描设备"
-    },
-    {
-      "wait": 13000
-    },
-    {
-      "shell": "python3 phone_ui.py tapxy 904 1244"
-    },
-    {
-      "wait": 9000
-    },
-    {
-      "op": "mode_set",
-      "mode": "clip"
-    },
-    {
-      "op": "mode_get",
-      "expect": {
-        "mode": "clip",
-        "phone_linked": true,
-        "voice_route": "ble"
-      }
-    },
-    {
-      "op": "ui_key",
-      "key": "SET",
-      "action": "long",
-      "ms": 900
-    },
-    {
-      "wait": 1000
-    },
-    {
-      "op": "home_state",
-      "expect": {
-        "view": "control"
-      }
-    },
-    {
-      "op": "ui_touch",
-      "type": "tap",
-      "x": 352,
-      "y": 240,
-      "ms": 90
-    },
-    {
-      "wait": 1000
-    },
-    {
-      "op": "mode_get",
-      "expect": {
-        "mode": "dock",
-        "voice_route": "wifi",
-        "phone_linked": true
-      }
-    },
-    {
-      "shot": "dock_selected"
-    },
-    {
-      "op": "ui_key",
-      "key": "SET",
-      "action": "click"
-    },
-    {
-      "wait": 1000
-    },
-    {
-      "op": "ui_key",
-      "key": "MODE",
-      "action": "press"
-    },
-    {
-      "wait": 900
-    },
-    {
-      "play": "背夹，请只回答你好。",
-      "voice": "Tingting",
-      "delay_ms": 1100
-    },
-    {
-      "wait": 9000
-    },
-    {
-      "op": "ui_key",
-      "key": "MODE",
-      "action": "release"
-    },
-    {
-      "wait_state": {
-        "voice": "reply"
-      },
-      "timeout_ms": 45000
-    },
-    {
-      "op": "home_state",
-      "expect": {
-        "voice": "reply",
-        "voice_route": "底座直连"
-      }
-    },
-    {
-      "shot": "dock_hello"
-    },
-    {
-      "wait": 27000
-    },
-    {
-      "op": "ui_key",
-      "key": "SET",
-      "action": "long",
-      "ms": 900
-    },
-    {
-      "wait": 1000
-    },
-    {
-      "op": "ui_touch",
-      "type": "tap",
-      "x": 128,
-      "y": 240,
-      "ms": 90
-    },
-    {
-      "wait": 1000
-    },
-    {
-      "op": "mode_get",
-      "expect": {
-        "mode": "clip",
-        "voice_route": "ble",
-        "phone_linked": true
-      }
-    },
-    {
-      "shot": "clip_selected"
-    },
-    {
-      "op": "ui_key",
-      "key": "SET",
-      "action": "click"
-    },
-    {
-      "wait": 1000
-    },
-    {
-      "op": "ui_key",
-      "key": "MODE",
-      "action": "press"
-    },
-    {
-      "wait": 900
-    },
-    {
-      "play": "背夹，请只回答再见。",
-      "voice": "Tingting",
-      "delay_ms": 1100
-    },
-    {
-      "wait": 9000
-    },
-    {
-      "op": "ui_key",
-      "key": "MODE",
-      "action": "release"
-    },
-    {
-      "wait_state": {
-        "voice": "reply"
-      },
-      "timeout_ms": 45000
-    },
-    {
-      "op": "home_state",
-      "expect": {
-        "voice": "reply",
-        "voice_route": "经手机",
-        "home_foreground": true
-      }
-    },
-    {
-      "shot": "phone_goodbye"
-    },
-    {
-      "note": "人工判定：两条原句、两条回复、路由标识与日志一致；不能把BLE仍连接但语音走Wi-Fi算手机链路。"
-    }
-  ]
+ "name": "r2_04_switch_voice_routes",
+ "steps": [
+  {
+   "note": "目的：同一连接会话里由用户在控制中心切两模式，分别说一句；以两轮唯一口令和路由日志区分结果。Wi-Fi在线且手机保持BLE连接。"
+  },
+  {
+   "note": "前置：小米 M610BB 手机 App 在设备页、无弹窗；扫描按钮可见。仅重连测试背夹，保持现有正常 AI 配置。串口复位后必须在本场景内重连；失败立即停止本场景。"
+  },
+  {
+   "shell": "python3 phone_ui.py connect"
+  },
+  {
+   "op": "mode_set",
+   "mode": "clip"
+  },
+  {
+   "op": "mode_get",
+   "expect": {
+    "mode": "clip",
+    "phone_linked": true,
+    "voice_route": "ble"
+   }
+  },
+  {
+   "op": "ui_key",
+   "key": "SET",
+   "action": "long",
+   "ms": 900
+  },
+  {
+   "wait": 1000
+  },
+  {
+   "op": "home_state",
+   "expect": {
+    "view": "control"
+   }
+  },
+  {
+   "op": "ui_touch",
+   "type": "tap",
+   "x": 352,
+   "y": 240,
+   "ms": 90
+  },
+  {
+   "wait": 1000
+  },
+  {
+   "op": "mode_get",
+   "expect": {
+    "mode": "dock",
+    "voice_route": "wifi",
+    "phone_linked": true
+   }
+  },
+  {
+   "shot": "dock_selected"
+  },
+  {
+   "op": "ui_key",
+   "key": "SET",
+   "action": "click"
+  },
+  {
+   "wait": 1000
+  },
+  {
+   "op": "ui_key",
+   "key": "MODE",
+   "action": "press"
+  },
+  {
+   "wait": 900
+  },
+  {
+   "play": "背夹，请只回答你好。",
+   "voice": "Tingting",
+   "delay_ms": 1100
+  },
+  {
+   "wait": 9000
+  },
+  {
+   "op": "ui_key",
+   "key": "MODE",
+   "action": "release"
+  },
+  {
+   "wait_state": {
+    "voice": "reply"
+   },
+   "timeout_ms": 45000
+  },
+  {
+   "op": "home_state",
+   "expect": {
+    "voice": "reply",
+    "voice_route": "底座直连"
+   }
+  },
+  {
+   "shot": "dock_hello"
+  },
+  {
+   "wait": 27000
+  },
+  {
+   "op": "ui_key",
+   "key": "SET",
+   "action": "long",
+   "ms": 900
+  },
+  {
+   "wait": 1000
+  },
+  {
+   "op": "ui_touch",
+   "type": "tap",
+   "x": 128,
+   "y": 240,
+   "ms": 90
+  },
+  {
+   "wait": 1000
+  },
+  {
+   "op": "mode_get",
+   "expect": {
+    "mode": "clip",
+    "voice_route": "ble",
+    "phone_linked": true
+   }
+  },
+  {
+   "shot": "clip_selected"
+  },
+  {
+   "op": "ui_key",
+   "key": "SET",
+   "action": "click"
+  },
+  {
+   "wait": 1000
+  },
+  {
+   "op": "ui_key",
+   "key": "MODE",
+   "action": "press"
+  },
+  {
+   "wait": 900
+  },
+  {
+   "play": "背夹，请只回答再见。",
+   "voice": "Tingting",
+   "delay_ms": 1100
+  },
+  {
+   "wait": 9000
+  },
+  {
+   "op": "ui_key",
+   "key": "MODE",
+   "action": "release"
+  },
+  {
+   "wait_state": {
+    "voice": "reply"
+   },
+   "timeout_ms": 45000
+  },
+  {
+   "op": "home_state",
+   "expect": {
+    "voice": "reply",
+    "voice_route": "经手机",
+    "home_foreground": true
+   }
+  },
+  {
+   "shot": "phone_goodbye"
+  },
+  {
+   "note": "人工判定：两条原句、两条回复、路由标识与日志一致；不能把BLE仍连接但语音走Wi-Fi算手机链路。"
+  }
+ ]
 }
