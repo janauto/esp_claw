@@ -302,6 +302,7 @@ static void news_render(clip_reader_board_handle_t b) {
         wrapped(b, b->content, 24, y, 432, "等待联网获取热榜。连接背夹 Wi-Fi 或手机后更新。", 2, MUTED);
     }
     b->status = wrapped(b, b->content, 24, y + 18, 432, "", 0, MUTED);
+    lv_obj_update_layout(b->content);
     lv_obj_scroll_to_y(b->content, scroll, LV_ANIM_OFF);
     if (!lv_obj_has_flag(b->sheet, LV_OBJ_FLAG_HIDDEN)) {
         news_detail(b);
@@ -746,8 +747,10 @@ cJSON *clip_reader_board_inspect(clip_reader_board_handle_t b) {
         return NULL;
     }
     cJSON *j = cJSON_CreateObject();
-    lv_obj_t *scroller = b->weather ? b->content : b->detail_body;
+    lv_obj_t *scroller = b->weather || lv_obj_has_flag(b->sheet, LV_OBJ_FLAG_HIDDEN)
+                             ? b->content : b->detail_body;
     cJSON_AddStringToObject(j, "view", b->weather ? "weather" : "aihot");
+    cJSON_AddNumberToObject(j, "contentChildren", lv_obj_get_child_count(b->content));
     if (scroller) {
         cJSON_AddNumberToObject(j, "scrollY", lv_obj_get_scroll_y(scroller));
         cJSON_AddNumberToObject(j, "scrollMax",

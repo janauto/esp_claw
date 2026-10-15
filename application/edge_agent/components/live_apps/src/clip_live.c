@@ -1220,7 +1220,11 @@ esp_err_t clip_live_start(clip_live_handle_t h) {
     if (err != ESP_OK) {
         return err;
     }
-    return xTaskCreate(worker, "clip-network", 8192, h, 2, &h->task) == pdPASS ? ESP_OK : ESP_ERR_NO_MEM;
+    /* TLS bignum work on this IDF version can take several seconds without a
+     * blocking call. As background work it must time-slice with the idle tasks
+     * instead of starving their watchdog hooks (and competing with BLE/UI). */
+    return xTaskCreate(worker, "clip-network", 8192, h, tskIDLE_PRIORITY, &h->task) == pdPASS
+               ? ESP_OK : ESP_ERR_NO_MEM;
 }
 esp_err_t clip_live_configure(clip_live_handle_t h, const cJSON *command) {
     clip_live_settings_t *settings = malloc(sizeof(*settings));

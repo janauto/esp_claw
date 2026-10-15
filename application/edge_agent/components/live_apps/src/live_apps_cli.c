@@ -111,6 +111,7 @@ static cJSON *command_reply(const cJSON *command) {
         int scale = cJSON_IsNumber(scale_value) ? scale_value->valueint : 1;
         err = (scale == 1 || scale == 2) ? display_service_lock() : ESP_ERR_INVALID_ARG;
         if (err == ESP_OK) {
+            lv_obj_update_layout(lv_screen_active());
             lv_draw_buf_t *image = lv_snapshot_take(lv_screen_active(), LV_COLOR_FORMAT_RGB565);
             display_service_unlock();
             if (!image) {
