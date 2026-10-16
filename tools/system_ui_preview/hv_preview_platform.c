@@ -28,7 +28,7 @@ bool hv_plat_wifi(char *ssid, size_t n)
 {
     bool on = atoi(env_or("PREVIEW_WIFI", "1")) != 0;
     if (ssid && n) {
-        strlcpy(ssid, on ? "Ai_Wi-Fi5" : "", n);
+        strlcpy(ssid, on ? "MyWiFi" : "", n);
     }
     return on;
 }
